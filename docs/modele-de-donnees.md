@@ -316,10 +316,15 @@ même grille.
 
 ## telecom
 
-**`telecom_connecteur`** : `id`, `nom`, `operateur`, `type` parmi SMPP, HTTP,
-`hote`, `port`, `identifiant`, `secret_chiffre`, `debit_max`, `sessions_max`,
-`fenetre`, `actif`, `etat_liaison` parmi CONNECTE, DECONNECTE, DEGRADE,
-`derniere_connexion_le`.
+**`telecom_connecteur`** : `id`, `nom` unique, `operateur`, `type` parmi SMPP,
+HTTP, SIMULE, `hote`, `port`, `identifiant`, `secret_chiffre`, `debit_max`,
+`sessions_max`, `fenetre`, `parametres` en jsonb pour les réglages propres à
+l'adaptateur (jamais un secret), `actif`, `etat_liaison` parmi CONNECTE,
+DECONNECTE, DEGRADE, `derniere_connexion_le`, `cree_le`, `modifie_le`.
+
+Cette table porte les identifiants des liaisons SMPP. Le rôle applicatif n'en
+lit ni n'en écrit aucune ligne : sécurité par ligne forcée, sans politique.
+Seuls les workers la voient.
 
 **`telecom_route`** : `id`, `operateur`, `connecteur_id`, `priorite`,
 `seuil_bascule`, `actif`.

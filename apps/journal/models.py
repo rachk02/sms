@@ -55,8 +55,14 @@ class Message(models.Model):
     cout_total = models.IntegerField()
     etat = models.CharField(max_length=20, choices=Etat, default=Etat.RECU)
     motif_echec = models.CharField(max_length=100, blank=True)
-    # Deviendra une clé étrangère vers telecom_connecteur avec T-13.
-    connecteur_id = models.UUIDField(null=True, blank=True)
+    connecteur = models.ForeignKey(
+        "telecom.Connecteur",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        db_index=False,
+    )
     reference_smsc = models.CharField(max_length=100, blank=True)
     cle_idempotence = models.CharField(max_length=100, blank=True)
     date_reception = models.DateTimeField()

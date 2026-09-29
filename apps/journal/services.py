@@ -1,13 +1,14 @@
 """Porte d'écriture du module journal."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.db import connections, transaction
 from django.utils import timezone
 
 from apps.core.encodage import analyser
+from apps.telecom.passerelles import Soumission
 
-from .models import Destinataire, Evenement, Message
+from .models import ETATS_TERMINAUX, Destinataire, Etat, Evenement, Message
 
 TABLES_PARTITIONNEES = ("journal_message", "journal_evenement")
 
@@ -86,3 +87,73 @@ def creer_partitions_a_venir(mois_d_avance: int = 2) -> list[str]:
                 )
                 creees.append(curseur.fetchone()[0])
     return creees
+
+
+# Fenêtre de recherche d'un message à partir de son accusé : la validité d'un
+# SMS. Toute recherche sur journal_message est bornée dans le temps.
+FENETRE_ACCUSE = timedelta(hours=72)
+
+
+@transaction.atomic
+def soumettre(message: Message, passerelle, source: str = Evenement.Source.WORKER) -> Message:
+    """Soumet un message à la passerelle et le passe SOUMIS.
+
+    Le marqueur de soumission interrompue et la reprise sans doublon sont
+    l'objet de T-25 ; ici le marqueur est posé, la reprise n'est pas encore là.
+    """
+    cle = {"id": message.id, "date_reception": message.date_reception}
+    maintenant = timezone.now()
+    Message.objects.filter(**cle).update(soumission_debutee_le=maintenant)
+    reference = passerelle.soumettre(
+        Soumission(message.numero_normalise, message.texte, message.expediteur_libelle)
+    )
+    Message.objects.filter(**cle).update(
+        reference_smsc=reference,
+        connecteur_id=passerelle.connecteur.id,
+        date_soumission=maintenant,
+        etat=Etat.SOUMIS,
+        modifie_le=maintenant,
+    )
+    Evenement.objects.create(
+        client_id=message.client_id,
+        message_id=message.id,
+        etat=Etat.SOUMIS,
+        horodatage=maintenant,
+        source=source,
+        details={"reference_smsc": reference},
+    )
+    return Message.objects.get(**cle)
+
+
+@transaction.atomic
+def appliquer_accuse(accuse) -> bool:
+    """Applique un accusé au message qu'il concerne. Renvoie vrai si l'état a
+    changé ; faux pour un accusé rejoué ou sans correspondance.
+
+    Le rapprochement par la table de corrélation et Redis, et la table des
+    accusés orphelins, sont l'objet de T-14.
+    """
+    message = (
+        Message.objects.select_for_update()
+        .filter(
+            connecteur_id=accuse.connecteur_id,
+            reference_smsc=accuse.reference_smsc,
+            date_reception__gte=accuse.horodatage - FENETRE_ACCUSE,
+            date_reception__lte=accuse.horodatage,
+        )
+        .first()
+    )
+    if message is None or message.etat in ETATS_TERMINAUX:
+        return False
+    Message.objects.filter(id=message.id, date_reception=message.date_reception).update(
+        etat=accuse.etat, date_accuse=accuse.horodatage, modifie_le=timezone.now()
+    )
+    Evenement.objects.create(
+        client_id=message.client_id,
+        message_id=message.id,
+        etat=accuse.etat,
+        horodatage=accuse.horodatage,
+        source=Evenement.Source.ACCUSE,
+        details={"libelle_operateur": accuse.libelle_operateur},
+    )
+    return True
