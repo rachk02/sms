@@ -26,3 +26,17 @@ def enregistrer_entrant(
             "recu_le": recu_le,
         },
     )
+
+
+def connecteur_pour(operateur: str):
+    """Connecteur qui porte les messages d'un opérateur : le premier actif dont
+    la liaison n'est pas tombée. Le routage par priorité et la bascule sont
+    l'objet de la fiche F-38 (lot 10) ; ceci en tient lieu d'ici là."""
+    from .models import Connecteur
+
+    return (
+        Connecteur.objects.filter(operateur=operateur, actif=True)
+        .exclude(etat_liaison=Connecteur.EtatLiaison.DECONNECTE)
+        .order_by("cree_le")
+        .first()
+    )

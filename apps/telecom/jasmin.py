@@ -79,8 +79,10 @@ class Jasmin(Passerelle):
             "password": settings.JASMIN_HTTP_PASSWORD,
             "to": soumission.numero.removeprefix("+"),
             "from": soumission.expediteur,
-            # En minutes : le SMSC et notre corrélation expirent ensemble.
-            "validity-period": str(settings.VALIDITE_SMS_HEURES * 60),
+            # Pas de validity-period : Jasmin 0.11 échoue parfois à le convertir en
+            # date SMPP (« tenths of second must be one digit ») et rejette alors
+            # le message après l'avoir accepté, sans accusé. La validité par
+            # défaut du SMSC s'applique ; VALIDITE_SMS_HEURES doit la refléter.
         }
         if analyser(soumission.texte).encodage == Encodage.UCS2:
             parametres |= {"coding": "8", "hex-content": soumission.texte.encode("utf-16-be").hex()}

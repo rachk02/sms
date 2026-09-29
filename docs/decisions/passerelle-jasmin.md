@@ -33,7 +33,12 @@ par Jasmin après rapprochement.
 5. **Jasmin valide strictement les trames SMPP.** Le premier simulateur essayé,
    `ukarim/smscsim`, envoie un champ trop long ; Jasmin a refusé ses accusés.
    C'est une qualité : une trame non conforme d'un opérateur serait vue.
-6. **Les limites SMPP s'appliquent partout** (mot de passe de huit caractères,
+6. **Jasmin convertit mal la durée de validité.** Avec `validity-period`, il
+   échoue parfois à former la date SMPP (« tenths of second must be one
+   digit », un message sur vingt au point de contrôle du lot 2) et rejette le
+   message après l'avoir accepté, sans accusé : une perte silencieuse. La
+   validité n'est donc pas transmise ; celle du SMSC s'applique.
+7. **Les limites SMPP s'appliquent partout** (mot de passe de huit caractères,
    identifiants courts). Elles viennent du protocole, pas de Jasmin.
 
 ## Options

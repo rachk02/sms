@@ -88,7 +88,8 @@ def test_une_soumission_gsm_part_en_texte_avec_demande_d_accuse(fausse_api, sett
     assert envoye["content"] == "Bonjour à vous" and "coding" not in envoye
     assert (envoye["username"], envoye["password"]) == ("sms", "secret")
     assert envoye["dlr"] == "yes" and envoye["dlr-level"] == "3"
-    assert envoye["validity-period"] == str(settings.VALIDITE_SMS_HEURES * 60)
+    # Jamais transmis à Jasmin, qui le convertit mal (voir jasmin.py).
+    assert "validity-period" not in envoye
     identifiant = passerelle.connecteur.id
     attendu = f"http://plateforme/rappels/jasmin/{identifiant}?jeton={jeton(identifiant)}"
     assert envoye["dlr-url"] == attendu

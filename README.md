@@ -39,4 +39,5 @@ La même chaîne tourne sur GitHub Actions à chaque envoi sur `main`.
 
 - [Sauvegardes et restauration](docs/exploitation/sauvegardes.md)
 - [Environnement de recette](docs/exploitation/recette.md)
+- [Point de contrôle du lot 2](docs/exploitation/point-de-controle-lot2.md), contre Jasmin et SMPPSim
 - Métriques au format Prometheus sur `/metriques`, avec le jeton `METRIQUES_JETON`.
