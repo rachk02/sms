@@ -6,10 +6,10 @@ racine du projet. Il porte les deux règles de travail, puis il tire la charte d
 ## La charte du dépôt
 
 Les conventions de code, la structure en modules, les interdits, les points délicats et
-l'encodage des SMS sont dans `EL-IMMEKA-SMS-dossiers/00-CLAUDE.md`. Lis-le avant de toucher
-au code. La ligne ci-dessous l'importe :
+l'encodage des SMS sont dans `docs/charte.md`. Lis-le avant de toucher au code. La ligne
+ci-dessous l'importe :
 
-@EL-IMMEKA-SMS-dossiers/00-CLAUDE.md
+@docs/charte.md
 
 ## Le journal du projet
 
@@ -60,20 +60,12 @@ confirmation à l'utilisateur. Cela vaut aussi pour les simples entrées du jour
 - Ne jamais forcer un push (`--force`) ni réécrire l'historique déjà poussé sans accord
   explicite.
 
-## État du dossier au moment de cette mise en place
+## Documents du projet
 
-Relevé le 2026-09-29. Le projet n'a pas encore commencé, et trois points méritent d'être
-réglés avant la première ligne de code.
+- `docs/charte.md` : la charte, importée ci-dessus.
+- `docs/modele-de-donnees.md` : tables, champs et contraintes. Il fait foi.
+- `docs/lot-1-taches.md` : le lot courant, découpé en tâches avec critères d'acceptation.
 
-- **Ce n'est pas encore un dépôt git.** Aucun `.git` à la racine. Les règles de commit
-  ci-dessus ne s'appliqueront qu'une fois `git init` fait ou le dépôt cloné.
-- **`pyproject.toml` demande Python >= 3.14**, alors que la charte annonce Python 3.12. L'un
-  des deux se trompe. À trancher avant d'installer quoi que ce soit, Django 5.1 n'étant pas
-  testé sur 3.14.
-- **`main.py` est le script d'exemple de PyCharm**, pas du code du projet.
-- La charte renvoie à `docs/modele-de-donnees.md` et `docs/lot-1-taches.md`, mais ces fichiers
-  vivent aujourd'hui sous `EL-IMMEKA-SMS-dossiers/` avec un préfixe numéroté. Soit les
-  chemins de la charte sont à corriger, soit le dossier est à réorganiser en `docs/`.
-- Aucun `.gitignore`. `.venv/`, `.idea/` et `__pycache__/` sont à y mettre avant le premier
-  commit, ainsi que `.claude/settings.local.json`, qui ne porte que des permissions propres à
-  une machine. Le journal, lui, a vocation à être suivi.
+Le plan d'implémentation, l'architecture backend, le document support et notifications et
+la revue d'avant-démarrage restent dans `docs_of_interest/`, exclu de git. Ils se lisent
+sur place quand une décision manque.
