@@ -20,6 +20,7 @@ INSTALLED_APPS = [
     "apps.telecom",
     "apps.journal",
     "apps.credits",
+    "apps.backoffice",
 ]
 
 AUTH_USER_MODEL = "comptes.Utilisateur"
@@ -30,6 +31,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "apps.core.middleware.JournalisationMiddleware",
     "apps.core.middleware.CloisonnementMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -106,13 +108,35 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 
 REDIS_URL = f"redis://{env('REDIS_HOST')}:{env('REDIS_PORT')}/0"
 
+RABBITMQ_USER = env("RABBITMQ_USER")
+RABBITMQ_PASSWORD = env("RABBITMQ_PASSWORD")
 RABBITMQ_URL = (
-    f"amqp://{env('RABBITMQ_USER')}:{env('RABBITMQ_PASSWORD')}"
-    f"@{env('RABBITMQ_HOST')}:{env('RABBITMQ_PORT')}/"
+    f"amqp://{RABBITMQ_USER}:{RABBITMQ_PASSWORD}@{env('RABBITMQ_HOST')}:{env('RABBITMQ_PORT')}/"
 )
 
 STOCKAGE_OBJET = {
     "point_acces": env("MINIO_ENDPOINT"),
     "identifiant": env("MINIO_ROOT_USER"),
     "secret": env("MINIO_ROOT_PASSWORD"),
+}
+
+RABBITMQ_API_URL = f"http://{env('RABBITMQ_HOST')}:{env('RABBITMQ_CONSOLE_PORT')}/api"
+
+# Jeton exigé par le point d'entrée des métriques, en en-tête
+# « Authorization: Bearer <jeton> ». Vide : le point d'entrée refuse tout.
+METRIQUES_JETON = env("METRIQUES_JETON", "")
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "filters": {"contexte": {"()": "apps.core.journalisation.FiltreContexte"}},
+    "formatters": {"json": {"()": "apps.core.journalisation.FormatJson"}},
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "json",
+            "filters": ["contexte"],
+        }
+    },
+    "root": {"handlers": ["console"], "level": env("NIVEAU_JOURNAL", "INFO")},
 }

@@ -6,12 +6,17 @@ from django.db import connections, transaction
 from django.utils import timezone
 
 from apps.core.encodage import analyser
+from apps.core.redis import client_redis
 from apps.telecom import correlation
 from apps.telecom.passerelles import Soumission
 
 from .models import ETATS_TERMINAUX, Destinataire, Etat, Evenement, Message
 
 TABLES_PARTITIONNEES = ("journal_message", "journal_evenement")
+
+# Compteur de messages soumis par connecteur, lu par les métriques
+# d'exploitation : jamais de comptage à la volée sur le journal.
+CLE_SOUMIS = "sms:metriques:soumis:{connecteur_id}"
 
 
 @transaction.atomic
@@ -111,6 +116,8 @@ def soumettre(message: Message, passerelle, source: str = Evenement.Source.WORKE
         modifie_le=maintenant,
     )
     correlation.enregistrer(passerelle.connecteur.id, reference, message.id, message.date_reception)
+    compteur = CLE_SOUMIS.format(connecteur_id=passerelle.connecteur.id)
+    transaction.on_commit(lambda: client_redis().incr(compteur))
     Evenement.objects.create(
         client_id=message.client_id,
         message_id=message.id,

@@ -10,13 +10,12 @@ complet de Redis ne coûte donc que de la vitesse.
 import json
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
-from functools import cache
 
-import redis
-from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+
+from apps.core.redis import client_redis
 
 from .models import AccuseOrphelin, Correlation
 
@@ -30,9 +29,8 @@ class Correspondance:
     message_date_reception: datetime
 
 
-@cache
-def _redis() -> redis.Redis:
-    return redis.Redis.from_url(settings.REDIS_URL)
+def _redis():
+    return client_redis()
 
 
 def cle_redis(connecteur_id, reference_smsc: str) -> str:

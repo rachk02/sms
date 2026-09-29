@@ -124,6 +124,6 @@ class WorkerEnAttente(Worker):
 
 
 def lancer(classe: type[Worker]) -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    # La journalisation JSON du projet est posée par django.setup().
     preparer_django()
     asyncio.run(classe().executer())
