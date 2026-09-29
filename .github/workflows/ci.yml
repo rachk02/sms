@@ -22,7 +22,7 @@ jobs:
       - name: Services d'appui
         run: docker compose up -d --wait postgres redis rabbitmq
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
 
       - name: Dépendances
         run: uv sync --frozen

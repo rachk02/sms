@@ -7,7 +7,7 @@ La règle est dans la charte : ni l'un ni l'autre, nulle part. Un caractère
 import subprocess
 import sys
 
-TIRET_CADRATIN = "—"
+TIRET_CADRATIN = chr(0x2014)
 PLAGES_EMOJI = (
     (0x1F000, 0x1FAFF),
     (0x2600, 0x27BF),
