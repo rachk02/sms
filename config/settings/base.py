@@ -72,9 +72,13 @@ def _base_de_donnees(role: str) -> dict:
 #                 manage.py migrate --database proprietaire
 #   default       le service web, soumis au cloisonnement par ligne
 #   worker        les workers, qui contournent le cloisonnement
+#
+# Un processus worker pose SMS_CONNEXION_PAR_DEFAUT=WORKER avant de charger
+# Django (voir workers/base.py) : sa connexion `default` prend alors le rôle
+# worker, et les services qu'il appelle traversent la même connexion.
 DATABASES = {
     "proprietaire": _base_de_donnees("PROPRIETAIRE"),
-    "default": _base_de_donnees("APP"),
+    "default": _base_de_donnees(env("SMS_CONNEXION_PAR_DEFAUT", "APP")),
     "worker": _base_de_donnees("WORKER"),
 }
 
