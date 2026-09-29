@@ -213,7 +213,12 @@ date de soumission, et qu'une clé de partitionnement ne peut pas être nulle.
 worker interroge la passerelle au lieu de resoumettre.
 
 Index par partition : `(client_id, date_reception desc)`,
-`(client_id, numero_normalise, date_reception desc)`, `(campagne_id, etat)`.
+`(client_id, numero_normalise, date_reception desc)`, `(campagne_id, etat)`,
+et `(numero_normalise, date_reception desc)`. Ce dernier sert au rapprochement
+d'un STOP reçu sur le numéro court partagé, qui cherche tous les clients ayant
+écrit à ce numéro dans les soixante-douze dernières heures. Il est posé dès la
+création de la table, parce qu'ajouter un index sur toutes les partitions d'une
+table déjà volumineuse coûte cher.
 
 Aucune contrainte d'unicité métier ne peut vivre sur cette table : PostgreSQL
 exige qu'elle inclue la clé de partitionnement, et un doublon tombé dans un
@@ -258,12 +263,20 @@ supprimée, jamais.
 **`credits_compte`** est le cache de solde, verrouillé pendant une réservation :
 `client_id` en clé primaire, `solde_acquis`, `montant_reserve`, `mis_a_jour_le`.
 
-**`credits_reservation`** : une réservation par message, créée à la mise en
-file. `id`, `client_id`, `message_id` UUID simple, `message_date_reception`,
-`campagne_id` UUID simple nul pour un envoi unitaire, `montant` au prix calculé
-à cet instant, `etat` parmi ACTIVE, REGLEE, LIBEREE, `cree_le`, `resolue_le`.
-Unicité sur `message_id`. Index sur `(client_id, etat)` et sur
-`(campagne_id, etat)`.
+**`credits_reservation`** porte soit une campagne entière, soit un envoi
+unitaire. Une campagne réserve en une seule fois, à son lancement, son coût
+estimé au cas le plus long : c'est ce qui permet à deux campagnes lancées en
+même temps de ne pas se partager un solde qui n'existe qu'une fois. Chaque
+message réglé écrit ensuite sa CONSOMMATION au registre et diminue
+`montant_restant`. Le reliquat est libéré quand tous les messages de la
+campagne ont atteint un état final.
+
+`id`, `client_id`, `campagne_id` UUID simple, `message_id` UUID simple,
+`message_date_reception`, `montant_initial`, `montant_restant`, `etat` parmi
+ACTIVE, REGLEE, LIBEREE, `cree_le`, `resolue_le`. Une contrainte impose qu'un
+seul des deux, `campagne_id` ou `message_id`, soit renseigné. Unicité sur
+`campagne_id` et sur `message_id` quand ils sont renseignés. Index sur
+`(client_id, etat)`.
 
 **`credits_grille`** : `id`, `nom`, `client_id` nul pour la grille publique,
 `devise` défaut XOF.

@@ -1,14 +1,16 @@
 # Lot 1, socle technique, découpé en tâches
 
 Le lot 1 couvre les fiches F-01, F-02, F-03, F-04 et F-42, soit 26 à 42
-jours-homme. Il est ici découpé en dix-neuf tâches d'une demi-journée à deux
+jours-homme. Il est ici découpé en dix-huit tâches d'une demi-journée à deux
 jours, chacune avec ce qu'elle produit et ce qui doit être vrai pour la
 déclarer finie.
 
-Une tâche se prend dans l'ordre, avec deux exceptions. T-05 se fait juste après
+Une tâche se prend dans l'ordre, avec une exception. T-05 se fait juste après
 T-01 : le modèle utilisateur personnalisé doit exister avant la toute première
-migration, et les tests de T-02 en lancent une. T-19 se fait après T-13 et
-avant T-18.
+migration, et les tests de T-02 en lancent une.
+
+Le déploiement de Jasmin, que la fiche F-03 rattache au lot 1, est traité au
+lot 2 par T-22 et T-23. Le lot 1 ne travaille que contre le connecteur simulé.
 
 Une tâche n'est finie que si ses critères d'acceptation passent, pas si le code
 semble écrit.
@@ -197,18 +199,6 @@ simulé, et un jeu de données de démonstration.
 **Critères** Dix mille messages sont soumis au connecteur simulé sans perte,
 les compteurs correspondent au nombre envoyé, et aucun message ne reste bloqué
 dans un état intermédiaire.
-
-## T-19 · Jasmin et décision sur la passerelle
-
-**Produit** Jasmin dans `docker-compose.yml`, raccordé à RabbitMQ et Redis, un
-connecteur SMPP vers un simulateur SMSC, piloté par script. L'adaptateur Jasmin
-de la couche d'abstraction, à côté de l'adaptateur simulé de T-13. Une note
-d'une page qui confirme Jasmin ou propose une alternative, après une journée de
-prise en main réelle, comme le demande la fiche F-03.
-
-**Critères** Un message soumis par l'adaptateur Jasmin atteint le simulateur
-SMSC, et son accusé remonte jusqu'au changement d'état du message, par le même
-chemin que l'adaptateur simulé. La note de décision est écrite et versionnée.
 
 ## Ce qui n'est pas dans ce lot
 
