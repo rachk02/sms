@@ -19,7 +19,9 @@ Prérequis : Docker avec Compose, et [uv](https://docs.astral.sh/uv/).
 Au premier démarrage, PostgreSQL crée trois rôles (voir
 `docker/postgres/init/01-roles.sh`) : le propriétaire des tables, qui passe les
 migrations, le rôle applicatif du service web, soumis au cloisonnement par
-ligne, et le rôle des workers, qui le contourne.
+ligne, et le rôle des workers, qui le contourne. Un quatrième, celui du
+back-office des agents, le contourne aussi (`docker/postgres/ajouter-role-backoffice.sh`
+le crée sur un volume déjà initialisé).
 
 ## Vérifier
 
@@ -31,7 +33,8 @@ La même chaîne tourne sur GitHub Actions à chaque envoi sur `main`.
 
 ## Lancer
 
-    uv run python manage.py runserver                  # service web
+    uv run python manage.py runserver                  # service web des clients
+    SMS_ESPACE=backoffice SMS_CONNEXION_PAR_DEFAUT=BACKOFFICE         uv run python manage.py runserver 127.0.0.1:8001  # back-office des agents
     uv run python -m workers.ordonnanceur              # relais des événements, partitions
     uv run python -m workers.envoi                     # et accuses, import_contacts, webhook
 

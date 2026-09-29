@@ -1,8 +1,13 @@
+from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
     path("", include("apps.backoffice.urls")),
     path("", include("apps.api.urls")),
 ]
+
+# L'administration n'existe que dans l'espace du back-office : dans l'espace des
+# clients, le rôle applicatif ne verrait de toute façon aucun compte.
+if settings.ESPACE == "backoffice":
+    urlpatterns.insert(0, path("admin/", admin.site.urls))

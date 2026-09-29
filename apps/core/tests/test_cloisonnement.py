@@ -86,5 +86,11 @@ def test_poser_un_client_hors_transaction_est_refuse():
 
 
 @pytest.mark.django_db
-def test_une_page_servie_par_la_pile_complete_traverse_le_middleware(client):
-    assert client.get("/admin/login/").status_code == 200
+def test_une_requete_servie_par_la_pile_complete_traverse_le_middleware(client):
+    reponse = client.get("/metriques")
+    assert reponse.status_code == 401 and reponse["X-Request-ID"]
+
+
+@pytest.mark.django_db
+def test_l_espace_client_n_expose_pas_l_administration(client):
+    assert client.get("/admin/login/").status_code == 404

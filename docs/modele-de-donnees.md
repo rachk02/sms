@@ -384,9 +384,12 @@ année, `periode_debut`, `periode_fin`, `montant_ht`, `tva`, `montant_ttc`,
 **`conformite_consentement`** : `id`, `client_id`, `contact_id` UUID simple,
 `source`, `preuve` en jsonb, `obtenu_le`.
 
-**`conformite_audit`** : `id`, `auteur_id`, `action`, `objet_type`, `objet_id`,
+**`conformite_audit`** : `id`, `auteur_id`, `client_id` du compte concerné (nul
+pour une action de plateforme), `action`, `objet_type`, `objet_id`,
 `valeur_avant` en jsonb, `valeur_apres` en jsonb, `motif`, `adresse_ip`,
-`horodatage`. En écriture seule.
+`horodatage`. En écriture seule pour tous les rôles, par le modèle et par un
+déclencheur. Le rôle applicatif y écrit sans pouvoir y lire ; le back-office la
+consulte.
 
 ## notifications
 

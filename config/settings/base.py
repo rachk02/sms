@@ -21,6 +21,7 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.comptes",
     "apps.telecom",
+    "apps.conformite",
     "apps.journal",
     "apps.credits",
     "apps.api",
@@ -79,10 +80,15 @@ def _base_de_donnees(role: str) -> dict:
 #   proprietaire  possède les tables et passe les migrations :
 #                 manage.py migrate --database proprietaire
 #   worker        les workers, qui contournent le cloisonnement
-# Les deux dernières n'existent que si leurs identifiants sont fournis : le
+#   backoffice    le back-office des agents EL-IMMEKA, qui le contourne aussi
+# Les trois dernières n'existent que si leurs identifiants sont fournis : le
 # conteneur du service web ne reçoit que ceux du rôle applicatif.
 DATABASES = {"default": _base_de_donnees(env("SMS_CONNEXION_PAR_DEFAUT", "APP"))}
-for _alias, _role in (("proprietaire", "PROPRIETAIRE"), ("worker", "WORKER")):
+for _alias, _role in (
+    ("proprietaire", "PROPRIETAIRE"),
+    ("worker", "WORKER"),
+    ("backoffice", "BACKOFFICE"),
+):
     if os.environ.get(f"POSTGRES_{_role}_USER"):
         DATABASES[_alias] = _base_de_donnees(_role)
 
@@ -166,3 +172,9 @@ VALIDITE_SMS_HEURES = int(env("VALIDITE_SMS_HEURES", "48"))
 
 # Secret des jetons portés par les adresses de rappel des passerelles.
 RAPPELS_SECRET = env("RAPPELS_SECRET", "")
+
+# Espace servi par ce processus. « client » : le portail et l'API des clients,
+# rôle applicatif, sans administration. « backoffice » : l'administration des
+# agents EL-IMMEKA, joignable du seul réseau interne, avec
+# SMS_CONNEXION_PAR_DEFAUT=BACKOFFICE.
+ESPACE = env("SMS_ESPACE", "client")
