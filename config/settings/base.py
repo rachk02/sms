@@ -20,6 +20,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "apps.core",
     "apps.comptes",
+    "apps.fichiers",
     "apps.telecom",
     "apps.conformite",
     "apps.journal",
@@ -124,6 +125,7 @@ RABBITMQ_URL = (
     f"/{quote(RABBITMQ_VHOST, safe='')}"
 )
 
+MINIO_BUCKET = env("MINIO_BUCKET", "sms")
 STOCKAGE_OBJET = {
     "point_acces": env("MINIO_ENDPOINT"),
     "identifiant": env("MINIO_ROOT_USER"),

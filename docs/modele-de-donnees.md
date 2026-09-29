@@ -451,6 +451,12 @@ EXPORT, FACTURE, ARCHIVE, `chemin`, `nom_origine`, `type_mime`,
 Le chemin suit la convention `clients/<client_id>/<famille>/<uuid>.<ext>`, avec
 un identifiant aléatoire et jamais le nom d'origine.
 
+Le type est reconnu au contenu (signature des premiers octets), la taille
+bornée par le serveur. `chiffre` vaut vrai pour les pièces d'identité, déposées
+avec le chiffrement SSE-S3 de MinIO et sa clé propre (`MINIO_KMS_SECRET_KEY`) :
+le stockage les chiffre au repos, et les liens signés de quinze minutes restent
+possibles, si bien qu'aucun fichier n'est servi par l'application.
+
 ## Ce qui reste à trancher
 
 La durée de rétention en ligne des partitions du journal, qui décide du moment
