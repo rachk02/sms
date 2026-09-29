@@ -4,6 +4,24 @@ Fiches F-05, F-06, F-07 et F-08, soit 23 à 36 jours-homme. Douze tâches, T-19 
 
 Ce lot produit la première chose qui prouve que le projet tient : un message qui part, qui revient accusé, et dont l'état change en base. Tout se fait contre un simulateur, aucune liaison réelle n'est nécessaire.
 
+## Ce que le lot 1 a déjà posé
+
+Plusieurs tâches de ce lot partent d'un existant : elles l'étendent, elles ne
+le refont pas.
+
+| Tâche | Déjà là | Reste à faire |
+| --- | --- | --- |
+| T-19 | `apps/telecom/passerelles.py` : `Passerelle` avec `soumettre`, `accuses_dus`, `traduire` | Interroger un statut, déclarer une indisponibilité, annoncer débit et limites ; test sans nom de fournisseur |
+| T-20 | `journal.models.Etat` et ses dix états ; table de correspondance par adaptateur | Trace d'un libellé inconnu ; mécanisme de déclaration formalisé |
+| T-21 | `Simulateur` : identifiant hexadécimal, délai et taux d'échec réglables, libellés DELIVRD et UNDELIV | Test à cinq pour cent sur mille messages ; écart soumission et accusé vérifié |
+| T-22 | Images `jookies/jasmin:0.11.0` (novembre 2023) et `ukarim/smscsim` téléchargeables | Tout |
+| T-23 | Rien | Tout |
+| T-24 | `enregistrer_message` et `soumettre` ; encodage et décompte des segments | Découpage réel avec en-tête de concaténation, vérifié sur ce que reçoit le simulateur |
+| T-25 | Colonne `soumission_debutee_le`, posée dans la transaction de soumission | Marqueur validé avant l'appel, reprise qui interroge la passerelle au lieu de resoumettre |
+| T-26 | Fait en T-14 : base puis Redis, 72 heures, orphelins, rejeu sans seconde transition | Durée alignée sur la validité réelle du SMS |
+| T-27 | `appliquer_accuse` refuse une seconde transition vers un état final | Table des transitions permises, worker accusés réel |
+| T-28 à T-30 | Rien | Tout |
+
 ## T-19 · Interface interne de la couche d'abstraction
 
 **Produit** Le contrat que tout adaptateur doit respecter : soumettre un message, interroger un statut, déclarer une indisponibilité, annoncer son débit et ses limites. Aucune implémentation, seulement la forme.
