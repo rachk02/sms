@@ -60,6 +60,9 @@ class EvenementSortant(Identifiable):
     auteur_id = models.UUIDField(null=True, blank=True)
     donnees = models.JSONField(default=dict, blank=True)
     cle_idempotence = models.CharField(max_length=100, unique=True)
+    # Échange de destination : `evenements` pour le bus, `sms` pour déposer un
+    # message dans une file de trafic (le nom sert alors de clé de routage).
+    echange = models.CharField(max_length=100, default="evenements")
     cree_le = models.DateTimeField(auto_now_add=True)
     publie_le = models.DateTimeField(null=True, blank=True)
 

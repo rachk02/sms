@@ -89,3 +89,38 @@ class AccuseOrphelin(Identifiable):
 
     def __str__(self):
         return f"{self.connecteur_id} {self.reference_smsc}"
+
+
+class MessageEntrant(Identifiable):
+    """SMS reçu sur le numéro court ou un identifiant de la plateforme.
+
+    `client` reste nul tant que le message n'est pas rapproché d'un client
+    (T-70). Un rappel rejoué par la passerelle ne crée pas de doublon : unicité
+    sur le connecteur et l'identifiant rendu par la passerelle.
+    """
+
+    client = models.ForeignKey(
+        "comptes.Client", on_delete=models.PROTECT, null=True, blank=True, related_name="+"
+    )
+    connecteur = models.ForeignKey(Connecteur, on_delete=models.PROTECT, related_name="+")
+    reference = models.CharField(max_length=100)
+    numero_expediteur = models.CharField(max_length=20)
+    numero_destination = models.CharField(max_length=20)
+    texte = models.TextField()
+    mot_cle_reconnu = models.CharField(max_length=30, blank=True)
+    recu_le = models.DateTimeField()
+    traite_le = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "telecom_message_entrant"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["connecteur", "reference"], name="entrant_connecteur_reference"
+            )
+        ]
+        indexes = [
+            models.Index(fields=["numero_expediteur", "-recu_le"], name="entrant_expediteur_date")
+        ]
+
+    def __str__(self):
+        return f"{self.numero_expediteur} {self.recu_le:%Y-%m-%d %H:%M}"

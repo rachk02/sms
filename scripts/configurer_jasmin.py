@@ -6,6 +6,7 @@ Recrée à l'identique, à chaque passage :
 - le connecteur `simulateur` vers le SMSC simulé du docker-compose ;
 - le groupe `clients` et l'utilisateur de l'API HTTP de Jasmin ;
 - la route par défaut des messages sortants vers ce connecteur ;
+- avec --rappels-entrants, le relais HTTP des SMS entrants et sa route ;
 puis enregistre la configuration (persist). Rien ne se saisit à la main.
 
 Avec --essai, envoie un message par l'API HTTP de Jasmin et attend son accusé
@@ -117,7 +118,7 @@ def exiger(sortie: str, attendu: str, etape: str) -> None:
     print(f"  {etape} : ok")
 
 
-def configurer(env: dict[str, str]) -> None:
+def configurer(env: dict[str, str], rappels_entrants: str | None = None) -> None:
     console = Console(
         "127.0.0.1",
         int(env["JASMIN_JCLI_PORT"]),
@@ -127,6 +128,8 @@ def configurer(env: dict[str, str]) -> None:
     try:
         # Tout est retiré puis recréé : la configuration appliquée est toujours
         # celle de ce fichier, jamais un reste d'une saisie antérieure.
+        console.commande("morouter -r 0")
+        console.commande("httpccm -r plateforme")
         console.commande("mtrouter -r 0")
         console.commande(f"smppccm -0 {CONNECTEUR['cid']}")
         console.commande(f"smppccm -r {CONNECTEUR['cid']}")
@@ -144,6 +147,16 @@ def configurer(env: dict[str, str]) -> None:
         exiger(console.saisir("user -a", utilisateur), "Successfully added", "utilisateur")
         route = {"type": "defaultroute", "connector": f"smppc({CONNECTEUR['cid']})", "rate": "0.00"}
         exiger(console.saisir("mtrouter -a", route), "Successfully added", "route par défaut")
+        if rappels_entrants:
+            # SMS entrants : relayés par HTTP vers le point d'entrée de rappel.
+            relais = {"cid": "plateforme", "url": rappels_entrants, "method": "POST"}
+            exiger(console.saisir("httpccm -a", relais), "Successfully added", "relais entrant")
+            route_entrante = {"type": "defaultroute", "connector": "http(plateforme)"}
+            exiger(
+                console.saisir("morouter -a", route_entrante),
+                "Successfully added",
+                "route entrante",
+            )
         exiger(
             console.commande(f"smppccm -1 {CONNECTEUR['cid']}"), "Successfully started", "démarrage"
         )
@@ -237,6 +250,10 @@ def main() -> int:
     options.add_argument(
         "--essai-seul", action="store_true", help="envoie un message d'essai sans reconfigurer"
     )
+    options.add_argument(
+        "--rappels-entrants",
+        help="adresse où Jasmin relaie les SMS entrants (point d'entrée de rappel)",
+    )
     arguments = options.parse_args()
     env = lire_env()
     if arguments.essai_seul:
@@ -244,7 +261,7 @@ def main() -> int:
         essayer(env)
         return 0
     print("Configuration de Jasmin :")
-    configurer(env)
+    configurer(env, arguments.rappels_entrants)
     if arguments.essai:
         print("Essai de bout en bout :")
         essayer(env)

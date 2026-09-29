@@ -23,6 +23,7 @@ INSTALLED_APPS = [
     "apps.telecom",
     "apps.journal",
     "apps.credits",
+    "apps.api",
     "apps.backoffice",
 ]
 
@@ -157,3 +158,6 @@ JASMIN_URL_RAPPEL = env("JASMIN_URL_RAPPEL", "")
 # ne tente plus de le livrer. La corrélation des accusés vit cette durée plus
 # une marge (apps/telecom/correlation.py), 72 heures par défaut.
 VALIDITE_SMS_HEURES = int(env("VALIDITE_SMS_HEURES", "48"))
+
+# Secret des jetons portés par les adresses de rappel des passerelles.
+RAPPELS_SECRET = env("RAPPELS_SECRET", "")

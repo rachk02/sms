@@ -25,8 +25,9 @@ plus la date qui permet de retrouver la partition.
 **`core_evenement_sortant`** est la boîte d'envoi du bus d'événements : `id`,
 `nom` selon la convention domaine, objet, action, `client_id` UUID simple nul
 pour un événement de plateforme, `objet_id`, `auteur_id`, `donnees` en jsonb,
-`cle_idempotence` unique, `cree_le`, `publie_le` nul tant que le relais ne l'a
-pas publiée. `publier` y écrit dans la transaction de l'écriture métier. Ce
+`cle_idempotence` unique, `echange` de destination (`evenements` pour le bus,
+`sms` pour déposer dans une file de trafic, le nom servant alors de clé de
+routage), `cree_le`, `publie_le` nul tant que le relais ne l'a pas publiée. `publier` y écrit dans la transaction de l'écriture métier. Ce
 n'est pas une table métier : le rôle applicatif peut y écrire sans pouvoir y
 lire, le relais passe par le rôle worker.
 
@@ -352,8 +353,11 @@ cette transaction validée.
 `attribue_le`, `expire_le`.
 
 **`telecom_message_entrant`** : `id`, `client_id` nul tant que non rapproché,
-`numero_expediteur`, `numero_destination`, `texte`, `mot_cle_reconnu`,
-`traite_le`, `recu_le`.
+`connecteur_id`, `reference` rendue par la passerelle, `numero_expediteur`,
+`numero_destination`, `texte`, `mot_cle_reconnu`, `traite_le`, `recu_le`.
+Unicité sur `(connecteur_id, reference)` : un rappel rejoué ne crée pas de
+doublon. Cloisonnée par `client_id` : un message non rapproché n'est visible
+d'aucun client.
 
 **`telecom_mot_cle`** : `id`, `client_id` nul pour les mots-clés globaux,
 `mot_cle`, `action` parmi DESINSCRIPTION, AIDE, CONTACT, `reponse_automatique`.

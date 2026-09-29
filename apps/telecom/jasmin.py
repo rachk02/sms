@@ -33,6 +33,7 @@ from .passerelles import (
     SoumissionRejetee,
     Statut,
 )
+from .rappels import jeton
 
 journal = logging.getLogger(__name__)
 
@@ -42,6 +43,11 @@ DELAI_S = 10
 
 # Réponse attendue par Jasmin à un rappel : sans elle, il le relaie à nouveau.
 ACQUITTEMENT_RAPPEL = "ACK/Jasmin"
+
+
+def adresse_rappel(base: str, connecteur_id) -> str:
+    """Adresse où Jasmin relaie accusés et SMS entrants d'un connecteur."""
+    return f"{base.rstrip('/')}/{connecteur_id}?jeton={jeton(connecteur_id)}"
 
 
 class Jasmin(Passerelle):
@@ -84,7 +90,7 @@ class Jasmin(Passerelle):
                 "dlr": "yes",
                 "dlr-level": "3",
                 "dlr-method": "POST",
-                "dlr-url": f"{self.url_rappel.rstrip('/')}/{self.connecteur.id}",
+                "dlr-url": adresse_rappel(self.url_rappel, self.connecteur.id),
             }
         return parametres
 

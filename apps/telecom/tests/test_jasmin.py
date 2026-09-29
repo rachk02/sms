@@ -30,6 +30,7 @@ from apps.telecom.passerelles import (
     SoumissionRejetee,
     passerelle_pour,
 )
+from apps.telecom.rappels import jeton
 
 
 class _Serveur:
@@ -88,7 +89,9 @@ def test_une_soumission_gsm_part_en_texte_avec_demande_d_accuse(fausse_api, sett
     assert (envoye["username"], envoye["password"]) == ("sms", "secret")
     assert envoye["dlr"] == "yes" and envoye["dlr-level"] == "3"
     assert envoye["validity-period"] == str(settings.VALIDITE_SMS_HEURES * 60)
-    assert envoye["dlr-url"] == f"http://plateforme/rappels/jasmin/{passerelle.connecteur.id}"
+    identifiant = passerelle.connecteur.id
+    attendu = f"http://plateforme/rappels/jasmin/{identifiant}?jeton={jeton(identifiant)}"
+    assert envoye["dlr-url"] == attendu
 
 
 def test_une_soumission_ucs2_part_en_hexadecimal_code_8(fausse_api):
@@ -219,4 +222,4 @@ def test_la_bascule_par_configuration_vers_jasmin(en_tant_que_worker, settings):
     assert message.etat in ETATS_TERMINAUX
     assert message.reference_smsc and uuid.UUID(message.reference_smsc)
     chemins = {chemin for chemin, _ in rappels.requetes}
-    assert chemins == {f"/rappels/jasmin/{connecteur.id}"}
+    assert chemins == {f"/rappels/jasmin/{connecteur.id}?jeton={jeton(connecteur.id)}"}

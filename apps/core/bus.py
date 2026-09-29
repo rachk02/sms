@@ -45,9 +45,16 @@ def _a_publier(using: str, lot: int) -> list[dict]:
         EvenementSortant.objects.using(using)
         .filter(publie_le__isnull=True)
         .order_by("cree_le", "id")
-        .values("id", "nom", "client_id", "objet_id", "auteur_id", "donnees", "cle_idempotence")[
-            :lot
-        ]
+        .values(
+            "id",
+            "nom",
+            "client_id",
+            "objet_id",
+            "auteur_id",
+            "donnees",
+            "cle_idempotence",
+            "echange",
+        )[:lot]
     )
 
 
@@ -59,13 +66,18 @@ def _marquer_publies(using: str, identifiants: list) -> None:
 
 async def relayer(canal, *, using: str = DEFAULT_DB_ALIAS, lot: int = 100) -> int:
     """Publie un lot d'événements en attente et renvoie leur nombre."""
-    echange = await declarer_echange(canal)
+    echanges = {ECHANGE: await declarer_echange(canal)}
     evenements = await sync_to_async(_a_publier)(using, lot)
     for evenement in evenements:
+        nom_echange = evenement.pop("echange")
+        if nom_echange not in echanges:
+            echanges[nom_echange] = await canal.declare_exchange(
+                nom_echange, aio_pika.ExchangeType.TOPIC, durable=True
+            )
         corps = json.dumps(
             {cle: valeur for cle, valeur in evenement.items() if cle != "id"}, default=str
         ).encode()
-        await echange.publish(
+        await echanges[nom_echange].publish(
             aio_pika.Message(
                 corps,
                 message_id=evenement["cle_idempotence"],

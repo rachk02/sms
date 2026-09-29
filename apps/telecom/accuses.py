@@ -28,8 +28,15 @@ def vers_json(accuse: Accuse) -> bytes:
     ).encode()
 
 
+def vers_dict(accuse: Accuse) -> dict:
+    return json.loads(vers_json(accuse))
+
+
 def depuis_json(corps: bytes) -> Accuse:
+    """Accepte un accusé nu, ou l'enveloppe de la boîte d'envoi qui le porte
+    dans `donnees` quand il vient du point d'entrée de rappel."""
     donnees = json.loads(corps)
+    donnees = donnees.get("donnees", donnees)
     return Accuse(
         connecteur_id=donnees["connecteur_id"],
         reference_smsc=donnees["reference_smsc"],

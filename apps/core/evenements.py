@@ -27,6 +27,7 @@ def publier(
     auteur_id=None,
     donnees: dict | None = None,
     cle_idempotence: str | None = None,
+    echange: str = "evenements",
     using: str = DEFAULT_DB_ALIAS,
 ) -> str:
     """Enregistre un événement à publier et renvoie sa clé d'idempotence.
@@ -44,6 +45,7 @@ def publier(
                 auteur_id=auteur_id,
                 donnees=donnees or {},
                 cle_idempotence=cle,
+                echange=echange,
             )
         ],
         ignore_conflicts=True,
