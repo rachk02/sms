@@ -50,3 +50,6 @@ desktop.ini
 
 # Claude Code : permissions propres a une machine (le journal, lui, est suivi)
 .claude/settings.local.json
+
+# Sauvegardes locales de PostgreSQL
+sauvegardes/
