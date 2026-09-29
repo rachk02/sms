@@ -1,7 +1,13 @@
-"""Réglages de l'environnement de recette, isolé de la production."""
+"""Réglages de l'environnement de recette, isolé du développement.
 
-from config.env import charger_fichier_env
+Sa base, son hôte virtuel RabbitMQ et sa base Redis sont les siens, décrits
+dans `.env.recette`, qui l'emporte sur `.env` pour toute variable qu'il pose.
+Voir scripts/preparer_recette.sh.
+"""
 
+from config.env import RACINE, charger_fichier_env
+
+charger_fichier_env(RACINE / ".env.recette")
 charger_fichier_env()
 
 from .base import *

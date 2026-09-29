@@ -1,4 +1,5 @@
-"""Refuse tout tiret cadratin et tout emoji dans les fichiers suivis par git.
+"""Refuse tout tiret cadratin et tout emoji dans les fichiers du dépôt, suivis ou
+nouveaux, hors fichiers ignorés par git.
 
 La règle est dans la charte : ni l'un ni l'autre, nulle part. Un caractère
 écrit sous forme de séquence d'échappement dans un test reste permis.
@@ -25,7 +26,10 @@ def interdit(caractere: str) -> bool:
 
 def main() -> int:
     fichiers = subprocess.run(
-        ["git", "ls-files", "-z"], capture_output=True, check=True, text=True
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        capture_output=True,
+        check=True,
+        text=True,
     ).stdout.split("\0")
     fautes = []
     for chemin in filter(None, fichiers):

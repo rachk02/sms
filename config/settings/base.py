@@ -1,5 +1,7 @@
 """Réglages communs aux quatre environnements."""
 
+from urllib.parse import quote
+
 from config.env import RACINE, env, env_liste
 
 BASE_DIR = RACINE
@@ -106,12 +108,15 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-REDIS_URL = f"redis://{env('REDIS_HOST')}:{env('REDIS_PORT')}/0"
+REDIS_URL = f"redis://{env('REDIS_HOST')}:{env('REDIS_PORT')}/{env('REDIS_DB', '0')}"
 
 RABBITMQ_USER = env("RABBITMQ_USER")
 RABBITMQ_PASSWORD = env("RABBITMQ_PASSWORD")
+# Hôte virtuel : « / » en développement, « recette » pour l'environnement de recette.
+RABBITMQ_VHOST = env("RABBITMQ_VHOST", "/")
 RABBITMQ_URL = (
-    f"amqp://{RABBITMQ_USER}:{RABBITMQ_PASSWORD}@{env('RABBITMQ_HOST')}:{env('RABBITMQ_PORT')}/"
+    f"amqp://{RABBITMQ_USER}:{RABBITMQ_PASSWORD}@{env('RABBITMQ_HOST')}:{env('RABBITMQ_PORT')}"
+    f"/{quote(RABBITMQ_VHOST, safe='')}"
 )
 
 STOCKAGE_OBJET = {

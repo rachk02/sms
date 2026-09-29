@@ -3,6 +3,7 @@
 import base64
 import json
 import logging
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 
@@ -27,7 +28,8 @@ class Liaison:
 def profondeur_files() -> dict[str, int] | None:
     """Messages en attente par file, lus sur l'API de gestion de RabbitMQ.
     None si le courtier ne répond pas."""
-    requete = urllib.request.Request(f"{settings.RABBITMQ_API_URL}/queues/%2F")
+    hote = urllib.parse.quote(settings.RABBITMQ_VHOST, safe="")
+    requete = urllib.request.Request(f"{settings.RABBITMQ_API_URL}/queues/{hote}")
     authentification = f"{settings.RABBITMQ_USER}:{settings.RABBITMQ_PASSWORD}".encode()
     requete.add_header("Authorization", "Basic " + base64.b64encode(authentification).decode())
     try:
