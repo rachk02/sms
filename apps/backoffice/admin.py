@@ -8,9 +8,19 @@ from django.shortcuts import redirect
 from django.template.response import TemplateResponse
 
 from apps.comptes.models import Client, Dossier, Piece, Utilisateur
+from apps.fichiers.models import Fichier
+from apps.fichiers.services import lien
 
 from .forms import EnregistrementClientForm
-from .services import EnregistrementRefuse, PieceDeposee, enregistrer_client
+from .services import (
+    CONTROLES_DE_REVUE,
+    DecisionRefusee,
+    EnregistrementRefuse,
+    PieceDeposee,
+    approuver_dossier,
+    enregistrer_client,
+    rejeter_dossier,
+)
 
 
 def adresse_ip(request) -> str | None:
@@ -58,22 +68,61 @@ class ClientAdmin(admin.ModelAdmin):
         return TemplateResponse(request, "admin/backoffice/enregistrer_client.html", contexte)
 
 
-class PieceEnLigne(admin.TabularInline):
-    model = Piece
-    extra = 0
-    fields = ("type", "etat", "expire_le", "motif_refus")
-    readonly_fields = ("type",)
-    can_delete = False
-
-
 @admin.register(Dossier)
 class DossierAdmin(admin.ModelAdmin):
     list_display = ("client", "etat", "depose_le", "decide_le", "decide_par")
     list_filter = ("etat",)
     # La file de revue se prend par ancienneté : le plus vieux dossier d'abord.
     ordering = ("depose_le",)
-    inlines = [PieceEnLigne]
-    readonly_fields = ("client", "depose_le", "decide_le", "decide_par")
+
+    def has_add_permission(self, request):
+        return False  # un dossier naît de l'enregistrement d'un client
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        """Fiche de revue : pièces par liens signés, cinq contrôles, décision."""
+        dossier = self.get_object(request, object_id)
+        if dossier is None:
+            return self._get_obj_does_not_exist_redirect(request, self.model._meta, object_id)
+        if request.method == "POST":
+            try:
+                if "approuver" in request.POST:
+                    approuver_dossier(
+                        dossier.id,
+                        agent=request.user,
+                        controles=request.POST.getlist("controles"),
+                        adresse_ip=adresse_ip(request),
+                    )
+                    messages.success(request, f"Dossier de {dossier.client} approuvé.")
+                else:
+                    rejeter_dossier(
+                        dossier.id,
+                        agent=request.user,
+                        motif=request.POST.get("motif", ""),
+                        detail=request.POST.get("detail", ""),
+                        adresse_ip=adresse_ip(request),
+                    )
+                    messages.success(request, f"Dossier de {dossier.client} rejeté.")
+                return redirect("admin:comptes_dossier_changelist")
+            except DecisionRefusee as refus:
+                messages.error(request, str(refus))
+        pieces = []
+        for piece in Piece.objects.filter(dossier=dossier).order_by("type"):
+            fichier = Fichier.objects.filter(id=piece.fichier_id).first()
+            pieces.append({"piece": piece, "lien": lien(fichier) if fichier else None})
+        contexte = {
+            **self.admin_site.each_context(request),
+            "title": f"Revue du dossier de {dossier.client}",
+            "dossier": dossier,
+            "pieces": pieces,
+            "controles": CONTROLES_DE_REVUE,
+            "motifs": Dossier.MotifRejet.choices,
+            "opts": self.model._meta,
+            "decidable": dossier.etat in (Dossier.Etat.DEPOSE, Dossier.Etat.EN_REVUE),
+        }
+        return TemplateResponse(request, "admin/backoffice/revue_dossier.html", contexte)
 
 
 @admin.register(Utilisateur)

@@ -1,0 +1,53 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<div class="module">
+  <h2>{{ dossier.client.raison_sociale }}</h2>
+  <p>
+    Forme : {{ dossier.client.get_forme_display }} ;
+    RCCM : {{ dossier.client.rccm|default:"sans objet" }} ; IFU : {{ dossier.client.ifu }}.<br>
+    Déposé le {{ dossier.depose_le|date:"d/m/Y H:i" }} ; état : {{ dossier.get_etat_display }}.
+    {% if dossier.motif_rejet %}<br>Motif : {{ dossier.get_motif_rejet_display }}{% if dossier.motif_detail %}, {{ dossier.motif_detail }}{% endif %}.{% endif %}
+  </p>
+</div>
+
+<div class="module">
+  <h2>Pièces</h2>
+  <table>
+    <thead><tr><th>Pièce</th><th>État</th><th>Consulter</th></tr></thead>
+    <tbody>
+    {% for ligne in pieces %}
+      <tr>
+        <td>{{ ligne.piece.get_type_display }}</td>
+        <td>{{ ligne.piece.get_etat_display }}</td>
+        <td>{% if ligne.lien %}<a href="{{ ligne.lien }}" target="_blank" rel="noopener">Ouvrir (lien valable 15 minutes)</a>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if decidable %}
+<form method="post" class="module">
+  {% csrf_token %}
+  <h2>Approuver</h2>
+  <fieldset>
+    {% for controle in controles %}
+      <div><label><input type="checkbox" name="controles" value="{{ controle }}"> {{ controle }}</label></div>
+    {% endfor %}
+  </fieldset>
+  <div class="submit-row"><input type="submit" name="approuver" class="default" value="Approuver le dossier"></div>
+</form>
+
+<form method="post" class="module">
+  {% csrf_token %}
+  <h2>Rejeter</h2>
+  <p>Le motif retenu est transmis au client tel quel.</p>
+  <select name="motif">
+    <option value="">Choisir un motif</option>
+    {% for valeur, libelle in motifs %}<option value="{{ valeur }}">{{ libelle }}</option>{% endfor %}
+  </select>
+  <p><label>Précision pour le client (facultative)<br><textarea name="detail" rows="3" cols="60"></textarea></label></p>
+  <div class="submit-row"><input type="submit" name="rejeter" value="Rejeter le dossier"></div>
+</form>
+{% endif %}
+{% endblock %}

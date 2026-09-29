@@ -126,3 +126,114 @@ def enregistrer_client(
         adresse_ip=adresse_ip,
     )
     return dossier
+
+
+# Les cinq contrôles de la revue humaine (fiche F-11).
+CONTROLES_DE_REVUE = (
+    "Raison sociale concordante entre la pièce d'existence, l'IFU et le compte",
+    "Numéro déclaré retrouvé dans le fichier national du RCCM",
+    "Identité du représentant cohérente avec la pièce d'existence, ou procuration",
+    "Pièces lisibles et non expirées",
+    "Activité déclarée cohérente avec l'usage annoncé des SMS",
+)
+
+
+class DecisionRefusee(ValueError):
+    pass
+
+
+def _dossier_a_decider(dossier_id) -> Dossier:
+    dossier = Dossier.objects.select_for_update().select_related("client").get(id=dossier_id)
+    if dossier.etat not in (Dossier.Etat.DEPOSE, Dossier.Etat.EN_REVUE):
+        raise DecisionRefusee(f"Dossier déjà {dossier.get_etat_display().lower()}.")
+    return dossier
+
+
+@transaction.atomic
+def approuver_dossier(
+    dossier_id, *, agent, palier=Client.Palier.VERIFIE, controles=(), adresse_ip=None
+) -> Dossier:
+    """Approuve un dossier : le client passe au palier accordé, ses plafonds
+    suivent sans autre intervention, ses pièces sont acceptées."""
+    from apps.comptes.services import PLAFONDS_PAR_PALIER
+    from apps.core.evenements import publier
+
+    manquants = [c for c in CONTROLES_DE_REVUE if c not in controles]
+    if manquants:
+        raise DecisionRefusee("Contrôles non cochés : " + " ; ".join(manquants))
+    dossier = _dossier_a_decider(dossier_id)
+    client = dossier.client
+    avant = {"palier": client.palier, "etat_dossier": dossier.etat}
+    plafonds = PLAFONDS_PAR_PALIER[palier]
+    Client.objects.filter(id=client.id).update(
+        palier=palier,
+        plafond_horaire=plafonds["horaire"],
+        plafond_journalier=plafonds["journalier"],
+        modifie_le=timezone.now(),
+    )
+    dossier.etat = Dossier.Etat.APPROUVE
+    dossier.decide_le, dossier.decide_par = timezone.now(), agent
+    dossier.palier_accorde = palier
+    dossier.save(update_fields=["etat", "decide_le", "decide_par", "palier_accorde", "modifie_le"])
+    Piece.objects.filter(dossier=dossier).update(etat=Piece.Etat.ACCEPTEE)
+    auditer(
+        "comptes.dossier.approuve",
+        dossier,
+        auteur=agent,
+        client=client,
+        avant=avant,
+        apres={"palier": palier, "etat_dossier": dossier.etat, "controles": list(controles)},
+        adresse_ip=adresse_ip,
+    )
+    publier(
+        "compte.dossier.approuve",
+        client_id=client.id,
+        objet_id=dossier.id,
+        auteur_id=agent.id,
+        donnees={"palier": palier},
+    )
+    return dossier
+
+
+@transaction.atomic
+def rejeter_dossier(dossier_id, *, agent, motif: str, detail: str = "", adresse_ip=None) -> Dossier:
+    """Rejette un dossier. Le motif vient de la liste fermée, jamais d'un champ
+    libre ; son libellé part au client mot pour mot, avec le détail éventuel."""
+    from apps.core.evenements import publier
+
+    if motif not in Dossier.MotifRejet.values:
+        raise DecisionRefusee("Un rejet exige un motif pris dans la liste des motifs.")
+    dossier = _dossier_a_decider(dossier_id)
+    avant = {"etat_dossier": dossier.etat}
+    dossier.etat = Dossier.Etat.REJETE
+    dossier.decide_le, dossier.decide_par = timezone.now(), agent
+    dossier.motif_rejet, dossier.motif_detail = motif, detail.strip()
+    dossier.save(
+        update_fields=[
+            "etat",
+            "decide_le",
+            "decide_par",
+            "motif_rejet",
+            "motif_detail",
+            "modifie_le",
+        ]
+    )
+    libelle = Dossier.MotifRejet(motif).label
+    auditer(
+        "comptes.dossier.rejete",
+        dossier,
+        auteur=agent,
+        client=dossier.client,
+        avant=avant,
+        apres={"etat_dossier": dossier.etat, "motif": motif, "detail": dossier.motif_detail},
+        motif=libelle,
+        adresse_ip=adresse_ip,
+    )
+    publier(
+        "compte.dossier.rejete",
+        client_id=dossier.client_id,
+        objet_id=dossier.id,
+        auteur_id=agent.id,
+        donnees={"motif": motif, "libelle": libelle, "detail": dossier.motif_detail},
+    )
+    return dossier
