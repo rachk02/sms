@@ -76,3 +76,53 @@ def analyser(texte: str) -> Analyse:
         return Analyse(Encodage.GSM7, sum(couts), _segments(couts, GSM_SIMPLE, GSM_SEGMENT))
     couts = [_cout_ucs2(c) for c in texte]
     return Analyse(Encodage.UCS2, sum(couts), _segments(couts, UCS2_SIMPLE, UCS2_SEGMENT), hors_gsm)
+
+
+@dataclass(frozen=True)
+class Segment:
+    """Un segment d'un message long, avec son en-tête de concaténation (UDH) :
+    05 00 03, puis la référence commune, le nombre de segments et le rang."""
+
+    contenu: str
+    rang: int
+    total: int
+    reference: int
+
+    @property
+    def udh(self) -> bytes:
+        return bytes([0x05, 0x00, 0x03, self.reference, self.total, self.rang])
+
+
+def _decouper(texte: str, cout, par_segment: int) -> list[str]:
+    morceaux, courant, rempli = [], [], 0
+    for caractere in texte:
+        prix = cout(caractere)
+        if rempli + prix > par_segment:
+            morceaux.append("".join(courant))
+            courant, rempli = [], 0
+        courant.append(caractere)
+        rempli += prix
+    morceaux.append("".join(courant))
+    return morceaux
+
+
+def decouper(texte: str, reference: int = 0) -> list[Segment]:
+    """Découpe un texte comme le réseau le recevra. Même règles que `analyser` :
+    le nombre de segments rendu ici est celui qui est facturé.
+
+    Un message qui tient en un segment n'a pas d'en-tête de concaténation : un
+    seul segment de rang 1 sur 1 est rendu, que l'adaptateur envoie sans UDH.
+    """
+    analyse = analyser(texte)
+    if analyse.segments == 1:
+        return [Segment(texte, 1, 1, reference % 256)]
+    if analyse.encodage == Encodage.GSM7:
+        morceaux = _decouper(texte, _cout_gsm, GSM_SEGMENT)
+    else:
+        morceaux = _decouper(texte, _cout_ucs2, UCS2_SEGMENT)
+    if len(morceaux) != analyse.segments:
+        raise RuntimeError("Découpage et décompte des segments divergent : le coût serait faux.")
+    return [
+        Segment(morceau, rang, len(morceaux), reference % 256)
+        for rang, morceau in enumerate(morceaux, start=1)
+    ]

@@ -19,6 +19,7 @@ from typing import ClassVar
 
 from django.utils import timezone
 
+from apps.core.encodage import Segment, decouper
 from apps.core.etats import ETATS_D_ACCUSE, Etat
 
 from .models import Connecteur
@@ -212,6 +213,7 @@ class Simulateur(Passerelle):
         self.libelle_echec = libelles.get("echec", "UNDELIV")
         self.en_attente: list[_EnAttente] = []
         self.soumissions: dict[str, Soumission] = {}
+        self.segments: dict[str, list[Segment]] = {}
         self.accuses_rendus: dict[str, str] = {}
 
     def etat(self) -> EtatLiaison:
@@ -226,6 +228,8 @@ class Simulateur(Passerelle):
             _EnAttente(reference, soumission, libelle, self.horloge() + self.delai)
         )
         self.soumissions[reference] = soumission
+        # Ce que le réseau recevrait : les segments et leur en-tête de concaténation.
+        self.segments[reference] = decouper(soumission.texte, self.aleatoire.randrange(256))
         return reference
 
     def statut(self, soumission: Soumission, reference_smsc: str | None = None) -> Statut:

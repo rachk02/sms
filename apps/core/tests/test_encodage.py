@@ -1,6 +1,6 @@
 import pytest
 
-from apps.core.encodage import ALPHABET_GSM, EXTENSION_GSM, Encodage, analyser
+from apps.core.encodage import ALPHABET_GSM, EXTENSION_GSM, Encodage, analyser, decouper
 
 
 def test_160_caracteres_gsm_tiennent_en_un_segment():
@@ -76,3 +76,29 @@ def test_le_caractere_d_echappement_n_est_pas_un_caractere_gsm_utilisable():
 def test_l_alphabet_compte_les_128_positions_moins_l_echappement():
     assert len(ALPHABET_GSM) == 127
     assert len(EXTENSION_GSM) == 10
+
+
+def test_un_texte_de_400_caracteres_gsm_se_decoupe_en_trois_segments_chaines():
+    texte = "".join(chr(ord("a") + rang % 26) for rang in range(400))
+    segments = decouper(texte, reference=0x2A)
+    assert [len(s.contenu) for s in segments] == [153, 153, 94]
+    assert "".join(s.contenu for s in segments) == texte
+    assert [s.udh for s in segments] == [bytes([5, 0, 3, 0x2A, 3, rang]) for rang in (1, 2, 3)]
+
+
+def test_un_texte_ucs2_se_decoupe_par_67_et_suit_le_decompte():
+    texte = "ê" * 100
+    segments = decouper(texte)
+    assert [len(s.contenu) for s in segments] == [67, 33]
+    assert len(segments) == analyser(texte).segments
+
+
+def test_un_caractere_d_extension_ne_se_coupe_pas_au_decoupage():
+    texte = "a" * 152 + "€" + "a" * 10
+    segments = decouper(texte)
+    assert segments[0].contenu == "a" * 152
+    assert segments[1].contenu.startswith("€")
+
+
+def test_un_message_court_est_un_seul_segment_sans_concatenation():
+    assert [(s.rang, s.total) for s in decouper("Bonjour")] == [(1, 1)]

@@ -2,11 +2,12 @@
 
 from datetime import datetime
 
-from django.db import connections, transaction
+from django.db import connection, connections, transaction
 from django.utils import timezone
 
 from apps.core.encodage import analyser
 from apps.core.etats import ETATS_TERMINAUX, Etat
+from apps.core.numeros import normaliser
 from apps.core.redis import client_redis
 from apps.telecom import correlation
 from apps.telecom.passerelles import Soumission
@@ -168,3 +169,36 @@ def appliquer_accuse(accuse) -> bool:
         details={"libelle_operateur": accuse.libelle_operateur},
     )
     return True
+
+
+def envoyer_unitaire(
+    *,
+    client,
+    numero: str,
+    texte: str,
+    expediteur: str,
+    passerelle,
+    cout_unitaire: int,
+    source: str = Evenement.Source.API,
+) -> Message:
+    """Envoi unitaire de bout en bout : normalisation du numéro, choix de
+    l'encodage et décompte des segments, écriture au journal, puis soumission.
+
+    Le message est validé au journal avant tout appel à la passerelle, jamais
+    après : une coupure entre les deux laisse un message connu et non soumis,
+    jamais un message parti sans trace. D'où le refus d'être appelé dans une
+    transaction déjà ouverte, qui rendrait cette garantie impossible.
+    """
+    if connection.in_atomic_block:
+        raise RuntimeError("envoyer_unitaire doit être appelé hors transaction.")
+    with transaction.atomic():
+        message = enregistrer_message(
+            client=client,
+            numero_normalise=normaliser(numero),
+            operateur=passerelle.connecteur.operateur,
+            expediteur_libelle=expediteur,
+            texte=texte,
+            cout_unitaire=cout_unitaire,
+            source=source,
+        )
+    return soumettre(message, passerelle)
