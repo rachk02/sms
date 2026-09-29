@@ -48,6 +48,7 @@ services:
       - "127.0.0.1:${RABBITMQ_CONSOLE_PORT}:15672"
     volumes:
       - rabbitmq:/var/lib/rabbitmq
+      - ./docker/rabbitmq/10-jasmin.conf:/etc/rabbitmq/conf.d/10-jasmin.conf:ro
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -73,6 +74,51 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # Passerelle SMS et simulateur de SMSC (lot 2). Profil « passerelle » :
+  #   docker compose --profile passerelle up -d
+  # SMPPSim (Selenium Software), empaqueté par les auteurs de Jasmin. Comptes
+  # smppclient1 à 3, mot de passe « password ». Accusés réalistes : 90 % livrés,
+  # 6 % non livrables, 2 % acceptés, 2 % rejetés, en moins de 13 secondes.
+  # ukarim/smscsim a été écarté : son service_type de sept caractères viole
+  # SMPP 3.4, et Jasmin refuse ses accusés.
+  smsc:
+    image: jookies/smppsim:1.0.1
+    profiles: ["passerelle"]
+    ports:
+      - "127.0.0.1:${SMSC_WEB_PORT}:89"
+
+  jasmin:
+    image: jookies/jasmin:0.11.0
+    profiles: ["passerelle"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      smsc:
+        condition: service_started
+    entrypoint: ["/bin/bash", "/opt/sms/demarrer.sh"]
+    environment:
+      REDIS_CLIENT_HOST: redis
+      REDIS_CLIENT_PORT: "6379"
+      REDIS_CLIENT_DBID: "2"
+      AMQP_BROKER_HOST: rabbitmq
+      AMQP_BROKER_PORT: "5672"
+      AMQP_BROKER_USER: ${RABBITMQ_USER}
+      AMQP_BROKER_PASSWORD: ${RABBITMQ_PASSWORD}
+      JCLI_USER: ${JASMIN_JCLI_USER}
+      JCLI_PASSWORD: ${JASMIN_JCLI_PASSWORD}
+    volumes:
+      - ./docker/jasmin/demarrer.sh:/opt/sms/demarrer.sh:ro
+    ports:
+      - "127.0.0.1:${JASMIN_JCLI_PORT}:8990"
+      - "127.0.0.1:${JASMIN_HTTP_PORT}:1401"
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import socket; socket.create_connection(('127.0.0.1', 8990), 2)\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
 volumes:
   postgres:
