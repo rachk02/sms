@@ -27,3 +27,19 @@ ETATS_TERMINAUX = frozenset(
 # États qu'un accusé d'opérateur peut annoncer. SANS_ACCUSE naît de l'absence
 # d'accusé, jamais d'un accusé ; ANNULE, d'une décision du client.
 ETATS_D_ACCUSE = frozenset({Etat.LIVRE, Etat.NON_LIVRE, Etat.EXPIRE, Etat.REJETE})
+
+# Transitions permises. Un état terminal n'a aucune sortie. SOUMIS peut finir en
+# REJETE : un opérateur peut refuser un message après l'avoir accepté.
+TRANSITIONS: dict[str, frozenset[str]] = {
+    Etat.RECU: frozenset({Etat.EN_ATTENTE, Etat.EN_FILE, Etat.SOUMIS, Etat.REJETE, Etat.ANNULE}),
+    Etat.EN_ATTENTE: frozenset({Etat.EN_FILE, Etat.REJETE, Etat.ANNULE}),
+    Etat.EN_FILE: frozenset({Etat.SOUMIS, Etat.EN_ATTENTE, Etat.REJETE, Etat.ANNULE}),
+    Etat.SOUMIS: frozenset(
+        {Etat.LIVRE, Etat.NON_LIVRE, Etat.EXPIRE, Etat.SANS_ACCUSE, Etat.REJETE}
+    ),
+    **{etat: frozenset() for etat in ETATS_TERMINAUX},
+}
+
+
+def transition_permise(depuis: str, vers: str) -> bool:
+    return vers in TRANSITIONS.get(depuis, frozenset())

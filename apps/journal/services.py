@@ -7,7 +7,7 @@ from django.db import connection, connections, transaction
 from django.utils import timezone
 
 from apps.core.encodage import analyser
-from apps.core.etats import ETATS_TERMINAUX, Etat
+from apps.core.etats import ETATS_TERMINAUX, Etat, transition_permise
 from apps.core.numeros import normaliser
 from apps.core.redis import client_redis
 from apps.telecom import correlation
@@ -100,6 +100,57 @@ def creer_partitions_a_venir(mois_d_avance: int = 2) -> list[str]:
     return creees
 
 
+class TransitionInterdite(Exception):
+    def __init__(self, message_id, depuis: str, vers: str):
+        self.message_id, self.depuis, self.vers = message_id, depuis, vers
+        super().__init__(f"Transition interdite pour {message_id} : {depuis} vers {vers}")
+
+
+def changer_etat(
+    message: Message,
+    vers: str,
+    *,
+    source: str,
+    horodatage: datetime | None = None,
+    details: dict | None = None,
+    **champs,
+) -> None:
+    """Seule porte de changement d'état d'un message. Vérifie la transition
+    contre la table de `core.etats`, écrit le nouvel état et ses champs, puis
+    un événement daté. Une transition interdite est journalisée et refusée.
+
+    `message` doit porter l'état courant, lu sous verrou par l'appelant.
+    """
+    if not transition_permise(message.etat, vers):
+        journal.warning(
+            "Transition interdite refusée pour %s : %s vers %s.",
+            message.id,
+            message.etat,
+            vers,
+            extra={"message_id": str(message.id)},
+        )
+        raise TransitionInterdite(message.id, message.etat, vers)
+    horodatage = horodatage or timezone.now()
+    Message.objects.filter(id=message.id, date_reception=message.date_reception).update(
+        etat=vers, modifie_le=timezone.now(), **champs
+    )
+    Evenement.objects.create(
+        client_id=message.client_id,
+        message_id=message.id,
+        etat=vers,
+        horodatage=horodatage,
+        source=source,
+        details=details or {},
+    )
+    message.etat = vers
+
+
+def _verrouiller(message: Message) -> Message:
+    return Message.objects.select_for_update().get(
+        id=message.id, date_reception=message.date_reception
+    )
+
+
 MOTIF_SORT_INCONNU = "SOUMISSION_INTERROMPUE_SORT_INCONNU"
 
 
@@ -151,52 +202,42 @@ def soumettre(message: Message, passerelle, source: str = Evenement.Source.WORKE
 def _enregistrer_soumission(
     message, passerelle, reference, source, soumis_le, reprise=False
 ) -> Message:
-    cle = {"id": message.id, "date_reception": message.date_reception}
-    Message.objects.filter(**cle).update(
+    courant = _verrouiller(message)
+    details = {"reference_smsc": reference}
+    if reprise:
+        details["reprise"] = "soumission retrouvée auprès de la passerelle, non refaite"
+    changer_etat(
+        courant,
+        Etat.SOUMIS,
+        source=source,
+        horodatage=soumis_le,
+        details=details,
         reference_smsc=reference,
         connecteur_id=passerelle.connecteur.id,
         date_soumission=soumis_le,
-        etat=Etat.SOUMIS,
-        modifie_le=timezone.now(),
     )
     correlation.enregistrer(passerelle.connecteur.id, reference, message.id, message.date_reception)
     compteur = CLE_SOUMIS.format(connecteur_id=passerelle.connecteur.id)
     transaction.on_commit(lambda: client_redis().incr(compteur))
-    details = {"reference_smsc": reference}
-    if reprise:
-        details["reprise"] = "soumission retrouvée auprès de la passerelle, non refaite"
-    Evenement.objects.create(
-        client_id=message.client_id,
-        message_id=message.id,
-        etat=Etat.SOUMIS,
-        horodatage=soumis_le,
-        source=source,
-        details=details,
-    )
-    return Message.objects.get(**cle)
+    return Message.objects.get(id=message.id, date_reception=message.date_reception)
 
 
 @transaction.atomic
 def _sort_inconnu(message, passerelle, source) -> Message:
-    cle = {"id": message.id, "date_reception": message.date_reception}
     journal.error(
         "Soumission interrompue de %s : %s ne sait pas en dire le sort, message non resoumis.",
         message.id,
         passerelle.connecteur.nom,
         extra={"message_id": str(message.id), "connecteur_id": str(passerelle.connecteur.id)},
     )
-    Message.objects.filter(**cle).update(
-        etat=Etat.EN_FILE, motif_echec=MOTIF_SORT_INCONNU, modifie_le=timezone.now()
-    )
-    Evenement.objects.create(
-        client_id=message.client_id,
-        message_id=message.id,
-        etat=Etat.EN_FILE,
-        horodatage=timezone.now(),
+    changer_etat(
+        _verrouiller(message),
+        Etat.EN_FILE,
         source=source,
         details={"motif": MOTIF_SORT_INCONNU, "connecteur": passerelle.connecteur.nom},
+        motif_echec=MOTIF_SORT_INCONNU,
     )
-    return Message.objects.get(**cle)
+    return Message.objects.get(id=message.id, date_reception=message.date_reception)
 
 
 @transaction.atomic
@@ -223,19 +264,19 @@ def appliquer_accuse(accuse) -> bool:
     if message is None:
         correlation.ranger_orphelin(accuse)
         return False
-    if message.etat in ETATS_TERMINAUX:
-        return False
-    Message.objects.filter(id=message.id, date_reception=message.date_reception).update(
-        etat=accuse.etat, date_accuse=accuse.horodatage, modifie_le=timezone.now()
-    )
-    Evenement.objects.create(
-        client_id=message.client_id,
-        message_id=message.id,
-        etat=accuse.etat,
-        horodatage=accuse.horodatage,
-        source=Evenement.Source.ACCUSE,
-        details={"libelle_operateur": accuse.libelle_operateur},
-    )
+    if message.etat == accuse.etat:
+        return False  # accusé rejoué : déjà appliqué
+    try:
+        changer_etat(
+            message,
+            accuse.etat,
+            source=Evenement.Source.ACCUSE,
+            horodatage=accuse.horodatage,
+            details={"libelle_operateur": accuse.libelle_operateur},
+            date_accuse=accuse.horodatage,
+        )
+    except TransitionInterdite:
+        return False  # contradictoire avec l'état final déjà connu : refusé, journalisé
     return True
 
 
