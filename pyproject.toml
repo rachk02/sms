@@ -30,7 +30,7 @@ addopts = "--strict-markers"
 [tool.ruff]
 target-version = "py314"
 line-length = 100
-extend-exclude = ["docs_of_interest"]
+extend-exclude = ["docs_of_interest", "**/migrations/*"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "DJ"]

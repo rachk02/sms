@@ -58,8 +58,14 @@ l'identifiant de connexion, il n'y a pas de nom d'utilisateur séparé.
 | `echecs_consecutifs` | smallint | défaut zéro |
 | `verrouille_jusqu_a` | timestamptz | nul hors verrouillage |
 | `langue` | char(2) | défaut fr |
+| `actif` | boolean | défaut vrai, exigé par l'authentification de Django |
+| `agent_plateforme` | boolean | défaut faux, vrai pour un agent EL-IMMEKA, ouvre l'administration |
+| `super_administrateur` | boolean | défaut faux |
 
-Un index unique sur `courriel`. Un index sur `(client_id, role)`.
+Un index unique sur `courriel`, enregistré en minuscules. Un index sur
+`(client_id, role)`. `client_id` est nul pour les agents EL-IMMEKA, qui
+n'appartiennent à aucun compte client. Les tables de liaison aux groupes et
+aux permissions de Django accompagnent ce modèle, pour l'administration.
 
 Cette table est la seule table portant `client_id` qui n'est pas soumise au
 cloisonnement par ligne : la connexion la lit par courriel avant que le client
