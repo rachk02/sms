@@ -151,6 +151,11 @@ LOGGING = {
 JASMIN_HTTP_URL = f"http://{env('JASMIN_HOST', '127.0.0.1')}:{env('JASMIN_HTTP_PORT', '1401')}"
 JASMIN_HTTP_USER = env("JASMIN_HTTP_USER", "")
 JASMIN_HTTP_PASSWORD = env("JASMIN_HTTP_PASSWORD", "")
+# Console d'administration de Jasmin, sondée par la surveillance des liaisons.
+JASMIN_JCLI_HOST = env("JASMIN_HOST", "127.0.0.1")
+JASMIN_JCLI_PORT = int(env("JASMIN_JCLI_PORT", "8990"))
+JASMIN_JCLI_USER = env("JASMIN_JCLI_USER", "")
+JASMIN_JCLI_PASSWORD = env("JASMIN_JCLI_PASSWORD", "")
 # Adresse où Jasmin relaie les accusés, vue depuis le conteneur de Jasmin.
 JASMIN_URL_RAPPEL = env("JASMIN_URL_RAPPEL", "")
 

@@ -10,7 +10,7 @@ from apps.core.encodage import analyser
 from apps.core.etats import ETATS_TERMINAUX, Etat, transition_permise
 from apps.core.numeros import normaliser
 from apps.core.redis import client_redis
-from apps.telecom import correlation
+from apps.telecom import correlation, sante
 from apps.telecom.passerelles import SortSoumission, Soumission
 
 from .models import Destinataire, Evenement, Message
@@ -277,6 +277,13 @@ def appliquer_accuse(accuse) -> bool:
         )
     except TransitionInterdite:
         return False  # contradictoire avec l'état final déjà connu : refusé, journalisé
+    delai = None
+    if message.date_soumission:
+        delai = (accuse.horodatage - message.date_soumission).total_seconds()
+    positif = accuse.etat == Etat.LIVRE
+    transaction.on_commit(
+        lambda: sante.enregistrer_accuse(accuse.connecteur_id, positif, delai, accuse.horodatage)
+    )
     return True
 
 

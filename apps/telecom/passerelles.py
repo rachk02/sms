@@ -144,6 +144,12 @@ class Passerelle(ABC):
         relever. None si le rappel n'annonce pas un état final."""
         raise NotImplementedError(f"{type(self).__name__} ne pousse pas ses accusés")
 
+    def sonder(self) -> EtatLiaison:
+        """Constate l'état réel de la liaison, au besoin en interrogeant la
+        passerelle. Appelé par la surveillance, jamais à chaque soumission :
+        `etat` doit rester sans coût."""
+        return self.etat()
+
     def limites(self) -> Limites:
         return Limites(
             messages_par_seconde=self.connecteur.debit_max,
@@ -220,6 +226,9 @@ class Simulateur(Passerelle):
         self.accuses_rendus: dict[str, str] = {}
 
     def etat(self) -> EtatLiaison:
+        # `coupe` dans les réglages simule une liaison tombée côté opérateur.
+        if (self.connecteur.parametres or {}).get("coupe"):
+            return EtatLiaison.DECONNECTE
         return EtatLiaison.CONNECTE
 
     def soumettre(self, soumission: Soumission) -> str:

@@ -42,6 +42,7 @@ class Ordonnanceur(Worker):
 
         from apps.core import bus
         from apps.journal.services import creer_partitions_a_venir
+        from apps.telecom.sante import surveiller
         from apps.telecom.supervision import publier_etat_liaisons
 
         self.arret = asyncio.Event()
@@ -67,6 +68,8 @@ class Ordonnanceur(Worker):
                         await sync_to_async(creer_partitions_a_venir)()
                         derniere_partition = time.monotonic()
                     if time.monotonic() - derniere_supervision >= self.periode_supervision_s:
+                        # Santé d'abord, pour que l'état publié soit le plus récent.
+                        await sync_to_async(surveiller)()
                         await sync_to_async(publier_etat_liaisons)()
                         derniere_supervision = time.monotonic()
                     await bus.relayer(canal)

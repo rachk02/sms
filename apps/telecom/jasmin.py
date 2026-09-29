@@ -23,6 +23,7 @@ from django.utils import timezone
 from apps.core.encodage import Encodage, analyser
 from apps.core.etats import Etat
 
+from .jcli import Console, etat_des_sessions
 from .passerelles import (
     Accuse,
     EtatLiaison,
@@ -113,6 +114,28 @@ class Jasmin(Passerelle):
         if not accepte:
             raise SoumissionRejetee("reponse", texte.strip()[:200])
         return accepte.group(1)
+
+    def sonder(self) -> EtatLiaison:
+        """État de la session SMPP de ce connecteur dans Jasmin, lu sur sa
+        console d'administration. Console injoignable : liaison tombée."""
+        cid = (self.connecteur.parametres or {}).get("cid_jasmin", "simulateur")
+        try:
+            console = Console(
+                settings.JASMIN_JCLI_HOST,
+                settings.JASMIN_JCLI_PORT,
+                settings.JASMIN_JCLI_USER,
+                settings.JASMIN_JCLI_PASSWORD,
+            )
+            try:
+                session = etat_des_sessions(console).get(cid, "NONE")
+            finally:
+                console.fermer()
+        except (OSError, PermissionError) as erreur:
+            journal.warning("Console de Jasmin injoignable : %s", erreur)
+            self._etat = EtatLiaison.DECONNECTE
+            return self._etat
+        self._etat = EtatLiaison.CONNECTE if session.startswith("BOUND") else EtatLiaison.DECONNECTE
+        return self._etat
 
     def statut(self, soumission: Soumission, reference_smsc: str | None = None) -> Statut:
         # L'API HTTP de Jasmin ne sait pas dire si elle a reçu une soumission :
