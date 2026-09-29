@@ -6,3 +6,7 @@
 docs_of_interest
 **/__pycache__
 staticfiles
+.env.*
+!.env.example
+!.env.recette.example
+sauvegardes
