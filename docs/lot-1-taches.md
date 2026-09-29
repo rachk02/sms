@@ -19,8 +19,8 @@ semble écrit.
 
 **Produit** `docker-compose.yml` fonctionnel, `.env.example` versionné et
 `.env` renseigné, dépendances installées (Python 3.14, Django 6.1), réglages
-séparés en `base`, `dev`, `recette` et `prod`, `AUTH_USER_MODEL` pointant sur
-`comptes.Utilisateur`, `python manage.py check` qui passe.
+séparés en `base`, `dev`, `recette` et `prod`, `python manage.py check` qui
+passe. Aucune migration n'est lancée avant T-05.
 
 **Critères** `docker compose up -d` démarre PostgreSQL, Redis, RabbitMQ et
 MinIO, et les quatre répondent à leur contrôle de santé. `python manage.py
@@ -61,6 +61,8 @@ rattrape l'erreur présente dans le cahier des charges.
 
 **Produit** `apps/comptes/models.py` avec `Client` et `Utilisateur`, ce dernier
 remplaçant le modèle utilisateur de Django, avec le courriel comme identifiant.
+`AUTH_USER_MODEL` pointe sur `comptes.Utilisateur` avant la toute première
+migration.
 
 **Critères** La migration passe. `createsuperuser` fonctionne avec un courriel
 et sans nom d'utilisateur. Deux utilisateurs ne peuvent pas partager un
