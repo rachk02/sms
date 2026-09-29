@@ -1,0 +1,91 @@
+# Lot 5, composition et diffusion des campagnes
+
+Fiches F-17 à F-22, soit 33 à 53 jours-homme. Quatorze tâches, T-55 à T-68.
+
+Découpage provisoire, à revoir en entrant dans le lot.
+
+C'est le coeur du produit et le lot le plus long. C'est aussi celui où une erreur se facture à des milliers d'exemplaires.
+
+## T-55 · Modèles de message et variables
+
+**Produit** L'éditeur de message avec balises de personnalisation issues des champs de contact, valeur de repli obligatoire, et substitution au moment de la soumission.
+
+**Critères** Une balise sans valeur de repli est refusée à l'enregistrement. Un champ vide chez un contact produit la valeur de repli et jamais une chaîne vide au milieu d'une phrase. Un test vérifie qu'aucun message rendu ne contient de virgule orpheline.
+
+## T-56 · Compteur de segments au cas le plus long
+
+**Produit** Le calcul du nombre de segments après personnalisation, en retenant le destinataire qui produit le message le plus long, et non la moyenne.
+
+**Critères** Sur une liste où un contact porte un nom de trente caractères et un autre de cinq, le compteur annonce le cas long. Le coût affiché avant lancement est supérieur ou égal au coût réel, jamais inférieur. Un test compare les deux sur mille destinataires.
+
+## T-57 · Moteur d'optimisation de l'encodage
+
+**Produit** L'analyse du texte pendant la saisie, la détection des caractères hors table GSM, leur surlignage, la conversion en un clic, et le compteur qui suit en direct.
+
+**Critères** Taper un e accent circonflexe fait apparaître l'avertissement et le compteur tombe de 160 à 70 sans rechargement de page. La conversion proposée ne dénature pas le sens, elle remplace seulement les caractères coûteux par leur équivalent GSM. Les accents de la table GSM ne déclenchent aucun avertissement.
+
+## T-58 · Déclaration d'un identifiant d'expéditeur
+
+**Produit** Le formulaire de déclaration, le contrôle des onze caractères et de l'alphabet, la liste des noms réservés, le téléversement de la pièce de mandat.
+
+**Critères** Un nom figurant sur la liste réservée déclenche une revue manuelle et n'est jamais activé automatiquement. Un nom de douze caractères est refusé à la saisie. Un accent dans le libellé est refusé.
+
+## T-59 · État par réseau des expéditeurs
+
+**Produit** La table des états par opérateur, l'écran qui les affiche séparément, et la saisie des décisions par un agent avec date, référence de dossier et motif.
+
+**Critères** Un même identifiant affiche trois états distincts sur un écran. Une décision saisie laisse une écriture au journal d'audit. Aucune route ne permet de modifier un état réseau depuis l'espace client.
+
+## T-60 · Contrôle de l'expéditeur à la soumission
+
+**Produit** La vérification que l'identifiant appartient au compte émetteur et qu'il est approuvé sur le réseau qui porte le numéro visé, avec les trois politiques de campagne.
+
+**Critères** Un lot mélangé avec un expéditeur approuvé chez un seul opérateur produit le comportement choisi : refus, bascule sur le numéro court, ou mise en attente. Le rapport de campagne indique combien de messages sont partis sous quel expéditeur.
+
+## T-61 · Aperçu, test et confirmation
+
+**Produit** Le récapitulatif avant diffusion : destinataires après filtrage, expéditeur retenu, segments, coût total, envoi de test vers un numéro, puis confirmation explicite.
+
+**Critères** La modale de confirmation porte le nombre de destinataires et le coût en toutes lettres dans son texte, pas seulement dans l'écran derrière. Le bouton nomme l'action. Un envoi de test ne décompte pas de crédit de campagne.
+
+## T-62 · Découpage et publication en file
+
+**Produit** Le découpage de la campagne en lots, la publication vers la file du bon réseau, et la clé d'idempotence par couple campagne et destinataire.
+
+**Critères** Une campagne rejouée entièrement ne produit aucun doublon, la contrainte d'unicité la bloque. Un lot mélangeant trois opérateurs se répartit dans les trois files d'envoi correspondantes, vérifié en comptant les messages par file.
+
+## T-63 · Workers de diffusion par réseau
+
+**Produit** Les workers de masse, un jeu par opérateur, avec un prefetch aligné sur le débit accordé par cet opérateur, et les workers prioritaires distincts.
+
+**Critères** Un envoi transactionnel passe devant une campagne de quarante mille messages en cours, ce que le test mesure en comparant les délais. Régler le débit d'un opérateur à dix messages par seconde produit effectivement dix messages par seconde et non davantage.
+
+## T-64 · Pause, reprise et annulation
+
+**Produit** La mise en pause d'une campagne en cours, sa reprise, son annulation, et la libération des crédits réservés non consommés.
+
+**Critères** Une pause arrête la soumission en quelques secondes et le compteur de messages non soumis est exact. Une annulation libère exactement les crédits des messages non partis. Ce qui est déjà soumis au réseau n'est pas rattrapable et l'écran le dit clairement.
+
+## T-65 · Planification et récurrence
+
+**Produit** L'envoi immédiat, programmé, et récurrent sur fréquence fixe, avec l'ordonnanceur en instance unique protégée par verrou.
+
+**Critères** Deux instances de l'ordonnanceur lancées en même temps ne déclenchent qu'un seul envoi, le verrou consultatif PostgreSQL le garantit et le test le vérifie. Une campagne programmée dans le passé est refusée à l'enregistrement.
+
+## T-66 · Lissage par paliers
+
+**Produit** L'étalement d'une campagne sur une durée choisie, par paliers réguliers, pour éviter de saturer le standard du client.
+
+**Critères** Une campagne de trois mille messages lissée sur trois heures produit environ mille messages par heure, mesuré sur les horodatages de soumission. Le lissage se combine correctement avec le débit maximal de l'opérateur, le plus contraignant des deux s'applique.
+
+## T-67 · Suivi de campagne en direct
+
+**Produit** L'écran de suivi avec ses compteurs pré-agrégés, le fragment rafraîchi toutes les deux secondes pendant la diffusion, et l'échange hors bande qui met à jour plusieurs zones en une réponse.
+
+**Critères** Le rafraîchissement ne déclenche aucun comptage sur le journal des messages, vérifié par le plan d'exécution. Une campagne de quarante mille messages affiche sa progression sans que le temps de réponse de la page augmente. La position de défilement ne bouge pas au rafraîchissement.
+
+## T-68 · Point de contrôle du lot
+
+**Produit** Une campagne complète de quarante mille destinataires contre le simulateur : composition avec personnalisation, aperçu, test, lancement, suivi en direct, pause, reprise, rapport final.
+
+**Critères** Le coût réel ne dépasse pas le coût annoncé. Aucun doublon. Le rapport final réconcilie envoyés, livrés, échecs et coût. La pause et la reprise n'ont produit ni perte ni doublon.

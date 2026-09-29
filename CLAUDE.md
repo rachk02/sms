@@ -65,6 +65,8 @@ confirmation à l'utilisateur. Cela vaut aussi pour les simples entrées du jour
 - `docs/charte.md` : la charte, importée ci-dessus.
 - `docs/modele-de-donnees.md` : tables, champs et contraintes. Il fait foi.
 - `docs/lot-1-taches.md` : le lot courant, découpé en tâches avec critères d'acceptation.
+- `docs/lot-2-taches.md` à `docs/lot-10-taches.md` : les lots suivants, découpage provisoire
+  à revoir en entrant dans chaque lot.
 
 Le plan d'implémentation, l'architecture backend, le document support et notifications et
 la revue d'avant-démarrage restent dans `docs_of_interest/`, exclu de git. Ils se lisent

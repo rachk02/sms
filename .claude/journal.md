@@ -31,3 +31,4 @@ Règles, reprises de `~/.claude/CLAUDE.md` :
 [2026-09-29 15:12:50] Suivi - Implémentation mise en attente : l'utilisateur doit fournir d'autres fichiers avant le démarrage de T-01.
 [2026-09-29 15:22:00] Remarque - L'utilisateur a fourni les découpages des lots 2 à 10 (07 à 15 dans docs_of_interest). Analyse faite.
 [2026-09-29 15:22:00] Correction - Retrait de la tâche T-19 ajoutée au lot 1 (doublon du déploiement de Jasmin prévu au lot 2 en T-22 et T-23, et collision avec la numérotation du lot 2). Réservation de crédit revue : une réservation par campagne entière ou par envoi unitaire, pour que T-09 et T-79 restent vrais. Index (numero_normalise, date_reception) ajouté sur journal_message pour le rapprochement des STOP.
+[2026-09-29 15:26:39] Suivi - Copies périmées 05 et 06 supprimées de docs_of_interest, lots 2 à 10 versionnés dans docs/, CLAUDE.md mis à jour. Démarrage de T-01 validé par l'utilisateur.

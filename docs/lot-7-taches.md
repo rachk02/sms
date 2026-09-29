@@ -1,0 +1,91 @@
+# Lot 7, crédits, paiements locaux et facturation
+
+Fiches F-26, F-27, F-28, F-29 et F-45, soit 38 à 59 jours-homme. Quatorze tâches, T-77 à T-90.
+
+Découpage provisoire, à revoir en entrant dans le lot.
+
+C'est le lot où circule l'argent. Une erreur ici ne se rattrape pas par un correctif, elle se rattrape par des avoirs et des explications à des clients.
+
+## T-77 · Registre de crédits, écritures complètes
+
+**Produit** Les quatre types d'écriture, achat, consommation, recrédit et ajustement, avec le motif obligatoire sur l'ajustement et l'auteur sur toute écriture manuelle.
+
+**Critères** Aucune méthode ne modifie ni ne supprime une écriture. Le solde recalculé depuis le registre égale le cache après mille opérations mêlant les quatre types. Un ajustement sans motif est refusé au niveau du service, pas seulement du formulaire.
+
+## T-78 · Réservation et règlement
+
+**Produit** La réservation à la soumission, le règlement à l'accusé en mode pay-per-delivered, le règlement immédiat en pay-per-submitted, et la libération en cas d'échec.
+
+**Critères** Les deux modèles passent par le même mécanisme, seul le moment du règlement change. Un message en échec définitif libère exactement sa réservation. Un message livré consomme exactement son coût figé à la soumission, même si la grille a changé entretemps.
+
+## T-79 · Concurrence sur le solde
+
+**Produit** Le verrou sur la ligne de cache pendant la réservation, et la gestion de l'attente.
+
+**Critères** Deux campagnes lancées simultanément sur un solde qui n'en couvre qu'une : l'une passe, l'autre est refusée avec un message clair, et le solde final est juste. Le test lance les deux dans deux transactions réelles, pas en simulation.
+
+## T-80 · Rapprochement quotidien du registre
+
+**Produit** Le traitement qui compare le solde recalculé au cache pour chaque client, et l'alerte sur tout écart.
+
+**Critères** Un écart introduit artificiellement d'un franc déclenche l'alerte. Le traitement passe sur mille comptes en moins d'une minute. L'alerte nomme le client et le montant de l'écart.
+
+## T-81 · Grilles tarifaires datées
+
+**Produit** Les grilles, leurs versions avec dates de prise d'effet et de fin, les paliers de volume, le prix par réseau et par pays, et la contrainte d'exclusion qui interdit le chevauchement.
+
+**Critères** Deux versions qui se chevauchent sont refusées par la base. Une grille sans version publiée n'est jamais appliquée. Le prix appliqué à un message est celui en vigueur à sa date de soumission, ce qu'un test vérifie en changeant la grille entre deux envois.
+
+## T-82 · Calcul du coût et gel sur le message
+
+**Produit** Le calcul à la soumission, tenant compte du palier de volume, du réseau et du nombre de segments, avec le coût figé sur la ligne du message.
+
+**Critères** Un message soumis avant un changement de grille conserve son coût d'origine, y compris quand son accusé arrive après. Le passage d'un palier de volume en cours de campagne est traité de façon documentée et le rapport de campagne l'explique.
+
+## T-83 · Grilles négociées et promotionnelles
+
+**Produit** Les grilles propres à un client, les grilles à durée limitée, et la règle de priorité entre grille client, grille promotionnelle et grille publique.
+
+**Critères** La règle de priorité est écrite et testée sur les six combinaisons possibles. Un client sans grille négociée tombe sur la grille publique. La modification d'une grille laisse une écriture au journal d'audit avec l'ancien et le nouveau prix.
+
+## T-84 · Point d'entrée des rappels de paiement
+
+**Produit** La route publique par fournisseur, la liste blanche d'adresses, la vérification de signature et la limite de débit par source.
+
+**Critères** Un rappel non signé est rejeté sans réponse détaillée. Un rappel venu d'une adresse hors liste blanche est rejeté et journalisé. Un client malveillant qui sonde la route n'apprend rien sur l'existence d'une transaction.
+
+## T-85 · Vérification et crédit
+
+**Produit** L'interrogation de l'API de statut du fournisseur avant tout crédit, l'unicité sur fournisseur et référence de transaction, et l'écriture ACHAT au registre.
+
+**Critères** Un rappel forgé avec une référence inexistante ne crédite rien. Le même rappel reçu trois fois ne crédite qu'une fois. Un rappel arrivé après expiration du délai, mais confirmé par l'API de statut, crédite quand même.
+
+## T-86 · Parcours de rechargement
+
+**Produit** Le choix du moyen, la redirection vers l'opérateur, la page d'attente qui interroge le statut, et les pages de résultat en cas de succès comme d'échec.
+
+**Critères** L'utilisateur n'est jamais laissé sur une page qui tourne indéfiniment : au bout du délai, la page annonce l'état réel et propose une suite. Un paiement confirmé pendant que l'utilisateur a fermé son navigateur crédite quand même et notifie par courriel.
+
+## T-87 · Paiements manuels
+
+**Produit** La saisie d'un virement ou d'un versement en espèces par un administrateur, avec justificatif joint, motif et identité de l'agent portés sur l'écriture.
+
+**Critères** Aucune saisie manuelle sans justificatif téléversé. L'écriture au registre porte l'agent. Le journal d'audit enregistre l'opération avec le montant.
+
+## T-88 · Facturation
+
+**Produit** L'émission de la facture normalisée à chaque achat de crédits, la numérotation séquentielle par année, le reçu téléchargeable, et l'export comptable.
+
+**Critères** La numérotation ne présente aucun trou ni doublon, y compris si deux factures sont émises simultanément. Les mentions obligatoires sont présentes et vérifiées par un test sur le contenu du PDF. Une facture émise n'est jamais modifiée, une correction passe par un avoir.
+
+## T-89 · Export des données et clôture de compte
+
+**Produit** L'export des répertoires, du journal et des factures à la demande du client, et la procédure de clôture : arrêt des envois, conservation des pièces comptables, suppression ou anonymisation des contacts, sort du solde.
+
+**Critères** L'export s'obtient sans demander quoi que ce soit au support. Une clôture laisse les pièces comptables intactes et rend les contacts irrécupérables au terme du délai. Le sort du solde suit la règle écrite aux conditions générales, et le test échoue si cette règle n'est pas encore tranchée.
+
+## T-90 · Point de contrôle du lot
+
+**Produit** Un cycle complet : rechargement par mobile money, crédit constaté, campagne consommant une partie du solde, échecs libérant des réservations, facture émise, rapprochement quotidien sans écart.
+
+**Critères** Le solde final égale le solde initial plus l'achat moins la consommation réelle, au franc près. La facture correspond à l'achat. Le rapprochement ne lève aucune alerte. Un rejeu du rappel de paiement ne crédite pas une seconde fois.
