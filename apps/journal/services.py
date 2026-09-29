@@ -128,34 +128,36 @@ def soumettre(message: Message, passerelle, source: str = Evenement.Source.WORKE
         if courant.etat == Etat.SOUMIS or courant.etat in ETATS_TERMINAUX:
             return courant  # déjà fait : relivraison d'un message traité
         reprise = courant.soumission_debutee_le is not None and courant.date_soumission is None
+        # La date de soumission est l'instant de l'appel à la passerelle, pas
+        # celui où l'on en écrit le résultat : un accusé peut arriver entre deux.
+        debut = courant.soumission_debutee_le if reprise else timezone.now()
         if not reprise:
-            Message.objects.filter(**cle).update(
-                soumission_debutee_le=timezone.now(), modifie_le=timezone.now()
-            )
+            Message.objects.filter(**cle).update(soumission_debutee_le=debut, modifie_le=debut)
 
     if reprise:
         statut = passerelle.statut(soumission, courant.reference_smsc or None)
         if statut.sort != SortSoumission.INCONNUE:
             return _enregistrer_soumission(
-                message, passerelle, statut.reference_smsc, source, reprise=True
+                message, passerelle, statut.reference_smsc, source, debut, reprise=True
             )
         if not passerelle.retrouve_ses_soumissions:
             return _sort_inconnu(message, passerelle, source)
 
     reference = passerelle.soumettre(soumission)
-    return _enregistrer_soumission(message, passerelle, reference, source)
+    return _enregistrer_soumission(message, passerelle, reference, source, debut)
 
 
 @transaction.atomic
-def _enregistrer_soumission(message, passerelle, reference, source, reprise=False) -> Message:
+def _enregistrer_soumission(
+    message, passerelle, reference, source, soumis_le, reprise=False
+) -> Message:
     cle = {"id": message.id, "date_reception": message.date_reception}
-    maintenant = timezone.now()
     Message.objects.filter(**cle).update(
         reference_smsc=reference,
         connecteur_id=passerelle.connecteur.id,
-        date_soumission=maintenant,
+        date_soumission=soumis_le,
         etat=Etat.SOUMIS,
-        modifie_le=maintenant,
+        modifie_le=timezone.now(),
     )
     correlation.enregistrer(passerelle.connecteur.id, reference, message.id, message.date_reception)
     compteur = CLE_SOUMIS.format(connecteur_id=passerelle.connecteur.id)
@@ -167,7 +169,7 @@ def _enregistrer_soumission(message, passerelle, reference, source, reprise=Fals
         client_id=message.client_id,
         message_id=message.id,
         etat=Etat.SOUMIS,
-        horodatage=maintenant,
+        horodatage=soumis_le,
         source=source,
         details=details,
     )
