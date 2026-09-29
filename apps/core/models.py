@@ -29,3 +29,18 @@ class Horodate(models.Model):
 class Base(Identifiable, Horodate):
     class Meta:
         abstract = True
+
+
+class Cloisonne(models.Model):
+    """Colonne `client_id` sur laquelle porte la politique de cloisonnement par
+    ligne. Référence par chaîne : `core` n'importe pas `comptes`."""
+
+    client = models.ForeignKey("comptes.Client", on_delete=models.PROTECT, related_name="+")
+
+    class Meta:
+        abstract = True
+
+
+class BaseClient(Base, Cloisonne):
+    class Meta:
+        abstract = True
