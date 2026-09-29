@@ -13,7 +13,8 @@ Jasmin. Les clients achètent des crédits d'avance et les consomment à l'envoi
 
 ## Pile technique
 
-Python 3.14, Django 5.1, PostgreSQL 16, Redis, RabbitMQ, Jasmin, Docker Compose.
+Python 3.14, Django 6.1 (puis 6.2 LTS à sa sortie), PostgreSQL 16, Redis, RabbitMQ,
+MinIO, Jasmin, Docker Compose.
 Interface rendue au serveur avec gabarits Django, HTMX, Alpine et Tailwind.
 Pas d'application monopage, pas de React sauf sur deux écrans nommés plus bas.
 
@@ -43,6 +44,12 @@ connaît pas `campagnes` : il reçoit un ordre de soumission et publie un accus�
 Si vous êtes tenté d'écrire un import qui remonte, c'est que le découpage est
 en cause. Arrêtez-vous et posez la question plutôt que de contourner.
 
+La règle vaut aussi pour les clés étrangères. Une table qui référence une table
+d'un module plus haut porte un UUID simple, indexé, sans `ForeignKey` Django :
+`journal_message.campagne_id`, `credits_reservation.campagne_id`,
+`telecom_correlation.message_id`, `conformite_consentement.contact_id`. La
+cohérence de ces références est tenue par les services, pas par la base.
+
 ## Règles par fichier
 
 - `models.py` : données et contraintes. Aucune logique métier, aucun appel réseau.
@@ -59,7 +66,7 @@ divergeront en silence.
 
 ## Conventions de nommage
 
-Le domaine métier est en français : `Campagne`, `Expediteur`, `registre_credits`,
+Le domaine métier est en français : `Campagne`, `Expediteur`, `credits_registre`,
 `soumettre_campagne`. Les noms de modules et de champs sont sans accents, pour
 éviter tout problème d'encodage en base et en ligne de commande. Les concepts
 techniques standard gardent leur nom usuel : `request`, `queryset`, `settings`.
@@ -96,10 +103,11 @@ Chaque écran vivant expose deux entrées, la page et son fragment :
 Trois zones se spécifient au détail près et se relisent ligne à ligne. Si une
 tâche vous y emmène sans instruction précise, demandez avant d'écrire.
 
-**Le registre de crédits.** `registre_credits` est en écriture seule : aucune
+**Le registre de crédits.** `credits_registre` est en écriture seule : aucune
 ligne n'est modifiée ni supprimée, jamais. Le solde est la somme des écritures.
-`comptes_credit` est un cache, verrouillé par `SELECT ... FOR UPDATE` pendant
-une réservation. Deux campagnes lancées en même temps ne doivent pas pouvoir
+`credits_compte` est un cache, verrouillé par `SELECT ... FOR UPDATE` pendant
+une réservation. Tous les montants et tous les prix sont des FCFA entiers :
+aucun prix à virgule, nulle part. Deux campagnes lancées en même temps ne doivent pas pouvoir
 réserver le même crédit.
 
 **La corrélation des accusés.** L'identifiant rendu par l'opérateur à la
@@ -108,9 +116,20 @@ range en Redis avec 72 heures de validité, avec une reprise en base. Un accusé
 sans correspondance va dans la table des accusés orphelins, il n'est jamais jeté.
 
 **Le cloisonnement par ligne.** Chaque table métier porte `client_id` et une
-politique `USING (client_id = current_setting('app.client')::uuid)`. Le
-middleware pose ce réglage à chaque requête. Sans client posé, une requête voit
-zéro ligne : c'est voulu, l'absence de client n'ouvre jamais l'accès à tout.
+politique :
+
+    USING (client_id = NULLIF(current_setting('app.client', true), '')::uuid)
+
+Le middleware pose ce réglage à chaque requête, local à la transaction. Sans
+client posé, une requête voit zéro ligne : c'est voulu, l'absence de client
+n'ouvre jamais l'accès à tout. Trois détails font que cela tient vraiment :
+
+- `current_setting(..., true)` et `NULLIF` : sans eux, un réglage absent ou
+  vidé lève une erreur au lieu de rendre zéro ligne.
+- `FORCE ROW LEVEL SECURITY` sur chaque table, et un rôle applicatif distinct
+  du propriétaire des tables : le propriétaire échappe sinon à la politique.
+- `comptes_utilisateur` n'est pas cloisonnée : la connexion cherche un
+  utilisateur par son courriel avant que le client soit connu.
 
 ## Encodage des SMS
 
@@ -119,7 +138,10 @@ Sont dans la table GSM 03.38, donc sans surcoût : é, è, à, ù, ì, ò, ä, �
 à 70 caractères : ê, â, î, ô, û, ë, ï, ç minuscule, œ, les guillemets
 typographiques, les tirets longs, les points de suspension en un caractère, et
 les emoji. Les caractères de la table d'extension comptent double : €, accolades,
-crochets, tilde, accent circonflexe seul, barre verticale.
+crochets, tilde, accent circonflexe seul, barre verticale, barre oblique inverse.
+
+Un message long se découpe en segments de 153 caractères en GSM et de 67 en
+UCS-2, à cause de l'en-tête de concaténation.
 
 Le compteur affiché au client doit annoncer le cas le plus long après
 personnalisation, jamais la moyenne, sinon le coût affiché est sous-estimé.

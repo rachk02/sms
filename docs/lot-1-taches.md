@@ -1,17 +1,24 @@
 # Lot 1, socle technique, découpé en tâches
 
 Le lot 1 couvre les fiches F-01, F-02, F-03, F-04 et F-42, soit 26 à 42
-jours-homme. Il est ici découpé en dix-huit tâches d'une demi-journée à deux
+jours-homme. Il est ici découpé en dix-neuf tâches d'une demi-journée à deux
 jours, chacune avec ce qu'elle produit et ce qui doit être vrai pour la
 déclarer finie.
 
-Une tâche se prend dans l'ordre. Une tâche n'est finie que si ses critères
-d'acceptation passent, pas si le code semble écrit.
+Une tâche se prend dans l'ordre, avec deux exceptions. T-05 se fait juste après
+T-01 : le modèle utilisateur personnalisé doit exister avant la toute première
+migration, et les tests de T-02 en lancent une. T-19 se fait après T-13 et
+avant T-18.
+
+Une tâche n'est finie que si ses critères d'acceptation passent, pas si le code
+semble écrit.
 
 ## T-01 · Environnement local qui démarre
 
-**Produit** `docker-compose.yml` fonctionnel, `.env` renseigné, dépendances
-installées, `python manage.py check` qui passe.
+**Produit** `docker-compose.yml` fonctionnel, `.env.example` versionné et
+`.env` renseigné, dépendances installées (Python 3.14, Django 6.1), réglages
+séparés en `base`, `dev`, `recette` et `prod`, `AUTH_USER_MODEL` pointant sur
+`comptes.Utilisateur`, `python manage.py check` qui passe.
 
 **Critères** `docker compose up -d` démarre PostgreSQL, Redis, RabbitMQ et
 MinIO, et les quatre répondent à leur contrôle de santé. `python manage.py
@@ -30,7 +37,7 @@ connexions.
 
 ## T-03 · Normalisation des numéros
 
-**Produit** `apps/core/numeros.py`, déjà esquissé, complété et testé.
+**Produit** `apps/core/numeros.py`, écrit et testé.
 
 **Critères** Les formes 70123456, 22670123456, +22670123456, 0022670123456 et
 les mêmes avec espaces, points et tirets donnent toutes `+22670123456`. Une
@@ -39,11 +46,12 @@ long lèvent `NumeroInvalide` avec un message qui nomme la cause.
 
 ## T-04 · Encodage GSM et décompte des segments
 
-**Produit** `apps/core/encodage.py`, complété et testé.
+**Produit** `apps/core/encodage.py`, écrit et testé.
 
 **Critères** Un texte de 160 caractères GSM donne un segment, 161 en donnent
 deux de 153. Un texte contenant un e accent circonflexe bascule en UCS-2 et
-tombe à 70 caractères. Un euro compte pour deux unités. Les accents de la table
+tombe à 70 caractères, 71 en donnent deux de 67. Un euro et une barre oblique
+inverse comptent chacun pour deux unités. Les accents de la table
 GSM, é è à ù ì ò ä ö ü ñ, ne font pas basculer en UCS-2 : c'est le test qui
 rattrape l'erreur présente dans le cahier des charges.
 
@@ -60,24 +68,34 @@ vérifie en inspectant son préfixe.
 ## T-06 · Politiques de cloisonnement par ligne
 
 **Produit** Une migration dédiée dans `apps/core/migrations/`, séparée de toute
-migration de schéma, activant la sécurité par ligne sur les tables métier et
-posant la politique `USING (client_id = current_setting('app.client')::uuid)`.
+migration de schéma, activant et forçant la sécurité par ligne
+(`ENABLE` puis `FORCE ROW LEVEL SECURITY`) sur les tables métier, sauf
+`comptes_utilisateur`, et posant la politique
+`USING (client_id = NULLIF(current_setting('app.client', true), '')::uuid)`.
+Un rôle applicatif distinct du propriétaire des tables, et un rôle worker qui
+contourne la politique.
 
 **Critères** Un test crée deux clients avec des données, pose `app.client` sur
 le premier, et vérifie qu'aucune ligne du second n'est visible. Un second test
 vérifie qu'une requête sans client posé voit zéro ligne, et non toutes les
-lignes. C'est le test le plus important du lot.
+lignes ni une erreur, y compris sur une connexion où le réglage a déjà été posé
+puis vidé. Un troisième vérifie que le rôle applicatif ne voit rien de plus
+que ce que la politique autorise. C'est le test le plus important du lot.
 
 ## T-07 · Partitionnement du journal
 
-**Produit** `apps/journal/models.py` avec `Message` et `Evenement`, et la
-migration qui crée le partitionnement mensuel par plage sur `date_soumission`,
-plus la fonction de création des partitions à venir.
+**Produit** `apps/journal/models.py` avec `Message`, `Evenement` et
+`Destinataire`, et la migration qui crée le partitionnement mensuel par plage
+sur `date_reception`, avec clé primaire composée `(id, date_reception)`, plus
+la fonction de création des partitions à venir.
 
 **Critères** Trois partitions existent après migration, celle du mois courant
 et les deux suivantes. Une insertion datée du mois prochain atterrit dans la
-bonne partition, vérifié par une requête sur `pg_class`. Une requête bornée sur
-un mois ne lit qu'une partition, vérifié par un plan d'exécution.
+bonne partition, vérifié par une requête sur `pg_class`. Un message sans date
+de soumission s'insère sans erreur. Une requête bornée sur un mois ne lit
+qu'une partition, vérifié par un plan d'exécution. Un second message pour le
+même couple campagne et contact est refusé par `journal_destinataire`, même
+daté d'un autre mois.
 
 ## T-08 · Registre de crédits
 
@@ -101,7 +119,7 @@ refusée, et le solde final est correct. Sans ce test, la tâche n'est pas finie
 
 ## T-10 · Bus d'événements
 
-**Produit** `apps/core/evenements.py` complété, publication vers RabbitMQ,
+**Produit** `apps/core/evenements.py`, publication vers RabbitMQ,
 consommation idempotente.
 
 **Critères** Un événement publié deux fois avec la même clé d'idempotence n'est
@@ -179,6 +197,18 @@ simulé, et un jeu de données de démonstration.
 **Critères** Dix mille messages sont soumis au connecteur simulé sans perte,
 les compteurs correspondent au nombre envoyé, et aucun message ne reste bloqué
 dans un état intermédiaire.
+
+## T-19 · Jasmin et décision sur la passerelle
+
+**Produit** Jasmin dans `docker-compose.yml`, raccordé à RabbitMQ et Redis, un
+connecteur SMPP vers un simulateur SMSC, piloté par script. L'adaptateur Jasmin
+de la couche d'abstraction, à côté de l'adaptateur simulé de T-13. Une note
+d'une page qui confirme Jasmin ou propose une alternative, après une journée de
+prise en main réelle, comme le demande la fiche F-03.
+
+**Critères** Un message soumis par l'adaptateur Jasmin atteint le simulateur
+SMSC, et son accusé remonte jusqu'au changement d'état du message, par le même
+chemin que l'adaptateur simulé. La note de décision est écrite et versionnée.
 
 ## Ce qui n'est pas dans ce lot
 

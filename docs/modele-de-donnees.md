@@ -4,12 +4,21 @@ Version du 29 septembre 2026. Ce document fait foi sur les noms de tables, de
 champs et de contraintes. Un champ qui n'y figure pas ne s'invente pas : il se
 demande.
 
-Conventions valables partout. La clé primaire est un UUID nommé `id`. Toute
-table métier porte `client_id` et les colonnes `cree_le` et `modifie_le`. Les
-montants sont en entiers de FCFA, jamais en flottants. Les dates sont stockées
-en UTC et affichées en heure de Ouagadougou. Les états sont des chaînes courtes
-en majuscules, contraintes par une énumération applicative et non par un type
-PostgreSQL, pour qu'un ajout d'état ne demande pas de migration de type.
+Conventions valables partout. La clé primaire est un UUID nommé `id`, sauf sur
+les tables partitionnées, où elle est composée de `id` et de la clé de
+partitionnement, ce que PostgreSQL impose. Toute table métier porte `client_id`
+et les colonnes `cree_le` et `modifie_le`, y compris les tables filles, pour que
+la politique de cloisonnement s'applique sans jointure. Les montants et les prix
+sont en entiers de FCFA, jamais en flottants, et aucun prix ne porte de
+virgule. Les dates sont stockées en UTC et affichées en heure de Ouagadougou.
+Les états sont des chaînes courtes en majuscules, contraintes par une
+énumération applicative et non par un type PostgreSQL, pour qu'un ajout d'état
+ne demande pas de migration de type.
+
+Une référence vers une table d'un module de couche supérieure est un UUID
+simple, indexé, sans clé étrangère : c'est noté « UUID simple » dans les tables
+ci-dessous. Une référence vers une table partitionnée l'est aussi, et porte en
+plus la date qui permet de retrouver la partition.
 
 ## comptes
 
@@ -52,6 +61,11 @@ l'identifiant de connexion, il n'y a pas de nom d'utilisateur séparé.
 
 Un index unique sur `courriel`. Un index sur `(client_id, role)`.
 
+Cette table est la seule table portant `client_id` qui n'est pas soumise au
+cloisonnement par ligne : la connexion la lit par courriel avant que le client
+soit connu. Ses lectures passent par `selectors.py` et filtrent toujours sur le
+client courant.
+
 **`comptes_cle_api`**
 
 | Champ | Type | Contraintes |
@@ -73,9 +87,15 @@ qu'une fois, à la création.
 
 `comptes_dossier` : `id`, `client_id`, `etat` parmi BROUILLON, DEPOSE,
 EN_REVUE, APPROUVE, REJETE, `depose_le`, `decide_le`, `decide_par_id`,
-`motif_rejet` en texte libre, `palier_accorde`.
+`motif_rejet` parmi une liste fermée, `motif_detail` en texte libre facultatif,
+`palier_accorde`.
 
-`comptes_piece` : `id`, `dossier_id`, `type` parmi RCCM, IFU, PIECE_GERANT,
+La liste fermée des motifs de rejet : PIECE_ILLISIBLE, PIECE_EXPIREE,
+NOM_NON_CONCORDANT, NUMERO_INTROUVABLE, REPRESENTANT_NON_JUSTIFIE,
+ACTIVITE_INCOMPATIBLE, DOUBLON, SOUPCON_FAUX. Sans liste fermée, aucun refus
+n'est mesurable ni justifiable. Le texte libre complète, il ne remplace pas.
+
+`comptes_piece` : `id`, `client_id`, `dossier_id`, `type` parmi RCCM, IFU, PIECE_GERANT,
 MANDAT, RECEPISSE, ACTE_CREATION, ACCORD_SIEGE, ATTESTATION_ORDRE,
 `chemin_stockage`, `nom_origine`, `type_mime`, `taille_octets`, `expire_le`,
 `etat` parmi DEPOSEE, ACCEPTEE, REFUSEE, `motif_refus`.
@@ -95,6 +115,7 @@ chez un autre.
 | Champ | Type | Contraintes |
 | --- | --- | --- |
 | `id` | uuid | clé primaire |
+| `client_id` | uuid | non nul |
 | `expediteur_id` | uuid | référence `expediteurs_expediteur` |
 | `operateur` | varchar(20) | ORANGE, MOOV, TELECEL |
 | `etat` | varchar(20) | NON_SOUMIS, EN_INSTRUCTION, APPROUVE, REFUSE, REVOQUE |
@@ -125,8 +146,8 @@ fiable. Index sur `(client_id, operateur_presume)`.
 **`contacts_liste`** : `id`, `client_id`, `nom`, `description`,
 `nombre_contacts` en compteur dénormalisé.
 
-**`contacts_liste_contact`** : table de liaison, `liste_id`, `contact_id`,
-`ajoute_le`. Unicité sur le couple.
+**`contacts_liste_contact`** : table de liaison, `client_id`, `liste_id`,
+`contact_id`, `ajoute_le`. Unicité sur le couple.
 
 **`contacts_segment`** : `id`, `client_id`, `nom`, `criteres` en jsonb,
 `nombre_estime`, `calcule_le`.
@@ -138,9 +159,10 @@ parmi STOP_SMS, MANUEL, IMPORT, API, `message_origine` conservé tel quel,
 **`contacts_import`** : `id`, `client_id`, `fichier_chemin`, `nom_origine`,
 `etat` parmi DEPOSE, EN_COURS, TERMINE, ECHOUE, `lignes_total`,
 `lignes_acceptees`, `lignes_rejetees`, `doublons`, `mappage` en jsonb,
-`demarre_le`, `termine_le`.
+`demarre_le`, `termine_le`. Un fichier d'import pèse au plus 200 Mo, limite
+appliquée par le serveur.
 
-**`contacts_import_rejet`** : `id`, `import_id`, `numero_ligne`,
+**`contacts_import_rejet`** : `id`, `client_id`, `import_id`, `numero_ligne`,
 `contenu_ligne`, `motif`.
 
 ## campagnes
@@ -157,14 +179,16 @@ ATTENDRE, `planifiee_pour`, `lissage_par_minute`, `destinataires_prevus`,
 ## journal
 
 **`journal_message`** est la table de volume, partitionnée par mois sur
-`date_soumission`.
+`date_reception`. La partition se fait sur la réception et non sur la
+soumission, parce qu'un message reçu, en attente ou rejeté n'a pas encore de
+date de soumission, et qu'une clé de partitionnement ne peut pas être nulle.
 
 | Champ | Type | Contraintes |
 | --- | --- | --- |
-| `id` | uuid | clé primaire |
+| `id` | uuid | clé primaire composée avec `date_reception` |
 | `client_id` | uuid | non nul |
-| `campagne_id` | uuid | nul pour un envoi unitaire |
-| `contact_id` | uuid | nul si envoi à un numéro libre |
+| `campagne_id` | uuid | UUID simple, nul pour un envoi unitaire |
+| `contact_id` | uuid | UUID simple, nul si envoi à un numéro libre |
 | `numero_normalise` | varchar(20) | non nul |
 | `operateur` | varchar(20) | non nul |
 | `expediteur_libelle` | varchar(11) | figé à la soumission |
@@ -177,21 +201,40 @@ ATTENDRE, `planifiee_pour`, `lissage_par_minute`, `destinataires_prevus`,
 | `motif_echec` | varchar(100) | |
 | `connecteur_id` | uuid | référence `telecom_connecteur` |
 | `reference_smsc` | varchar(100) | identifiant rendu par l'opérateur |
-| `cle_idempotence` | varchar(100) | |
-| `date_reception` | timestamptz | non nul |
-| `date_soumission` | timestamptz | clé de partitionnement |
+| `cle_idempotence` | varchar(100) | copie informative, l'unicité vit ailleurs |
+| `date_reception` | timestamptz | non nul, clé de partitionnement |
+| `soumission_debutee_le` | timestamptz | marqueur posé juste avant l'appel à la passerelle |
+| `date_soumission` | timestamptz | nul tant que non soumis |
 | `date_accuse` | timestamptz | |
+| `modifie_le` | timestamptz | non nul |
 
-Index par partition : `(client_id, date_soumission desc)`,
-`(client_id, numero_normalise, date_soumission desc)`, `(campagne_id, etat)`.
-Unicité sur `(campagne_id, contact_id)` quand les deux sont renseignés, et sur
-`(client_id, cle_idempotence)` quand elle est fournie.
+`date_reception` tient lieu de `cree_le`. `soumission_debutee_le` rempli et
+`date_soumission` vide signalent une soumission interrompue : au rejeu, le
+worker interroge la passerelle au lieu de resoumettre.
 
-**`journal_evenement`** : `id`, `message_id`, `etat`, `horodatage`, `source`
-parmi API, WORKER, ACCUSE, ADMIN, `details` en jsonb. Partitionnée par mois.
+Index par partition : `(client_id, date_reception desc)`,
+`(client_id, numero_normalise, date_reception desc)`, `(campagne_id, etat)`.
+
+Aucune contrainte d'unicité métier ne peut vivre sur cette table : PostgreSQL
+exige qu'elle inclue la clé de partitionnement, et un doublon tombé dans un
+autre mois passerait alors inaperçu. Les deux garanties vivent dans des tables
+non partitionnées, `journal_destinataire` ci-dessous et `api_idempotence` dans
+le module `api`.
+
+**`journal_destinataire`** garantit qu'une campagne n'envoie jamais deux fois
+au même contact, même après une reprise sur incident : `campagne_id` UUID
+simple, `contact_id` UUID simple, `client_id`, `message_id`,
+`message_date_reception`, `cree_le`. Clé primaire composée
+`(campagne_id, contact_id)`. L'insertion se fait dans la même transaction que
+celle du message ; un conflit signifie que le destinataire est déjà servi.
+
+**`journal_evenement`** : `id`, `client_id`, `message_id` UUID simple, `etat`,
+`horodatage`, `source` parmi API, WORKER, ACCUSE, ADMIN, `details` en jsonb.
+Partitionnée par mois sur `horodatage`, clé primaire composée
+`(id, horodatage)`.
 
 **`journal_compteur`** porte les agrégats que lisent les tableaux de bord :
-`client_id`, `campagne_id`, `operateur`, `heure`, `emis`, `livres`,
+`client_id`, `campagne_id` UUID simple, `operateur`, `heure`, `emis`, `livres`,
 `echecs`, `sans_accuse`, `cout`. Clé primaire composée. C'est cette table que
 les rafraîchissements interrogent, jamais `journal_message`.
 
@@ -215,8 +258,12 @@ supprimée, jamais.
 **`credits_compte`** est le cache de solde, verrouillé pendant une réservation :
 `client_id` en clé primaire, `solde_acquis`, `montant_reserve`, `mis_a_jour_le`.
 
-**`credits_reservation`** : `id`, `client_id`, `campagne_id`, `montant`, `etat`
-parmi ACTIVE, REGLEE, LIBEREE, `cree_le`, `resolue_le`.
+**`credits_reservation`** : une réservation par message, créée à la mise en
+file. `id`, `client_id`, `message_id` UUID simple, `message_date_reception`,
+`campagne_id` UUID simple nul pour un envoi unitaire, `montant` au prix calculé
+à cet instant, `etat` parmi ACTIVE, REGLEE, LIBEREE, `cree_le`, `resolue_le`.
+Unicité sur `message_id`. Index sur `(client_id, etat)` et sur
+`(campagne_id, etat)`.
 
 **`credits_grille`** : `id`, `nom`, `client_id` nul pour la grille publique,
 `devise` défaut XOF.
@@ -226,7 +273,7 @@ Une contrainte d'exclusion interdit deux versions qui se chevauchent pour une
 même grille.
 
 **`credits_grille_palier`** : `id`, `version_id`, `pays`, `operateur`,
-`volume_min`, `prix_unitaire`.
+`volume_min`, `prix_unitaire` en FCFA entiers.
 
 ## telecom
 
@@ -241,9 +288,12 @@ même grille.
 **`telecom_prefixe`** : `id`, `pays`, `prefixe`, `operateur`, `actif`. Chargée
 en base et modifiable sans redéploiement : le plan de numérotation évolue.
 
-**`telecom_correlation`** : `id`, `reference_smsc`, `message_id`,
-`connecteur_id`, `cree_le`, `expire_le`. Reprise en base de la correspondance
-tenue en Redis.
+**`telecom_correlation`** : `id`, `reference_smsc`, `message_id` UUID simple,
+`message_date_reception`, `connecteur_id`, `cree_le`, `expire_le`. Reprise en
+base de la correspondance tenue en Redis. Unicité sur
+`(connecteur_id, reference_smsc)` : deux opérateurs peuvent rendre le même
+identifiant sans se mélanger. `message_date_reception` permet au worker
+accusés de mettre à jour le message dans sa seule partition.
 
 **`telecom_accuse_orphelin`** : `id`, `reference_smsc`, `connecteur_id`,
 `charge_utile` en jsonb, `recu_le`. Un accusé sans correspondance n'est jamais
@@ -278,8 +328,8 @@ année, `periode_debut`, `periode_fin`, `montant_ht`, `tva`, `montant_ttc`,
 
 **`conformite_jour_ferie`** : `id`, `pays`, `date`, `libelle`.
 
-**`conformite_consentement`** : `id`, `client_id`, `contact_id`, `source`,
-`preuve` en jsonb, `obtenu_le`.
+**`conformite_consentement`** : `id`, `client_id`, `contact_id` UUID simple,
+`source`, `preuve` en jsonb, `obtenu_le`.
 
 **`conformite_audit`** : `id`, `auteur_id`, `action`, `objet_type`, `objet_id`,
 `valeur_avant` en jsonb, `valeur_apres` en jsonb, `motif`, `adresse_ip`,
@@ -301,6 +351,11 @@ client dit ne pas avoir reçu sa facture.
 **`notifications_suppression`** : `id`, `adresse`, `motif` parmi REJET_DUR,
 PLAINTE, `ajoute_le`.
 
+**`notifications_modele_courriel`** : `id`, `type`, `version`, `langue`,
+`sujet`, `corps_html`, `corps_texte`, `cree_le`. Unicité sur
+`(type, version, langue)`. Les modèles sont versés avec le code et conservés
+par version, pour savoir ce qu'a reçu un client à une date donnée.
+
 ## support
 
 **`support_ticket`** : `id`, `client_id`, `demandeur_id`, `categorie`,
@@ -309,8 +364,27 @@ ATTENTE_CLIENT, ESCALADE_N2, ESCALADE_RESEAU, RESOLU, CLOS, `objet`,
 `contexte` en jsonb pour l'objet technique rattaché, `agent_id`,
 `premiere_reponse_le`, `resolu_le`, `clos_le`.
 
-**`support_message`** : `id`, `ticket_id`, `auteur_id`, `interne` booléen,
-`corps`, `cree_le`.
+**`support_message`** : `id`, `client_id`, `ticket_id`, `auteur_id`, `interne`
+booléen, `corps`, `cree_le`.
+
+**`support_piece`** : `id`, `client_id`, `message_id`, `fichier_id` référence
+`fichiers_fichier`, `cree_le`.
+
+**`support_incident`** : `id`, `titre`, `composants` en tableau parmi
+APPLICATION, API, ORANGE, MOOV, TELECEL, ACCUSES, RECHARGEMENT, `etat` parmi
+DEGRADE, PANNE, MAINTENANCE, RETABLI, `debut_le`, `fin_le`. Table de
+plateforme, sans `client_id`.
+
+**`support_publication_incident`** : `id`, `incident_id`, `texte`, `auteur_id`,
+`publiee_le`.
+
+## api
+
+**`api_idempotence`** conserve vingt-quatre heures la réponse produite pour un
+en-tête `Idempotency-Key` : `id`, `client_id`, `cle`, `empreinte` condensat du
+corps de la requête, `statut_http`, `reponse` en jsonb, `cree_le`, `expire_le`.
+Unicité sur `(client_id, cle)`. Un rejeu avec la même clé et la même empreinte
+renvoie la réponse stockée ; la même clé avec une autre empreinte est refusée.
 
 ## fichiers
 
