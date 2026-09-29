@@ -29,9 +29,10 @@ from django.utils.dateparse import parse_datetime
 
 from apps.comptes.models import Client
 from apps.core import bus
+from apps.core.etats import ETATS_TERMINAUX
 from apps.core.files import TOPOLOGIE
 from apps.core.redis import client_redis
-from apps.journal.models import ETATS_TERMINAUX, Evenement, Message
+from apps.journal.models import Evenement, Message
 from apps.journal.services import CLE_SOUMIS, appliquer_accuse, enregistrer_message, soumettre
 from apps.telecom.models import Connecteur, Correlation
 from apps.telecom.passerelles import passerelle_pour

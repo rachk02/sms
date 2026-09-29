@@ -11,25 +11,7 @@ import uuid
 
 from django.db import models
 
-
-class Etat(models.TextChoices):
-    """Les dix états du cycle de vie d'un message, dont six terminaux."""
-
-    RECU = "RECU", "Reçu"
-    EN_ATTENTE = "EN_ATTENTE", "En attente"
-    EN_FILE = "EN_FILE", "En file"
-    SOUMIS = "SOUMIS", "Soumis"
-    LIVRE = "LIVRE", "Livré"
-    NON_LIVRE = "NON_LIVRE", "Non livré"
-    EXPIRE = "EXPIRE", "Expiré"
-    SANS_ACCUSE = "SANS_ACCUSE", "Sans accusé"
-    REJETE = "REJETE", "Rejeté"
-    ANNULE = "ANNULE", "Annulé"
-
-
-ETATS_TERMINAUX = frozenset(
-    {Etat.LIVRE, Etat.NON_LIVRE, Etat.EXPIRE, Etat.SANS_ACCUSE, Etat.REJETE, Etat.ANNULE}
-)
+from apps.core.etats import Etat
 
 
 class Encodage(models.TextChoices):

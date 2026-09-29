@@ -6,11 +6,12 @@ from django.db import connections, transaction
 from django.utils import timezone
 
 from apps.core.encodage import analyser
+from apps.core.etats import ETATS_TERMINAUX, Etat
 from apps.core.redis import client_redis
 from apps.telecom import correlation
 from apps.telecom.passerelles import Soumission
 
-from .models import ETATS_TERMINAUX, Destinataire, Etat, Evenement, Message
+from .models import Destinataire, Evenement, Message
 
 TABLES_PARTITIONNEES = ("journal_message", "journal_evenement")
 
