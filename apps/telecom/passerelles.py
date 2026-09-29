@@ -134,6 +134,12 @@ class Passerelle(ABC):
     def etat(self) -> EtatLiaison:
         """État de la liaison, tel que l'adaptateur le constate."""
 
+    def interpreter_rappel(self, donnees: dict) -> Accuse | None:
+        """Accusé porté par un rappel que la passerelle adresse à la plateforme,
+        pour les adaptateurs qui poussent leurs accusés au lieu de les laisser
+        relever. None si le rappel n'annonce pas un état final."""
+        raise NotImplementedError(f"{type(self).__name__} ne pousse pas ses accusés")
+
     def limites(self) -> Limites:
         return Limites(
             messages_par_seconde=self.connecteur.debit_max,
@@ -246,12 +252,17 @@ class Simulateur(Passerelle):
         ]
 
 
-ADAPTATEURS: dict[str, type[Passerelle]] = {Connecteur.Type.SIMULE: Simulateur}
+def _adaptateurs() -> dict[str, type[Passerelle]]:
+    from .jasmin import Jasmin
+
+    return {Connecteur.Type.SIMULE: Simulateur, Connecteur.Type.SMPP: Jasmin}
 
 
 def passerelle_pour(connecteur: Connecteur, **options) -> Passerelle:
+    """L'adaptateur du connecteur, choisi par sa configuration, jamais par le
+    code métier. Une liaison SMPP passe par Jasmin."""
     try:
-        adaptateur = ADAPTATEURS[connecteur.type]
+        adaptateur = _adaptateurs()[connecteur.type]
     except KeyError:
         raise NotImplementedError(f"Aucun adaptateur pour le type {connecteur.type}") from None
     return adaptateur(connecteur, **options)

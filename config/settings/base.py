@@ -143,3 +143,12 @@ LOGGING = {
     },
     "root": {"handlers": ["console"], "level": env("NIVEAU_JOURNAL", "INFO")},
 }
+
+# Passerelle Jasmin, lue par l'adaptateur des workers d'envoi. Ces identifiants
+# sont ceux de l'API HTTP de notre Jasmin ; ceux des opérateurs restent dans la
+# configuration de Jasmin, jamais dans la base.
+JASMIN_HTTP_URL = f"http://{env('JASMIN_HOST', '127.0.0.1')}:{env('JASMIN_HTTP_PORT', '1401')}"
+JASMIN_HTTP_USER = env("JASMIN_HTTP_USER", "")
+JASMIN_HTTP_PASSWORD = env("JASMIN_HTTP_PASSWORD", "")
+# Adresse où Jasmin relaie les accusés, vue depuis le conteneur de Jasmin.
+JASMIN_URL_RAPPEL = env("JASMIN_URL_RAPPEL", "")

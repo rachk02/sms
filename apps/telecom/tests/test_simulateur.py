@@ -122,4 +122,4 @@ def test_le_role_applicatif_ne_lit_pas_les_connecteurs():
 
 def test_un_type_sans_adaptateur_est_refuse():
     with pytest.raises(NotImplementedError):
-        passerelle_pour(Connecteur(type=Connecteur.Type.SMPP))
+        passerelle_pour(Connecteur(type=Connecteur.Type.HTTP))
