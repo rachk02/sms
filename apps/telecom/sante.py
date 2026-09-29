@@ -27,6 +27,9 @@ journal = logging.getLogger(__name__)
 
 FENETRE = timedelta(minutes=5)
 SEUIL_TAUX = 0.85
+# Hystérésis : une route dégradée ne redevient saine qu'à 90 %. Sans cet écart,
+# une route qui tourne autour de 85 % alternerait alertes et rétablissements.
+SEUIL_RETABLISSEMENT = 0.90
 # En dessous, la fenêtre compte trop peu d'accusés pour conclure : une poignée
 # d'échecs sur un trafic faible ne doit pas déclarer une route dégradée.
 ECHANTILLON_MIN = 20
@@ -85,13 +88,15 @@ def mesures(connecteur_id, maintenant: datetime | None = None) -> Mesures:
 def evaluer(passerelle, maintenant: datetime | None = None) -> Sante:
     session = passerelle.sonder()
     releve = mesures(passerelle.connecteur.id, maintenant)
+    deja_degradee = passerelle.connecteur.etat_liaison == EtatLiaison.DEGRADE
+    seuil = SEUIL_RETABLISSEMENT if deja_degradee else SEUIL_TAUX
     if session == EtatLiaison.DECONNECTE:
         etat, motif = EtatLiaison.DECONNECTE, "session tombée"
-    elif releve.total >= ECHANTILLON_MIN and releve.taux < SEUIL_TAUX:
+    elif releve.total >= ECHANTILLON_MIN and releve.taux < seuil:
         etat = EtatLiaison.DEGRADE
         motif = (
             f"{releve.taux:.0%} d'accusés positifs sur cinq minutes, sous le seuil de "
-            f"{SEUIL_TAUX:.0%} ({releve.positifs} sur {releve.total})"
+            f"{seuil:.0%} ({releve.positifs} sur {releve.total})"
         )
     else:
         etat, motif = EtatLiaison.CONNECTE, "liaison saine"

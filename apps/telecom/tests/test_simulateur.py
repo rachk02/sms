@@ -108,7 +108,7 @@ def test_sur_mille_messages_a_cinq_pour_cent_les_etats_et_le_delai_sont_conforme
 def test_un_libelle_inconnu_d_un_operateur_tombe_dans_un_etat_par_defaut():
     passerelle = Simulateur(Connecteur(type=Connecteur.Type.SIMULE, parametres={}))
     assert passerelle.traduire("delivrd") == Etat.LIVRE
-    assert passerelle.traduire("ACCEPTD") == Etat.NON_LIVRE
+    assert passerelle.traduire("ENROUTE") == Etat.NON_LIVRE
 
 
 def test_le_role_applicatif_ne_lit_pas_les_connecteurs():

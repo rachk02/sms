@@ -85,8 +85,8 @@ def test_deux_adaptateurs_aux_libelles_differents_donnent_le_meme_etat():
 
 def test_un_libelle_inconnu_tombe_dans_l_etat_par_defaut_et_laisse_une_trace(caplog):
     with caplog.at_level(logging.WARNING, logger="apps.telecom.passerelles"):
-        assert Simulateur(_connecteur()).traduire("ACCEPTD") == passerelles.ETAT_PAR_DEFAUT
-    assert "ACCEPTD" in caplog.text and "inconnu" in caplog.text
+        assert Simulateur(_connecteur()).traduire("ENROUTE") == passerelles.ETAT_PAR_DEFAUT
+    assert "ENROUTE" in caplog.text and "inconnu" in caplog.text
 
 
 def test_une_correspondance_vers_un_etat_qu_un_accuse_ne_peut_annoncer_est_refusee():

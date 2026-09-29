@@ -60,6 +60,9 @@ class Jasmin(Passerelle):
         "UNDELIV": Etat.NON_LIVRE,
         "EXPIRED": Etat.EXPIRE,
         "REJECTD": Etat.REJETE,
+        # Accepté par le SMSC, sort final inconnu : compté non livré, le client ne
+        # paie pas ce qu'aucun accusé ne prouve (décision du 29 septembre 2026).
+        "ACCEPTD": Etat.NON_LIVRE,
         "DELETED": Etat.NON_LIVRE,
         "UNKNOWN": Etat.NON_LIVRE,
     }

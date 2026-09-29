@@ -208,6 +208,9 @@ class Simulateur(Passerelle):
         "UNDELIV": Etat.NON_LIVRE,
         "EXPIRED": Etat.EXPIRE,
         "REJECTD": Etat.REJETE,
+        # Accepté par le SMSC, sort final inconnu : compté non livré, le client ne
+        # paie pas ce qu'aucun accusé ne prouve (décision du 29 septembre 2026).
+        "ACCEPTD": Etat.NON_LIVRE,
     }
 
     def __init__(self, connecteur: Connecteur, horloge: Callable[[], datetime] = timezone.now):

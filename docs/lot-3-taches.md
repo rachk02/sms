@@ -6,6 +6,30 @@ Découpage provisoire, à revoir en entrant dans le lot : ce que le lot 2 aura a
 
 Ce lot ouvre le premier écran. Jusqu'ici tout se faisait en ligne de commande.
 
+## Décisions prises avant d'entrer dans le lot
+
+Tranchées le 29 septembre 2026 par la direction du projet.
+
+- **Pas d'inscription libre au lancement (F-11).** Les premiers clients viennent
+  de la vente directe : l'équipe EL-IMMEKA enregistre le client et son dossier
+  depuis le back-office, après signature. Le parcours de téléversement en
+  quatre étapes de T-37 est remplacé par ce formulaire d'agent ; les pièces
+  attendues selon la forme juridique restent exigées.
+- **Deux rôles au lancement (F-10)** : administrateur du compte et utilisateur.
+  Les cinq rôles du CDC V3.0 viendront ensuite ; T-35 et T-36 se lisent avec
+  ces deux rôles, « propriétaire » s'entendant « dernier administrateur ».
+- **Pas d'expiration forcée des mots de passe (F-09).** Changement exigé sur
+  soupçon de compromission ; second facteur obligatoire pour l'administration.
+
+## Ce que les lots précédents ont déjà posé
+
+| Tâche | Déjà là |
+| --- | --- |
+| T-31 | Modèle `Client` (forme juridique, RCCM et IFU uniques en base), service `creer_client` |
+| T-33 | Modèle `Utilisateur` : courriel comme identifiant, Argon2id, compteur d'échecs et date de verrouillage |
+| T-38 | MinIO dans le docker-compose ; convention de chemin `clients/<client>/<famille>/<uuid>.<ext>` au modèle |
+| T-41 | Rien : le journal d'audit est à écrire |
+
 ## T-31 · Inscription et identité juridique
 
 **Produit** Le parcours de création de compte : raison sociale, forme juridique, RCCM, IFU, contact, avec les validations propres à chaque forme de structure.

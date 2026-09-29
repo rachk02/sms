@@ -144,7 +144,25 @@ def test_couper_le_simulateur_smpp_declenche_l_alerte_en_moins_d_une_minute(en_t
         delai = time.monotonic() - debut
     finally:
         subprocess.run(["docker", "compose", "start", "smsc"], check=True, capture_output=True)
+        # Rendre la liaison reliée : les tests suivants qui passent par Jasmin
+        # ne doivent pas hériter d'une session en cours de reconnexion.
+        fin = time.monotonic() + 90
+        while time.monotonic() < fin:
+            if passerelle_pour(connecteur).sonder() == EtatLiaison.CONNECTE:
+                break
+            time.sleep(2)
 
     assert connecteur.etat_liaison == EtatLiaison.DECONNECTE, "aucune alerte en une minute"
     assert delai < 60
     assert _alertes(connecteur) == ["telecom.liaison.tombee"]
+
+
+def test_une_route_degradee_ne_se_retablit_qu_a_90_pour_cent(connecteur):
+    maintenant = timezone.now()
+    for rang in range(40):
+        sante.enregistrer_accuse(connecteur.id, rang % 100 < 35, 2.0, maintenant)  # 35 sur 40
+    connecteur.etat_liaison = EtatLiaison.CONNECTE
+    assert sante.evaluer(passerelle_pour(connecteur), maintenant).etat == EtatLiaison.CONNECTE
+    connecteur.etat_liaison = EtatLiaison.DEGRADE
+    # 87,5 % : au-dessus du seuil d'alerte, sous celui de rétablissement.
+    assert sante.evaluer(passerelle_pour(connecteur), maintenant).etat == EtatLiaison.DEGRADE
