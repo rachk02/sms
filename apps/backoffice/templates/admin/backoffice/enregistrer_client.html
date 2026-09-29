@@ -1,0 +1,18 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<p>Client signé : saisir son identité, son représentant et les pièces attendues pour sa forme juridique.</p>
+<form method="post" enctype="multipart/form-data" novalidate>
+  {% csrf_token %}
+  {% if formulaire.non_field_errors %}<div class="errornote">{{ formulaire.non_field_errors }}</div>{% endif %}
+  <fieldset class="module aligned">
+    {% for champ in formulaire %}
+      <div class="form-row{% if champ.errors %} errors{% endif %}">
+        {{ champ.errors }}
+        <div class="flex-container">{{ champ.label_tag }} {{ champ }}</div>
+        {% if champ.help_text %}<div class="help">{{ champ.help_text }}</div>{% endif %}
+      </div>
+    {% endfor %}
+  </fieldset>
+  <div class="submit-row"><input type="submit" class="default" value="Enregistrer le client"></div>
+</form>
+{% endblock %}

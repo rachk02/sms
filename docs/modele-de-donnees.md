@@ -66,7 +66,7 @@ l'identifiant de connexion, il n'y a pas de nom d'utilisateur séparé.
 | `mot_de_passe` | varchar(255) | condensat Argon2id |
 | `nom` | varchar(150) | non nul |
 | `telephone` | varchar(20) | forme normalisée |
-| `role` | varchar(30) | PROPRIETAIRE, ADMIN, OPERATEUR, COMPTABLE, LECTEUR |
+| `role` | varchar(30) | ADMIN, UTILISATEUR au lancement ; PROPRIETAIRE, OPERATEUR, COMPTABLE, LECTEUR déclarés pour la suite |
 | `courriel_verifie_le` | timestamptz | nul tant que non vérifié |
 | `second_facteur_actif` | boolean | défaut faux |
 | `second_facteur_secret` | varchar(255) | chiffré au repos |
@@ -117,10 +117,15 @@ NOM_NON_CONCORDANT, NUMERO_INTROUVABLE, REPRESENTANT_NON_JUSTIFIE,
 ACTIVITE_INCOMPATIBLE, DOUBLON, SOUPCON_FAUX. Sans liste fermée, aucun refus
 n'est mesurable ni justifiable. Le texte libre complète, il ne remplace pas.
 
-`comptes_piece` : `id`, `client_id`, `dossier_id`, `type` parmi RCCM, IFU, PIECE_GERANT,
-MANDAT, RECEPISSE, ACTE_CREATION, ACCORD_SIEGE, ATTESTATION_ORDRE,
-`chemin_stockage`, `nom_origine`, `type_mime`, `taille_octets`, `expire_le`,
-`etat` parmi DEPOSEE, ACCEPTEE, REFUSEE, `motif_refus`.
+`comptes_piece` : `id`, `client_id`, `dossier_id`, `type` parmi RCCM, IFU,
+PIECE_GERANT, DEMANDE_ECRITE, MANDAT, RECEPISSE, ACTE_CREATION, ACCORD_SIEGE,
+ATTESTATION_ORDRE, `fichier_id` UUID simple vers `fichiers_fichier` (qui porte
+chemin, nom d'origine, type et taille), `expire_le`, `etat` parmi DEPOSEE,
+ACCEPTEE, REFUSEE, `motif_refus`. Une pièce par type et par dossier. Pièces
+attendues selon la forme : IFU, pièce du premier responsable et demande écrite
+pour toutes, plus RCCM (société), récépissé (association), acte de création
+(structure publique), accord de siège (représentation diplomatique) ou
+attestation d'inscription à l'ordre (profession libérale).
 
 ## expediteurs
 
