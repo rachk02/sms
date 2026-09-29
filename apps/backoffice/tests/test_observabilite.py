@@ -6,7 +6,7 @@ import json
 import logging
 
 import pytest
-from django.db import connections, transaction
+from django.db import connections
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
@@ -111,16 +111,15 @@ def test_les_metriques_exposent_files_liaisons_et_debit(
     client_redis().delete(cle_compteur)
     references = []
     for rang in range(3):
-        with transaction.atomic():
-            message = enregistrer_message(
-                client=creer_client(raison_sociale=f"C{rang}", forme=Client.Forme.SOCIETE),
-                numero_normalise=f"+2267000000{rang}",
-                operateur="ORANGE",
-                expediteur_libelle="EXEMPLE",
-                texte="Bonjour",
-                cout_unitaire=10,
-            )
-            references.append(soumettre(message, passerelle).reference_smsc)
+        message = enregistrer_message(
+            client=creer_client(raison_sociale=f"C{rang}", forme=Client.Forme.SOCIETE),
+            numero_normalise=f"+2267000000{rang}",
+            operateur="ORANGE",
+            expediteur_libelle="EXEMPLE",
+            texte="Bonjour",
+            cout_unitaire=10,
+        )
+        references.append(soumettre(message, passerelle).reference_smsc)
 
     publier_etat_liaisons()
     try:

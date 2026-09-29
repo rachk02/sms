@@ -4,12 +4,10 @@ from collections import Counter
 from datetime import timedelta
 
 import pytest
-from django.db import transaction
 from django.utils import timezone
 
 from apps.comptes.models import Client
 from apps.comptes.services import creer_client
-from apps.core.cloisonnement import poser_client
 from apps.journal.models import Etat, Evenement, Message
 from apps.journal.services import appliquer_accuse, enregistrer_message, soumettre
 from apps.telecom.models import Connecteur, Operateur
@@ -31,10 +29,9 @@ def _connecteur(**parametres):
 
 @pytest.fixture
 def client(en_tant_que_worker):
-    client = creer_client(raison_sociale="Exemple SA", forme=Client.Forme.SOCIETE)
-    with transaction.atomic():
-        poser_client(client.id)
-        yield client
+    # Sous le rôle worker, comme le worker d'envoi : pas de client à poser, et
+    # aucune transaction ouverte autour de la soumission.
+    return creer_client(raison_sociale="Exemple SA", forme=Client.Forme.SOCIETE)
 
 
 def _message(client, numero="+22670123456"):

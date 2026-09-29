@@ -97,6 +97,9 @@ class Passerelle(ABC):
     """
 
     correspondance: ClassVar[dict[str, Etat]] = {}
+    # Vrai si `statut` sait retrouver une soumission dont on n'a pas gardé la
+    # référence. Faux : après une coupure, le sort d'une soumission est inconnu.
+    retrouve_ses_soumissions: ClassVar[bool] = True
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)

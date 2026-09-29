@@ -1,5 +1,6 @@
 """Porte d'écriture du module journal."""
 
+import logging
 from datetime import datetime
 
 from django.db import connection, connections, transaction
@@ -10,9 +11,11 @@ from apps.core.etats import ETATS_TERMINAUX, Etat
 from apps.core.numeros import normaliser
 from apps.core.redis import client_redis
 from apps.telecom import correlation
-from apps.telecom.passerelles import Soumission
+from apps.telecom.passerelles import SortSoumission, Soumission
 
 from .models import Destinataire, Evenement, Message
+
+journal = logging.getLogger(__name__)
 
 TABLES_PARTITIONNEES = ("journal_message", "journal_evenement")
 
@@ -97,19 +100,56 @@ def creer_partitions_a_venir(mois_d_avance: int = 2) -> list[str]:
     return creees
 
 
-@transaction.atomic
-def soumettre(message: Message, passerelle, source: str = Evenement.Source.WORKER) -> Message:
-    """Soumet un message à la passerelle et le passe SOUMIS.
+MOTIF_SORT_INCONNU = "SOUMISSION_INTERROMPUE_SORT_INCONNU"
 
-    Le marqueur de soumission interrompue et la reprise sans doublon sont
-    l'objet de T-25 ; ici le marqueur est posé, la reprise n'est pas encore là.
+
+def soumettre(message: Message, passerelle, source: str = Evenement.Source.WORKER) -> Message:
+    """Soumet un message à la passerelle et le passe SOUMIS, sans jamais le
+    soumettre deux fois.
+
+    Trois temps. D'abord le marqueur `soumission_debutee_le`, validé seul, avant
+    tout appel. Puis l'appel à la passerelle, hors transaction. Enfin l'écriture
+    du résultat. Un processus qui meurt entre les deux laisse le marqueur sans
+    résultat : au rejeu, on demande alors à la passerelle le sort de cette
+    soumission au lieu de la refaire. Si la passerelle ne sait pas le dire, le
+    message n'est pas resoumis : il reste en file, motif posé, pour vérification.
+    Un doublon atteint le destinataire et se facture ; un manque se rattrape.
+
+    À appeler hors transaction, comme un worker le fait : sans cela, le marqueur
+    ne serait pas validé avant l'appel.
     """
+    if connection.in_atomic_block:
+        raise RuntimeError("soumettre doit être appelé hors transaction.")
+    cle = {"id": message.id, "date_reception": message.date_reception}
+    soumission = Soumission(message.numero_normalise, message.texte, message.expediteur_libelle)
+
+    with transaction.atomic():
+        courant = Message.objects.select_for_update().get(**cle)
+        if courant.etat == Etat.SOUMIS or courant.etat in ETATS_TERMINAUX:
+            return courant  # déjà fait : relivraison d'un message traité
+        reprise = courant.soumission_debutee_le is not None and courant.date_soumission is None
+        if not reprise:
+            Message.objects.filter(**cle).update(
+                soumission_debutee_le=timezone.now(), modifie_le=timezone.now()
+            )
+
+    if reprise:
+        statut = passerelle.statut(soumission, courant.reference_smsc or None)
+        if statut.sort != SortSoumission.INCONNUE:
+            return _enregistrer_soumission(
+                message, passerelle, statut.reference_smsc, source, reprise=True
+            )
+        if not passerelle.retrouve_ses_soumissions:
+            return _sort_inconnu(message, passerelle, source)
+
+    reference = passerelle.soumettre(soumission)
+    return _enregistrer_soumission(message, passerelle, reference, source)
+
+
+@transaction.atomic
+def _enregistrer_soumission(message, passerelle, reference, source, reprise=False) -> Message:
     cle = {"id": message.id, "date_reception": message.date_reception}
     maintenant = timezone.now()
-    Message.objects.filter(**cle).update(soumission_debutee_le=maintenant)
-    reference = passerelle.soumettre(
-        Soumission(message.numero_normalise, message.texte, message.expediteur_libelle)
-    )
     Message.objects.filter(**cle).update(
         reference_smsc=reference,
         connecteur_id=passerelle.connecteur.id,
@@ -120,13 +160,39 @@ def soumettre(message: Message, passerelle, source: str = Evenement.Source.WORKE
     correlation.enregistrer(passerelle.connecteur.id, reference, message.id, message.date_reception)
     compteur = CLE_SOUMIS.format(connecteur_id=passerelle.connecteur.id)
     transaction.on_commit(lambda: client_redis().incr(compteur))
+    details = {"reference_smsc": reference}
+    if reprise:
+        details["reprise"] = "soumission retrouvée auprès de la passerelle, non refaite"
     Evenement.objects.create(
         client_id=message.client_id,
         message_id=message.id,
         etat=Etat.SOUMIS,
         horodatage=maintenant,
         source=source,
-        details={"reference_smsc": reference},
+        details=details,
+    )
+    return Message.objects.get(**cle)
+
+
+@transaction.atomic
+def _sort_inconnu(message, passerelle, source) -> Message:
+    cle = {"id": message.id, "date_reception": message.date_reception}
+    journal.error(
+        "Soumission interrompue de %s : %s ne sait pas en dire le sort, message non resoumis.",
+        message.id,
+        passerelle.connecteur.nom,
+        extra={"message_id": str(message.id), "connecteur_id": str(passerelle.connecteur.id)},
+    )
+    Message.objects.filter(**cle).update(
+        etat=Etat.EN_FILE, motif_echec=MOTIF_SORT_INCONNU, modifie_le=timezone.now()
+    )
+    Evenement.objects.create(
+        client_id=message.client_id,
+        message_id=message.id,
+        etat=Etat.EN_FILE,
+        horodatage=timezone.now(),
+        source=source,
+        details={"motif": MOTIF_SORT_INCONNU, "connecteur": passerelle.connecteur.nom},
     )
     return Message.objects.get(**cle)
 

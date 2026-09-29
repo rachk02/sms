@@ -45,6 +45,9 @@ ACQUITTEMENT_RAPPEL = "ACK/Jasmin"
 
 
 class Jasmin(Passerelle):
+    # L'API HTTP de Jasmin ne dit pas si elle a reçu une soumission dont on n'a
+    # pas la référence : après une coupure, le sort reste inconnu.
+    retrouve_ses_soumissions: ClassVar[bool] = False
     correspondance: ClassVar[dict[str, Etat]] = {
         "DELIVRD": Etat.LIVRE,
         "UNDELIV": Etat.NON_LIVRE,
