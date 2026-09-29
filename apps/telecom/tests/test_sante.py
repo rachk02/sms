@@ -46,7 +46,9 @@ def test_un_taux_d_echec_a_80_pour_cent_degrade_la_liaison_alors_que_la_session_
     connecteur,
 ):
     passerelle = passerelle_pour(connecteur)
-    client = creer_client(raison_sociale="Exemple SA", forme=Client.Forme.SOCIETE)
+    client = creer_client(
+        raison_sociale="Exemple SA", forme=Client.Forme.SOCIETE, palier=Client.Palier.VERIFIE
+    )
     references = []
     for rang in range(50):
         message = enregistrer_message(

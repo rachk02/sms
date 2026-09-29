@@ -71,7 +71,13 @@ class Command(BaseCommand):
             )
         )()
         clients = await sync_to_async(
-            lambda: list(Client.objects.filter(raison_sociale__startswith="Recette "))
+            # Hors du bac à sable : un client au palier Découverte n'envoie qu'à ses
+            # numéros de test, ce que ce contrôle de charge ne vise pas.
+            lambda: list(
+                Client.objects.filter(raison_sociale__startswith="Recette ").exclude(
+                    palier=Client.Palier.DECOUVERTE
+                )
+            )
         )()
         if len(connecteurs) != 3 or not clients:
             raise CommandError("Jeu d'essai absent : lancer scripts/preparer_recette.sh.")

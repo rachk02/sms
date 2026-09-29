@@ -28,7 +28,9 @@ class Coupure(BaseException):
 
 @pytest.fixture
 def message(en_tant_que_worker):
-    client = creer_client(raison_sociale="Exemple SA", forme=Client.Forme.SOCIETE)
+    client = creer_client(
+        raison_sociale="Exemple SA", forme=Client.Forme.SOCIETE, palier=Client.Palier.VERIFIE
+    )
     return enregistrer_message(
         client=client,
         numero_normalise="+22670123456",

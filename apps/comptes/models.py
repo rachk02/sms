@@ -230,3 +230,27 @@ PIECE_D_EXISTENCE = {
 
 def pieces_attendues(forme: str) -> tuple[str, ...]:
     return (PIECE_D_EXISTENCE[forme], *PIECES_COMMUNES)
+
+
+class NumeroTest(Base):
+    """Numéro vers lequel un compte au palier Découverte peut envoyer (bac à sable).
+    Dix au plus par client, vérifiés par un code avant de servir."""
+
+    MAXIMUM_PAR_CLIENT = 10
+
+    client = models.ForeignKey(Client, on_delete=models.PROTECT, related_name="numeros_test")
+    numero_normalise = models.CharField(max_length=20)
+    code_condensat = models.CharField(max_length=128, blank=True)
+    code_expire_le = models.DateTimeField(null=True, blank=True)
+    verifie_le = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "comptes_numero_test"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["client", "numero_normalise"], name="numero_test_unique_par_client"
+            )
+        ]
+
+    def __str__(self):
+        return self.numero_normalise

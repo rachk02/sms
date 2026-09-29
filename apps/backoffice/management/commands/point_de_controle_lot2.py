@@ -141,7 +141,15 @@ class Command(BaseCommand):
 
     def _client(self):
         client = Client.objects.filter(raison_sociale="Contrôle lot 2").first()
-        return client or creer_client(raison_sociale="Contrôle lot 2", forme=Client.Forme.SOCIETE)
+        if client and client.palier == Client.Palier.DECOUVERTE:
+            Client.objects.filter(id=client.id).update(palier=Client.Palier.VERIFIE)
+            client.refresh_from_db()
+        # Hors du bac à sable : le scénario envoie à des numéros quelconques.
+        return client or creer_client(
+            raison_sociale="Contrôle lot 2",
+            forme=Client.Forme.SOCIETE,
+            palier=Client.Palier.VERIFIE,
+        )
 
     def _configurer_jasmin(self, adresse_entrants):
         self._note("Configuration de Jasmin, route des SMS entrants comprise.")

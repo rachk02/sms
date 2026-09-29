@@ -25,7 +25,9 @@ TEXTE_400 = "".join(chr(ord("a") + rang % 26) for rang in range(400))
 
 @pytest.fixture
 def client(en_tant_que_worker):
-    return creer_client(raison_sociale="Exemple SA", forme=Client.Forme.SOCIETE)
+    return creer_client(
+        raison_sociale="Exemple SA", forme=Client.Forme.SOCIETE, palier=Client.Palier.VERIFIE
+    )
 
 
 def _connecteur(type_=Connecteur.Type.SIMULE, **parametres):

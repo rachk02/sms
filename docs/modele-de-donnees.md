@@ -127,6 +127,14 @@ pour toutes, plus RCCM (société), récépissé (association), acte de créatio
 (structure publique), accord de siège (représentation diplomatique) ou
 attestation d'inscription à l'ordre (profession libérale).
 
+**`comptes_numero_test`** : les numéros du bac à sable. `id`, `client_id`,
+`numero_normalise`, `code_condensat` (condensat du code à six chiffres, jamais
+le code), `code_expire_le` (dix minutes), `verifie_le`, `cree_le`,
+`modifie_le`. Dix au plus par client, unicité sur `(client_id,
+numero_normalise)`. Un compte au palier Découverte n'envoie qu'à ses numéros
+vérifiés ; le moteur d'envoi le contrôle avant la passerelle et rejette tout
+autre envoi (motif BAC_A_SABLE_NUMERO_NON_VERIFIE).
+
 ## expediteurs
 
 **`expediteurs_expediteur`** : `id`, `client_id`, `libelle` de onze caractères

@@ -100,7 +100,9 @@ def test_du_rappel_a_la_base_accuse_applique_et_entrant_ecrit(client, en_tant_qu
         type=Connecteur.Type.SIMULE,
     )
     message = enregistrer_message(
-        client=creer_client(raison_sociale="Exemple SA", forme=Client.Forme.SOCIETE),
+        client=creer_client(
+            raison_sociale="Exemple SA", forme=Client.Forme.SOCIETE, palier=Client.Palier.VERIFIE
+        ),
         numero_normalise="+22670123456",
         operateur="ORANGE",
         expediteur_libelle="EXEMPLE",

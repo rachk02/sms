@@ -31,7 +31,9 @@ def _connecteur(**parametres):
 def client(en_tant_que_worker):
     # Sous le rôle worker, comme le worker d'envoi : pas de client à poser, et
     # aucune transaction ouverte autour de la soumission.
-    return creer_client(raison_sociale="Exemple SA", forme=Client.Forme.SOCIETE)
+    return creer_client(
+        raison_sociale="Exemple SA", forme=Client.Forme.SOCIETE, palier=Client.Palier.VERIFIE
+    )
 
 
 def _message(client, numero="+22670123456"):

@@ -112,7 +112,9 @@ def test_les_metriques_exposent_files_liaisons_et_debit(
     references = []
     for rang in range(3):
         message = enregistrer_message(
-            client=creer_client(raison_sociale=f"C{rang}", forme=Client.Forme.SOCIETE),
+            client=creer_client(
+                raison_sociale=f"C{rang}", forme=Client.Forme.SOCIETE, palier=Client.Palier.VERIFIE
+            ),
             numero_normalise=f"+2267000000{rang}",
             operateur="ORANGE",
             expediteur_libelle="EXEMPLE",

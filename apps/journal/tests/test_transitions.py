@@ -43,7 +43,9 @@ def passerelle(en_tant_que_worker):
 
 @pytest.fixture
 def soumis(passerelle):
-    client = creer_client(raison_sociale="Exemple SA", forme=Client.Forme.SOCIETE)
+    client = creer_client(
+        raison_sociale="Exemple SA", forme=Client.Forme.SOCIETE, palier=Client.Palier.VERIFIE
+    )
     message = enregistrer_message(
         client=client,
         numero_normalise="+22670123456",

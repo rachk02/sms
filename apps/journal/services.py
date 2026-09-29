@@ -6,6 +6,7 @@ from datetime import datetime
 from django.db import connection, connections, transaction
 from django.utils import timezone
 
+from apps.comptes.services import envoi_autorise
 from apps.core.encodage import analyser
 from apps.core.etats import ETATS_TERMINAUX, Etat, transition_permise
 from apps.core.numeros import normaliser
@@ -152,6 +153,7 @@ def _verrouiller(message: Message) -> Message:
 
 
 MOTIF_SORT_INCONNU = "SOUMISSION_INTERROMPUE_SORT_INCONNU"
+MOTIF_BAC_A_SABLE = "BAC_A_SABLE_NUMERO_NON_VERIFIE"
 
 
 def soumettre(message: Message, passerelle, source: str = Evenement.Source.WORKER) -> Message:
@@ -178,6 +180,16 @@ def soumettre(message: Message, passerelle, source: str = Evenement.Source.WORKE
         courant = Message.objects.select_for_update().get(**cle)
         if courant.etat == Etat.SOUMIS or courant.etat in ETATS_TERMINAUX:
             return courant  # déjà fait : relivraison d'un message traité
+        if not envoi_autorise(courant.client, courant.numero_normalise):
+            # Bac à sable : refusé ici, après la file et avant la passerelle.
+            changer_etat(
+                courant,
+                Etat.REJETE,
+                source=source,
+                details={"motif": MOTIF_BAC_A_SABLE},
+                motif_echec=MOTIF_BAC_A_SABLE,
+            )
+            return Message.objects.get(**cle)
         reprise = courant.soumission_debutee_le is not None and courant.date_soumission is None
         # La date de soumission est l'instant de l'appel à la passerelle, pas
         # celui où l'on en écrit le résultat : un accusé peut arriver entre deux.

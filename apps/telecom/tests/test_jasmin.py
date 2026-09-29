@@ -166,7 +166,9 @@ def _jasmin_lance() -> bool:
 def _scenario(connecteur, relever_accuses) -> Message:
     """Le même scénario applicatif, quel que soit l'adaptateur : écrire, soumettre,
     appliquer l'accusé. Aucun appel ne nomme l'adaptateur."""
-    client = creer_client(raison_sociale="Exemple SA", forme=Client.Forme.SOCIETE)
+    client = creer_client(
+        raison_sociale="Exemple SA", forme=Client.Forme.SOCIETE, palier=Client.Palier.VERIFIE
+    )
     message = enregistrer_message(
         client=client,
         numero_normalise="+22670123456",
