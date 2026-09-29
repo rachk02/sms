@@ -1,0 +1,8 @@
+.git
+.venv
+.idea
+.claude
+.env
+docs_of_interest
+**/__pycache__
+staticfiles

@@ -1,0 +1,58 @@
+name: Intégration continue
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verifications:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Fichier .env de la chaîne
+        run: |
+          cp .env.example .env
+          while grep -q 'a-remplacer' .env; do
+            sed -i "0,/a-remplacer/s//$(openssl rand -hex 24)/" .env
+          done
+
+      - name: Services d'appui
+        run: docker compose up -d --wait postgres redis rabbitmq
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Dépendances
+        run: uv sync --frozen
+
+      - name: Style
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run python scripts/verifier_style.py
+
+      - name: Migrations à jour
+        run: |
+          uv run python manage.py makemigrations --check --dry-run
+          uv run python manage.py migrate --database proprietaire
+
+      - name: Tests
+        run: uv run pytest
+
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Construction de l'image
+        run: docker build -t sms:ci .
+
+      - name: Démarrage de l'image
+        run: |
+          cp .env.example .env
+          docker run --rm --env-file .env -e DJANGO_SETTINGS_MODULE=config.settings.recette \
+            sms:ci python manage.py check
+          docker run --rm --env-file .env sms:ci gunicorn --check-config config.wsgi:application

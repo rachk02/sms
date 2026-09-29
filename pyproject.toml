@@ -9,6 +9,7 @@ dependencies = [
     "argon2-cffi>=25.1",
     "redis>=6.0",
     "aio-pika>=9.5",
+    "gunicorn>=26.2.0",
 ]
 
 [dependency-groups]
