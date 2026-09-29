@@ -20,6 +20,21 @@ simple, indexé, sans clé étrangère : c'est noté « UUID simple » dans les 
 ci-dessous. Une référence vers une table partitionnée l'est aussi, et porte en
 plus la date qui permet de retrouver la partition.
 
+## core
+
+**`core_evenement_sortant`** est la boîte d'envoi du bus d'événements : `id`,
+`nom` selon la convention domaine, objet, action, `client_id` UUID simple nul
+pour un événement de plateforme, `objet_id`, `auteur_id`, `donnees` en jsonb,
+`cle_idempotence` unique, `cree_le`, `publie_le` nul tant que le relais ne l'a
+pas publiée. `publier` y écrit dans la transaction de l'écriture métier. Ce
+n'est pas une table métier : le rôle applicatif peut y écrire sans pouvoir y
+lire, le relais passe par le rôle worker.
+
+**`core_evenement_traite`** : `consommateur`, `cle_idempotence`, `traite_le`.
+Clé primaire composée sur les deux premiers. Écrite dans la même transaction
+que le traitement : un événement relivré après un traitement validé est
+reconnu et ignoré.
+
 ## comptes
 
 **`comptes_client`** porte l'identité juridique de l'organisation cliente.
