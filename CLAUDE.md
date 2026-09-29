@@ -60,6 +60,12 @@ confirmation à l'utilisateur. Cela vaut aussi pour les simples entrées du jour
 - Ne jamais forcer un push (`--force`) ni réécrire l'historique déjà poussé sans accord
   explicite.
 
+## Enchaînement des tâches
+
+Une tâche finie, commitée et poussée, la suivante démarre sans attendre l'accord de
+l'utilisateur, dans l'ordre du lot. On ne s'arrête pour demander que sur une vraie décision
+qui revient à l'utilisateur, un blocage, ou une contradiction entre les documents.
+
 ## Documents du projet
 
 - `docs/charte.md` : la charte, importée ci-dessus.
