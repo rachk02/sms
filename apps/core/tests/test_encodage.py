@@ -44,7 +44,7 @@ def test_les_accents_de_la_table_gsm_ne_basculent_pas_en_ucs2(accent):
 
 
 @pytest.mark.parametrize(
-    "couteux", ["ê", "â", "î", "ô", "û", "ë", "ï", "ç", "œ", "’", "“", "—", "…"]
+    "couteux", ["ê", "â", "î", "ô", "û", "ë", "ï", "ç", "œ", "\u2019", "\u201c", "\u2014", "\u2026"]
 )
 def test_les_caracteres_couteux_de_la_charte_basculent_en_ucs2(couteux):
     assert analyser(f"Bonjour {couteux}").encodage == Encodage.UCS2
