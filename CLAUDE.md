@@ -50,6 +50,16 @@ commit, ni dans la documentation, ni dans le journal.
 Ces règles sont aussi écrites dans `~/.claude/CLAUDE.md` et valent pour tous les projets.
 Elles sont rappelées ici pour que ce dépôt se lise seul.
 
+## Commit et push automatiques
+
+Chaque modification terminée est commitée puis poussée sur `origin` sans demander
+confirmation à l'utilisateur. Cela vaut aussi pour les simples entrées du journal.
+
+- Un commit par changement cohérent, avec un message clair en français, sans attribution.
+- Avant de pousser, faire la vérification ci-dessus (aucune ligne d'attribution).
+- Ne jamais forcer un push (`--force`) ni réécrire l'historique déjà poussé sans accord
+  explicite.
+
 ## État du dossier au moment de cette mise en place
 
 Relevé le 2026-09-29. Le projet n'a pas encore commencé, et trois points méritent d'être
