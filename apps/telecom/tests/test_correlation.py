@@ -116,3 +116,18 @@ def test_une_soumission_annulee_ne_laisse_rien_dans_redis(passerelle):
         raise RuntimeError("panne avant validation")
     assert correlation._redis().get(cle) is None
     assert not Correlation.objects.filter(reference_smsc="annulee").exists()
+
+
+def test_la_correspondance_vit_la_validite_du_sms_plus_la_marge(passerelle, settings):
+    settings.VALIDITE_SMS_HEURES = 24
+    maintenant, message_id = timezone.now(), uuid.uuid7()
+    with transaction.atomic():
+        correlation.enregistrer(passerelle.connecteur.id, "courte", message_id, maintenant)
+    try:
+        duree = correlation._redis().ttl(correlation.cle_redis(passerelle.connecteur.id, "courte"))
+        assert 47 * 3600 < duree <= 48 * 3600  # 24 heures de validité, 24 de marge
+        ligne = Correlation.objects.get(reference_smsc="courte")
+        ecart = (ligne.expire_le - ligne.cree_le).total_seconds()
+        assert abs(ecart - 48 * 3600) < 60
+    finally:
+        correlation._redis().delete(correlation.cle_redis(passerelle.connecteur.id, "courte"))

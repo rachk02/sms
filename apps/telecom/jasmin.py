@@ -72,6 +72,8 @@ class Jasmin(Passerelle):
             "password": settings.JASMIN_HTTP_PASSWORD,
             "to": soumission.numero.removeprefix("+"),
             "from": soumission.expediteur,
+            # En minutes : le SMSC et notre corrélation expirent ensemble.
+            "validity-period": str(settings.VALIDITE_SMS_HEURES * 60),
         }
         if analyser(soumission.texte).encodage == Encodage.UCS2:
             parametres |= {"coding": "8", "hex-content": soumission.texte.encode("utf-16-be").hex()}

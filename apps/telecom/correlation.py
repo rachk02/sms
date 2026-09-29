@@ -1,7 +1,8 @@
 """Corrélation des accusés : identifiant de l'opérateur vers message interne.
 
 À la soumission, le couple connecteur et identifiant externe est écrit en base
-dans la transaction de la soumission, puis dans Redis pour 72 heures une fois
+dans la transaction de la soumission, puis dans Redis, pour la validité du SMS
+plus une marge (72 heures par défaut), une fois
 cette transaction validée : Redis ne pointe jamais vers une soumission annulée.
 À l'accusé, Redis répond en général, sinon la base prend le relais. Un vidage
 complet de Redis ne coûte donc que de la vitesse.
@@ -11,6 +12,7 @@ import json
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -19,7 +21,15 @@ from apps.core.redis import client_redis
 
 from .models import AccuseOrphelin, Correlation
 
-VALIDITE = timedelta(hours=72)
+# Un accusé peut arriver jusqu'au terme de la validité du SMS, et un peu après :
+# la corrélation vit cette validité plus une marge.
+MARGE = timedelta(hours=24)
+
+
+def validite() -> timedelta:
+    return timedelta(hours=settings.VALIDITE_SMS_HEURES) + MARGE
+
+
 PREFIXE = "sms:correlation"
 
 
@@ -43,11 +53,12 @@ def enregistrer(connecteur_id, reference_smsc: str, message_id, message_date_rec
         reference_smsc=reference_smsc,
         message_id=message_id,
         message_date_reception=message_date_reception,
-        expire_le=timezone.now() + VALIDITE,
+        expire_le=timezone.now() + validite(),
     )
     valeur = json.dumps({"message_id": str(message_id), "date": message_date_reception.isoformat()})
     cle = cle_redis(connecteur_id, reference_smsc)
-    transaction.on_commit(lambda: _redis().set(cle, valeur, ex=VALIDITE))
+    duree = validite()
+    transaction.on_commit(lambda: _redis().set(cle, valeur, ex=duree))
 
 
 def retrouver(connecteur_id, reference_smsc: str) -> Correspondance | None:

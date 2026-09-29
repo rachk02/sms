@@ -18,7 +18,7 @@ le refont pas.
 | T-23 | Rien | Tout |
 | T-24 | `enregistrer_message` et `soumettre` ; encodage et décompte des segments | Découpage réel avec en-tête de concaténation, vérifié sur ce que reçoit le simulateur |
 | T-25 | Colonne `soumission_debutee_le`, posée dans la transaction de soumission | Marqueur validé avant l'appel, reprise qui interroge la passerelle au lieu de resoumettre |
-| T-26 | Fait en T-14 : base puis Redis, 72 heures, orphelins, rejeu sans seconde transition | Durée alignée sur la validité réelle du SMS |
+| T-26 | Fait en T-14 : base puis Redis, orphelins, rejeu sans seconde transition | Fait : durée de la validité du SMS (`VALIDITE_SMS_HEURES`, transmise au SMSC) plus 24 heures |
 | T-27 | `appliquer_accuse` refuse une seconde transition vers un état final | Table des transitions permises, worker accusés réel |
 | T-28 à T-30 | Rien | Tout |
 

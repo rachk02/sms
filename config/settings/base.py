@@ -152,3 +152,8 @@ JASMIN_HTTP_USER = env("JASMIN_HTTP_USER", "")
 JASMIN_HTTP_PASSWORD = env("JASMIN_HTTP_PASSWORD", "")
 # Adresse où Jasmin relaie les accusés, vue depuis le conteneur de Jasmin.
 JASMIN_URL_RAPPEL = env("JASMIN_URL_RAPPEL", "")
+
+# Durée de validité d'un SMS, transmise au SMSC : passé ce délai, l'opérateur
+# ne tente plus de le livrer. La corrélation des accusés vit cette durée plus
+# une marge (apps/telecom/correlation.py), 72 heures par défaut.
+VALIDITE_SMS_HEURES = int(env("VALIDITE_SMS_HEURES", "48"))
