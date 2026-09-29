@@ -40,6 +40,10 @@ services:
 
   rabbitmq:
     image: rabbitmq:4-management-alpine
+    # Nom d'hôte fixe : RabbitMQ range ses données sous le nom de son nœud, tiré
+    # du nom d'hôte. Sans lui, recréer le conteneur change de nœud et fait perdre
+    # hôtes virtuels, files et droits, alors même que le volume est conservé.
+    hostname: rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}

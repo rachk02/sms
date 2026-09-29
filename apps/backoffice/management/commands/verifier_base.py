@@ -21,6 +21,7 @@ CLOISONNEES = (
     "credits_registre",
     "credits_compte",
     "credits_reservation",
+    "telecom_message_entrant",
 )
 RESERVEES_AUX_WORKERS = (
     "telecom_connecteur",

@@ -162,10 +162,19 @@ class Command(BaseCommand):
         commun = {k: v for k, v in os.environ.items() if k != "SMS_CONNEXION_PAR_DEFAUT"}
         commun["JASMIN_URL_RAPPEL"] = base_rappels
         worker = commun | {"SMS_CONNEXION_PAR_DEFAUT": "WORKER"}
+        # Le service web ne reçoit que le rôle applicatif : identifiants du
+        # propriétaire et du worker posés vides, que le chargement de .env ne
+        # remplit pas, si bien que ces connexions ne sont pas définies.
+        web = commun | {
+            "POSTGRES_PROPRIETAIRE_USER": "",
+            "POSTGRES_PROPRIETAIRE_PASSWORD": "",
+            "POSTGRES_WORKER_USER": "",
+            "POSTGRES_WORKER_PASSWORD": "",
+        }
         a_lancer = {
             "web": (
                 [sys.executable, "manage.py", "runserver", f"0.0.0.0:{port}", "--noreload"],
-                commun,
+                web,
             ),
             "envoi": (
                 [sys.executable, "-m", "workers.envoi"],
@@ -174,6 +183,29 @@ class Command(BaseCommand):
             "accuses": ([sys.executable, "-m", "workers.accuses"], worker),
             "ordonnanceur": ([sys.executable, "-m", "workers.ordonnanceur"], worker),
         }
+        connexions_web = (
+            subprocess.run(
+                [
+                    sys.executable,
+                    "manage.py",
+                    "shell",
+                    "-c",
+                    "from django.conf import settings; print(','.join(sorted(settings.DATABASES)))",
+                ],
+                cwd=RACINE,
+                env=web,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            .stdout.strip()
+            .splitlines()[-1]
+        )
+        if connexions_web != "default":
+            raise Echec(
+                f"le service web détient d'autres connexions que default : {connexions_web}"
+            )
+        self._note("Service web lancé avec la seule connexion du rôle applicatif.")
         for nom, (commande, env) in a_lancer.items():
             sortie = open(self.journaux / f"{nom}.log", "w", encoding="utf-8")
             self.processus[nom] = (
@@ -263,6 +295,9 @@ class Command(BaseCommand):
         raise Echec(f"liaison restée {connecteur.etat_liaison}, {etat} attendu après {delai_s} s")
 
     def _couper_et_retablir(self, connecteur, client, pendant_coupure):
+        # Le connecteur est réutilisé d'une exécution à l'autre : seules les
+        # alertes émises à partir de cette coupure comptent.
+        depuis = timezone.now()
         subprocess.run(
             ["docker", "compose", "stop", "smsc"], cwd=RACINE, check=True, capture_output=True
         )
@@ -283,15 +318,13 @@ class Command(BaseCommand):
 
         alertes = list(
             EvenementSortant.objects.filter(
-                objet_id=connecteur.id, nom__startswith="telecom.liaison."
+                objet_id=connecteur.id, nom__startswith="telecom.liaison.", cree_le__gte=depuis
             )
             .order_by("cree_le")
             .values_list("nom", flat=True)
         )
         self._note(f"Alertes de liaison : {', '.join(alertes)}.")
-        # La coupure doit être suivie d'un rétablissement. D'autres transitions
-        # peuvent s'y mêler : SMPPSim rend 10 % d'échecs, au bord du seuil de
-        # dégradation de 85 %, et c'est la surveillance qui fait son travail.
+        # La coupure doit être suivie d'un rétablissement.
         tombee = (
             alertes.index("telecom.liaison.tombee") if "telecom.liaison.tombee" in alertes else None
         )
