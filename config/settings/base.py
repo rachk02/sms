@@ -18,6 +18,7 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.comptes",
     "apps.journal",
+    "apps.credits",
 ]
 
 AUTH_USER_MODEL = "comptes.Utilisateur"

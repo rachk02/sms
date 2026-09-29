@@ -260,14 +260,19 @@ supprimée, jamais.
 | `client_id` | uuid | non nul |
 | `type` | varchar(20) | ACHAT, CONSOMMATION, RECREDIT, AJUSTEMENT |
 | `montant` | integer | signé, en FCFA |
-| `solde_apres` | integer | pour contrôle, jamais pour lecture |
+| `solde_apres` | bigint | pour contrôle, jamais pour lecture |
 | `reference` | varchar(100) | transaction, message ou campagne |
 | `motif` | text | obligatoire pour AJUSTEMENT |
 | `auteur_id` | uuid | nul si écriture automatique |
 | `cree_le` | timestamptz | non nul |
 
 **`credits_compte`** est le cache de solde, verrouillé pendant une réservation :
-`client_id` en clé primaire, `solde_acquis`, `montant_reserve`, `mis_a_jour_le`.
+`client_id` en clé primaire, `solde_acquis` et `montant_reserve` en bigint,
+`mis_a_jour_le`. Les soldes cumulés sont en bigint : une écriture tient en
+integer, pas forcément la somme de toutes.
+
+Le registre refuse toute modification et toute suppression à deux niveaux : le
+modèle Django, et un déclencheur PostgreSQL qui vaut pour tous les rôles.
 
 **`credits_reservation`** porte soit une campagne entière, soit un envoi
 unitaire. Une campagne réserve en une seule fois, à son lancement, son coût
