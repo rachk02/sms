@@ -97,7 +97,14 @@ def test_le_relais_publie_et_un_doublon_du_courtier_n_est_traite_qu_une_fois():
             for _ in range(2):
                 message = await file.get(timeout=5)
                 traites.append(
-                    await bus.traiter_message(message, "test-relais", recus.append, using="worker")
+                    await bus.traiter_message(
+                        message,
+                        "test-relais",
+                        recus.append,
+                        canal=canal,
+                        file_origine=file.name,
+                        using="worker",
+                    )
                 )
             return traites
 
@@ -133,7 +140,14 @@ def test_un_consommateur_mort_apres_traitement_et_avant_acquittement_ne_double_p
 
             # Le courtier relivre le message au consommateur suivant.
             relivre = await file.get(timeout=5)
-            traite = await bus.traiter_message(relivre, "test-mort", recus.append, using="worker")
+            traite = await bus.traiter_message(
+                relivre,
+                "test-mort",
+                recus.append,
+                canal=canal,
+                file_origine=file.name,
+                using="worker",
+            )
             await file.delete(if_unused=False, if_empty=False)
             return relivre.redelivered, traite
 

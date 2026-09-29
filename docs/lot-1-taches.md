@@ -135,9 +135,10 @@ acquittement ne produit pas de doublon au rejeu.
 **Produit** La déclaration de l'échange `sms`, des douze files et de l'échange
 de rebut, avec les paliers de réessai.
 
-**Critères** Les files existent après démarrage. Un message qui échoue cinq
-fois atterrit dans `rebut` et non dans une boucle. Les délais entre tentatives
-suivent la progression prévue.
+**Critères** Les files existent après démarrage (`manage.py declarer_files`).
+Un message qui échoue encore après les cinq paliers de réessai (une minute,
+cinq, trente, deux heures, six heures) atterrit dans `rebut` et non dans une
+boucle. Les délais entre tentatives suivent la progression prévue.
 
 ## T-12 · Squelette des workers
 

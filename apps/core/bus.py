@@ -13,6 +13,7 @@ identifiant du message et le consommateur reconnaît le doublon.
 """
 
 import json
+import logging
 from collections.abc import Callable
 from typing import Any
 
@@ -23,9 +24,12 @@ from django.db import DEFAULT_DB_ALIAS
 from django.utils import timezone
 
 from .evenements import traiter_une_fois
+from .files import TOPOLOGIE, Topologie, echouer
 from .models import EvenementSortant
 
 ECHANGE = "evenements"
+
+journal = logging.getLogger(__name__)
 
 
 async def connecter() -> aio_pika.abc.AbstractRobustConnection:
@@ -79,12 +83,17 @@ async def traiter_message(
     message: aio_pika.abc.AbstractIncomingMessage,
     consommateur: str,
     gestionnaire: Callable[[dict], Any],
+    *,
+    canal,
+    file_origine: str,
+    topologie: Topologie = TOPOLOGIE,
     using: str = DEFAULT_DB_ALIAS,
 ) -> bool:
     """Traite un événement reçu au plus une fois, puis l'acquitte.
 
-    En cas d'échec du traitement, le message est rendu à la file. La politique
-    de réessai et le rebut sont portés par la déclaration des files (T-11).
+    En cas d'échec, le message part au palier de réessai suivant, ou au rebut
+    après le dernier (voir `apps.core.files`). Renvoie vrai si le traitement a
+    eu lieu, faux s'il avait déjà eu lieu ou s'il a échoué.
     """
     evenement = json.loads(message.body)
     cle = message.message_id or evenement["cle_idempotence"]
@@ -92,8 +101,9 @@ async def traiter_message(
         traite = await sync_to_async(traiter_une_fois)(
             consommateur, cle, lambda: gestionnaire(evenement), using
         )
-    except Exception:
-        await message.nack(requeue=True)
-        raise
+    except Exception as erreur:
+        journal.exception("Échec du traitement de %s par %s", cle, consommateur)
+        await echouer(canal, message, file_origine, repr(erreur)[:200], topologie)
+        return False
     await message.ack()
     return traite
