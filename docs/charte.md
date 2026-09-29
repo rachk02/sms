@@ -156,8 +156,14 @@ Les trois zones délicates ci-dessus reçoivent des tests de concurrence et de
 rejeu, pas seulement des tests de cas nominal : deux réservations simultanées,
 un accusé rejoué deux fois, une requête sans client posé.
 
-    pytest
-    ruff check .
+    uv run python manage.py migrate --database proprietaire
+    uv run pytest
+    uv run ruff check .
+
+Les migrations passent toujours par la connexion `proprietaire`, qui possède
+les tables. `default` est le rôle applicatif, soumis au cloisonnement ;
+`worker` le contourne. Les tests créent leur base par `proprietaire` (voir
+`conftest.py`) et y raccrochent les deux autres.
 
 ## Ce qui est décidé et ne se rediscute pas
 

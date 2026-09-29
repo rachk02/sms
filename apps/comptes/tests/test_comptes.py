@@ -47,13 +47,7 @@ def test_deux_clients_ne_partagent_pas_un_rccm_mais_peuvent_n_en_avoir_aucun():
     creer_client(raison_sociale="B", forme=Client.Forme.ASSOCIATION)
     creer_client(raison_sociale="C", forme=Client.Forme.SOCIETE, rccm="BF-OUA-2026-B-001")
     with pytest.raises(IntegrityError):
-        Client.objects.create(
-            raison_sociale="D",
-            forme=Client.Forme.SOCIETE,
-            rccm="BF-OUA-2026-B-001",
-            plafond_horaire=1,
-            plafond_journalier=1,
-        )
+        creer_client(raison_sociale="D", forme=Client.Forme.SOCIETE, rccm="BF-OUA-2026-B-001")
 
 
 def test_un_utilisateur_de_compte_est_rattache_a_son_client():

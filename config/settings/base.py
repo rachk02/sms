@@ -51,15 +51,29 @@ TEMPLATES = [
     },
 ]
 
-DATABASES = {
-    "default": {
+
+def _base_de_donnees(role: str) -> dict:
+    return {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": env("POSTGRES_DB"),
-        "USER": env("POSTGRES_USER"),
-        "PASSWORD": env("POSTGRES_PASSWORD"),
+        "USER": env(f"POSTGRES_{role}_USER"),
+        "PASSWORD": env(f"POSTGRES_{role}_PASSWORD"),
         "HOST": env("POSTGRES_HOST"),
         "PORT": env("POSTGRES_PORT"),
     }
+
+
+# Trois connexions vers la même base, avec trois rôles PostgreSQL distincts.
+# `proprietaire` vient en premier : c'est lui qui crée la base de test et y
+# lance les migrations, les deux autres s'y raccrochent.
+#   proprietaire  possède les tables, lance les migrations :
+#                 manage.py migrate --database proprietaire
+#   default       le service web, soumis au cloisonnement par ligne
+#   worker        les workers, qui contournent le cloisonnement
+DATABASES = {
+    "proprietaire": _base_de_donnees("PROPRIETAIRE"),
+    "default": _base_de_donnees("APP"),
+    "worker": _base_de_donnees("WORKER"),
 }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
