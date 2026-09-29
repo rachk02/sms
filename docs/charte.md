@@ -165,6 +165,12 @@ les tables. `default` est le rôle applicatif, soumis au cloisonnement ;
 `worker` le contourne. Les tests créent leur base par `proprietaire` (voir
 `conftest.py`) et y raccrochent les deux autres.
 
+Le service web ne reçoit que les identifiants du rôle applicatif : les
+connexions `proprietaire` et `worker` n'existent que si leurs identifiants
+sont fournis. Une vue ne lit jamais par `.using("worker")`. Ce dont le web a
+besoin et qu'il ne peut pas lire, les workers le publient (l'état des liaisons
+dans Redis, par exemple).
+
 ## Ce qui est décidé et ne se rediscute pas
 
 Interconnexion directe avec les trois opérateurs, sans agrégateur. Jasmin comme

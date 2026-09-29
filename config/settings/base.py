@@ -1,5 +1,6 @@
 """Réglages communs aux quatre environnements."""
 
+import os
 from urllib.parse import quote
 
 from config.env import RACINE, env, env_liste
@@ -70,22 +71,19 @@ def _base_de_donnees(role: str) -> dict:
     }
 
 
-# Trois connexions vers la même base, avec trois rôles PostgreSQL distincts.
-# `proprietaire` vient en premier : c'est lui qui crée la base de test et y
-# lance les migrations, les deux autres s'y raccrochent.
-#   proprietaire  possède les tables, lance les migrations :
+# Jusqu'à trois connexions vers la même base, avec trois rôles PostgreSQL :
+#   default       le service web, rôle applicatif soumis au cloisonnement par
+#                 ligne ; un worker pose SMS_CONNEXION_PAR_DEFAUT=WORKER avant de
+#                 charger Django (voir workers/base.py) et prend le rôle worker
+#   proprietaire  possède les tables et passe les migrations :
 #                 manage.py migrate --database proprietaire
-#   default       le service web, soumis au cloisonnement par ligne
 #   worker        les workers, qui contournent le cloisonnement
-#
-# Un processus worker pose SMS_CONNEXION_PAR_DEFAUT=WORKER avant de charger
-# Django (voir workers/base.py) : sa connexion `default` prend alors le rôle
-# worker, et les services qu'il appelle traversent la même connexion.
-DATABASES = {
-    "proprietaire": _base_de_donnees("PROPRIETAIRE"),
-    "default": _base_de_donnees(env("SMS_CONNEXION_PAR_DEFAUT", "APP")),
-    "worker": _base_de_donnees("WORKER"),
-}
+# Les deux dernières n'existent que si leurs identifiants sont fournis : le
+# conteneur du service web ne reçoit que ceux du rôle applicatif.
+DATABASES = {"default": _base_de_donnees(env("SMS_CONNEXION_PAR_DEFAUT", "APP"))}
+for _alias, _role in (("proprietaire", "PROPRIETAIRE"), ("worker", "WORKER")):
+    if os.environ.get(f"POSTGRES_{_role}_USER"):
+        DATABASES[_alias] = _base_de_donnees(_role)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

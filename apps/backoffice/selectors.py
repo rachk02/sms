@@ -11,7 +11,7 @@ from django.conf import settings
 
 from apps.core.redis import client_redis
 from apps.journal.services import CLE_SOUMIS
-from apps.telecom.models import Connecteur
+from apps.telecom.supervision import etat_publie
 
 journal = logging.getLogger(__name__)
 
@@ -41,22 +41,16 @@ def profondeur_files() -> dict[str, int] | None:
     return {file["name"]: int(file.get("messages", 0)) for file in files}
 
 
-def etat_liaisons() -> list[Liaison]:
-    """État de chaque connecteur. Lu par la connexion worker : le rôle
-    applicatif ne voit pas la table des connecteurs, qui porte les secrets.
-    Seuls des champs sans secret sont lus."""
-    return [
-        Liaison(
-            str(ligne["id"]),
-            ligne["nom"],
-            ligne["operateur"],
-            ligne["etat_liaison"],
-            ligne["actif"],
-        )
-        for ligne in Connecteur.objects.using("worker")
-        .order_by("nom")
-        .values("id", "nom", "operateur", "etat_liaison", "actif")
+def etat_liaisons() -> tuple[list[Liaison], int | None]:
+    """État des connecteurs tel que l'ordonnanceur le publie dans Redis, et
+    l'instant de cette publication. Le service web ne lit jamais la table des
+    connecteurs, qui porte les secrets des liaisons."""
+    publiees, publiees_le = etat_publie()
+    liaisons = [
+        Liaison(identifiant, v["nom"], v["operateur"], v["etat"], v["actif"])
+        for identifiant, v in sorted(publiees.items(), key=lambda paire: paire[1]["nom"])
     ]
+    return liaisons, publiees_le
 
 
 def messages_soumis(connecteurs: list[str]) -> dict[str, int]:

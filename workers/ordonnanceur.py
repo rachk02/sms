@@ -28,6 +28,7 @@ class Ordonnanceur(Worker):
     attente_verrou_s = 5.0
     periode_relais_s = 1.0
     periode_partitions_s = 3_600.0
+    periode_supervision_s = 15.0
 
     async def _attendre(self, secondes: float) -> None:
         try:
@@ -41,6 +42,7 @@ class Ordonnanceur(Worker):
 
         from apps.core import bus
         from apps.journal.services import creer_partitions_a_venir
+        from apps.telecom.supervision import publier_etat_liaisons
 
         self.arret = asyncio.Event()
         if installer_signaux:
@@ -57,11 +59,16 @@ class Ordonnanceur(Worker):
             connexion = await bus.connecter()
             try:
                 canal = await connexion.channel()
-                derniere_partition = 0.0
+                # -inf : les deux tâches tournent dès le premier tour, quelle que soit
+                # l'origine arbitraire de time.monotonic().
+                derniere_partition = derniere_supervision = float("-inf")
                 while not self.arret.is_set():
                     if time.monotonic() - derniere_partition >= self.periode_partitions_s:
                         await sync_to_async(creer_partitions_a_venir)()
                         derniere_partition = time.monotonic()
+                    if time.monotonic() - derniere_supervision >= self.periode_supervision_s:
+                        await sync_to_async(publier_etat_liaisons)()
+                        derniere_supervision = time.monotonic()
                     await bus.relayer(canal)
                     await self._attendre(self.periode_relais_s)
             finally:

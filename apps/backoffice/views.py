@@ -6,6 +6,7 @@ jeton configuré, le point d'entrée refuse tout.
 
 import hmac
 import logging
+import time
 
 from django.conf import settings
 from django.http import HttpResponse
@@ -42,7 +43,14 @@ def _lignes() -> list[str]:
     for nom, profondeur in sorted((files or {}).items()):
         lignes.append(f'sms_file_profondeur{{file="{_etiquette(nom)}"}} {profondeur}')
 
-    liaisons = selectors.etat_liaisons()
+    liaisons, publiees_le = selectors.etat_liaisons()
+    age = int(time.time()) - publiees_le if publiees_le else -1
+    lignes += [
+        "# HELP sms_liaisons_age_secondes Âge de l'état des liaisons publié par"
+        " l'ordonnanceur, -1 si rien n'est publié.",
+        "# TYPE sms_liaisons_age_secondes gauge",
+        f"sms_liaisons_age_secondes {age}",
+    ]
     lignes += [
         "# HELP sms_liaison_etat 1 pour l'état courant de la liaison, 0 sinon.",
         "# TYPE sms_liaison_etat gauge",

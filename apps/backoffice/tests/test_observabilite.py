@@ -5,7 +5,8 @@ import json
 import logging
 
 import pytest
-from django.db import transaction
+from django.db import connections, transaction
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from apps.comptes.models import Client
@@ -16,6 +17,7 @@ from apps.journal.services import CLE_SOUMIS, enregistrer_message, soumettre
 from apps.telecom import correlation
 from apps.telecom.models import Connecteur, Operateur
 from apps.telecom.passerelles import passerelle_pour
+from apps.telecom.supervision import publier_etat_liaisons
 
 JETON = "jeton-de-test-des-metriques"
 
@@ -39,7 +41,7 @@ def jeton(settings):
     return {"HTTP_AUTHORIZATION": f"Bearer {JETON}"}
 
 
-@pytest.mark.django_db(databases=["default", "worker"])
+@pytest.mark.django_db
 def test_les_lignes_d_une_requete_portent_le_meme_identifiant(client, jeton, sortie_json):
     reponse = client.get("/metriques", **jeton)
     identifiant = reponse["X-Request-ID"]
@@ -49,7 +51,7 @@ def test_les_lignes_d_une_requete_portent_le_meme_identifiant(client, jeton, sor
     assert all({"horodatage", "niveau", "journal"} <= set(ligne) for ligne in lignes)
 
 
-@pytest.mark.django_db(databases=["default", "worker"])
+@pytest.mark.django_db
 def test_un_identifiant_de_requete_sain_est_repris_et_un_hostile_remplace(client, jeton):
     reponse = client.get("/metriques", HTTP_X_REQUEST_ID="frontal-1234abcd", **jeton)
     assert reponse["X-Request-ID"] == "frontal-1234abcd"
@@ -77,7 +79,9 @@ def test_les_metriques_sont_refusees_si_aucun_jeton_n_est_configure(client, sett
     assert client.get("/metriques", HTTP_AUTHORIZATION="Bearer ").status_code == 401
 
 
-@pytest.mark.django_db(transaction=True, databases=["default", "worker"])
+# Seule la connexion `default` est permise : le test échoue si la vue touche
+# à la connexion worker ou lit la table des connecteurs.
+@pytest.mark.django_db(transaction=True)
 def test_les_metriques_exposent_files_liaisons_et_debit(client, jeton, en_tant_que_worker):
     connecteur = Connecteur.objects.create(
         nom=f"orange-{timezone.now().timestamp()}",
@@ -101,8 +105,10 @@ def test_les_metriques_exposent_files_liaisons_et_debit(client, jeton, en_tant_q
             )
             references.append(soumettre(message, passerelle).reference_smsc)
 
+    publier_etat_liaisons()
     try:
-        reponse = client.get("/metriques", **jeton)
+        with CaptureQueriesContext(connections["default"]) as requetes:
+            reponse = client.get("/metriques", **jeton)
     finally:
         client_redis().delete(cle_compteur)
         for reference in references:
@@ -117,3 +123,5 @@ def test_les_metriques_exposent_files_liaisons_et_debit(client, jeton, en_tant_q
     assert f'sms_liaison_etat{{{base},etat="CONNECTE"}} 1' in texte
     assert f'sms_liaison_etat{{{base},etat="DECONNECTE"}} 0' in texte
     assert f'sms_messages_soumis_total{{connecteur="{connecteur.nom}"}} 3' in texte
+    assert "sms_liaisons_age_secondes -1" not in texte
+    assert not [r for r in requetes.captured_queries if "telecom_connecteur" in r["sql"]]
