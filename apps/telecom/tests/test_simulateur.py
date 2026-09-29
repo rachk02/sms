@@ -87,18 +87,25 @@ def test_l_accuse_arrive_apres_le_delai_regle(client):
     assert accuses[0].horodatage - instant[0] == timedelta(seconds=60)
 
 
-def test_le_taux_d_echec_regle_se_retrouve_dans_les_etats_finaux_sur_mille_messages(client):
-    passerelle = passerelle_pour(_connecteur(taux_echec=0.2, graine=2026))
+def test_sur_mille_messages_a_cinq_pour_cent_les_etats_et_le_delai_sont_conformes(client):
+    """T-21 : la répartition suit le taux réglé, et l'écart entre soumission et
+    accusé suit le délai réglé."""
+    passerelle = passerelle_pour(_connecteur(taux_echec=0.05, delai_accuse_s=30, graine=2026))
     for rang in range(1_000):
         soumettre(_message(client, numero=f"+2267{rang:07d}"), passerelle)
-    for accuse in passerelle.accuses_dus():
+    for accuse in passerelle.accuses_dus(timezone.now() + timedelta(seconds=31)):
         appliquer_accuse(accuse)
 
     etats = Counter(Message.objects.values_list("etat", flat=True))
     assert sum(etats.values()) == 1_000
     assert set(etats) == {Etat.LIVRE, Etat.NON_LIVRE}
-    # Loi binomiale : écart type de 12,6 sur mille tirages à 20 %.
-    assert 150 <= etats[Etat.NON_LIVRE] <= 250
+    # Loi binomiale : 50 attendus, écart type de 6,9 ; marge de quatre écarts types.
+    assert 22 <= etats[Etat.NON_LIVRE] <= 78
+    ecarts = [
+        (accuse - soumis).total_seconds()
+        for soumis, accuse in Message.objects.values_list("date_soumission", "date_accuse")
+    ]
+    assert all(29.5 <= ecart <= 31 for ecart in ecarts), (min(ecarts), max(ecarts))
 
 
 def test_un_libelle_inconnu_d_un_operateur_tombe_dans_un_etat_par_defaut():
