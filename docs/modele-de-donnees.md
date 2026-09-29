@@ -343,6 +343,11 @@ accusés de mettre à jour le message dans sa seule partition.
 `charge_utile` en jsonb, `recu_le`. Un accusé sans correspondance n'est jamais
 jeté.
 
+Ces deux tables, sans `client_id`, sont réservées aux workers : sécurité par
+ligne forcée sans politique, comme `telecom_connecteur`. La correspondance est
+écrite en base dans la transaction de la soumission, puis dans Redis une fois
+cette transaction validée.
+
 **`telecom_numero_court`** : `id`, `numero`, `pays`, `operateurs` en tableau,
 `attribue_le`, `expire_le`.
 

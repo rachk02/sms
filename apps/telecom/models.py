@@ -2,7 +2,7 @@
 
 from django.db import models
 
-from apps.core.models import Base
+from apps.core.models import Base, Identifiable
 
 
 class Operateur(models.TextChoices):
@@ -49,3 +49,43 @@ class Connecteur(Base):
 
     def __str__(self):
         return self.nom
+
+
+class Correlation(Identifiable):
+    """Reprise en base de la correspondance tenue en Redis entre l'identifiant
+    rendu par l'opérateur et le message. La base est la vérité, Redis un cache."""
+
+    reference_smsc = models.CharField(max_length=100)
+    message_id = models.UUIDField()
+    message_date_reception = models.DateTimeField()
+    connecteur = models.ForeignKey(Connecteur, on_delete=models.PROTECT, related_name="+")
+    cree_le = models.DateTimeField(auto_now_add=True)
+    expire_le = models.DateTimeField()
+
+    class Meta:
+        db_table = "telecom_correlation"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["connecteur", "reference_smsc"], name="correlation_connecteur_reference"
+            )
+        ]
+        indexes = [models.Index(fields=["expire_le"], name="correlation_expiration")]
+
+    def __str__(self):
+        return f"{self.connecteur_id} {self.reference_smsc}"
+
+
+class AccuseOrphelin(Identifiable):
+    """Accusé sans correspondance. Jamais jeté : un flux d'orphelins signale
+    presque toujours qu'un opérateur a changé le format de ses identifiants."""
+
+    reference_smsc = models.CharField(max_length=100)
+    connecteur = models.ForeignKey(Connecteur, on_delete=models.PROTECT, related_name="+")
+    charge_utile = models.JSONField(default=dict)
+    recu_le = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "telecom_accuse_orphelin"
+
+    def __str__(self):
+        return f"{self.connecteur_id} {self.reference_smsc}"

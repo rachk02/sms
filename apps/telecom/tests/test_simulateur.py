@@ -30,7 +30,7 @@ def _connecteur(**parametres):
 
 
 @pytest.fixture
-def client():
+def client(en_tant_que_worker):
     client = creer_client(raison_sociale="Exemple SA", forme=Client.Forme.SOCIETE)
     with transaction.atomic():
         poser_client(client.id)

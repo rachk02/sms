@@ -33,3 +33,17 @@ def django_db_setup(request, django_test_environment, django_db_blocker):
         for alias in RACCROCHEES:
             connections[alias].close()
         teardown_databases(configuration, verbosity=verbosite)
+
+
+@pytest.fixture
+def en_tant_que_worker(transactional_db):
+    """Le temps d'un test, la connexion `default` prend le rôle des workers,
+    comme dans un processus lancé par `workers.base.lancer`."""
+    reglages = connections["default"].settings_dict
+    avant = reglages["USER"], reglages["PASSWORD"]
+    worker = connections["worker"].settings_dict
+    connections["default"].close()
+    reglages["USER"], reglages["PASSWORD"] = worker["USER"], worker["PASSWORD"]
+    yield
+    connections["default"].close()
+    reglages["USER"], reglages["PASSWORD"] = avant

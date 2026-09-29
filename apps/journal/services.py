@@ -1,11 +1,12 @@
 """Porte d'écriture du module journal."""
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from django.db import connections, transaction
 from django.utils import timezone
 
 from apps.core.encodage import analyser
+from apps.telecom import correlation
 from apps.telecom.passerelles import Soumission
 
 from .models import ETATS_TERMINAUX, Destinataire, Etat, Evenement, Message
@@ -89,11 +90,6 @@ def creer_partitions_a_venir(mois_d_avance: int = 2) -> list[str]:
     return creees
 
 
-# Fenêtre de recherche d'un message à partir de son accusé : la validité d'un
-# SMS. Toute recherche sur journal_message est bornée dans le temps.
-FENETRE_ACCUSE = timedelta(hours=72)
-
-
 @transaction.atomic
 def soumettre(message: Message, passerelle, source: str = Evenement.Source.WORKER) -> Message:
     """Soumet un message à la passerelle et le passe SOUMIS.
@@ -114,6 +110,7 @@ def soumettre(message: Message, passerelle, source: str = Evenement.Source.WORKE
         etat=Etat.SOUMIS,
         modifie_le=maintenant,
     )
+    correlation.enregistrer(passerelle.connecteur.id, reference, message.id, message.date_reception)
     Evenement.objects.create(
         client_id=message.client_id,
         message_id=message.id,
@@ -128,22 +125,28 @@ def soumettre(message: Message, passerelle, source: str = Evenement.Source.WORKE
 @transaction.atomic
 def appliquer_accuse(accuse) -> bool:
     """Applique un accusé au message qu'il concerne. Renvoie vrai si l'état a
-    changé ; faux pour un accusé rejoué ou sans correspondance.
+    changé ; faux pour un accusé rejoué, déjà appliqué, ou sans correspondance,
+    ce dernier étant rangé parmi les orphelins et jamais jeté.
 
-    Le rapprochement par la table de corrélation et Redis, et la table des
-    accusés orphelins, sont l'objet de T-14.
+    Le message est lu par sa clé exacte, date de réception comprise : une seule
+    partition ouverte, et un verrou qui sérialise deux accusés concurrents.
     """
+    correspondance = correlation.retrouver(accuse.connecteur_id, accuse.reference_smsc)
+    if correspondance is None:
+        correlation.ranger_orphelin(accuse)
+        return False
     message = (
         Message.objects.select_for_update()
         .filter(
-            connecteur_id=accuse.connecteur_id,
-            reference_smsc=accuse.reference_smsc,
-            date_reception__gte=accuse.horodatage - FENETRE_ACCUSE,
-            date_reception__lte=accuse.horodatage,
+            id=correspondance.message_id,
+            date_reception=correspondance.message_date_reception,
         )
         .first()
     )
-    if message is None or message.etat in ETATS_TERMINAUX:
+    if message is None:
+        correlation.ranger_orphelin(accuse)
+        return False
+    if message.etat in ETATS_TERMINAUX:
         return False
     Message.objects.filter(id=message.id, date_reception=message.date_reception).update(
         etat=accuse.etat, date_accuse=accuse.horodatage, modifie_le=timezone.now()
