@@ -37,6 +37,7 @@ jobs:
         run: |
           uv run python manage.py makemigrations --check --dry-run
           uv run python manage.py migrate --database proprietaire
+          uv run python manage.py declarer_files
 
       - name: Tests
         run: uv run pytest

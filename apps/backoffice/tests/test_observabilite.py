@@ -1,5 +1,6 @@
 """Journaux et métriques, T-16."""
 
+import asyncio
 import io
 import json
 import logging
@@ -11,6 +12,7 @@ from django.utils import timezone
 
 from apps.comptes.models import Client
 from apps.comptes.services import creer_client
+from apps.core import bus, files
 from apps.core.journalisation import FiltreContexte, FormatJson, contexte
 from apps.core.redis import client_redis
 from apps.journal.services import CLE_SOUMIS, enregistrer_message, soumettre
@@ -33,6 +35,19 @@ def sortie_json():
     racine.addHandler(gestionnaire)
     yield lambda: [json.loads(ligne) for ligne in tampon.getvalue().splitlines()]
     racine.removeHandler(gestionnaire)
+
+
+@pytest.fixture
+def files_declarees():
+    """Les files réelles, déclarées comme au démarrage d'un worker : le test ne
+    doit pas dépendre de l'état du courtier du poste où il tourne."""
+
+    async def declarer():
+        connexion = await bus.connecter()
+        async with connexion:
+            await files.declarer(await connexion.channel())
+
+    asyncio.run(declarer())
 
 
 @pytest.fixture
@@ -82,7 +97,9 @@ def test_les_metriques_sont_refusees_si_aucun_jeton_n_est_configure(client, sett
 # Seule la connexion `default` est permise : le test échoue si la vue touche
 # à la connexion worker ou lit la table des connecteurs.
 @pytest.mark.django_db(transaction=True)
-def test_les_metriques_exposent_files_liaisons_et_debit(client, jeton, en_tant_que_worker):
+def test_les_metriques_exposent_files_liaisons_et_debit(
+    client, jeton, en_tant_que_worker, files_declarees
+):
     connecteur = Connecteur.objects.create(
         nom=f"orange-{timezone.now().timestamp()}",
         operateur=Operateur.ORANGE,
