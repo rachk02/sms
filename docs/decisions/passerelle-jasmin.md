@@ -53,4 +53,13 @@ avec RabbitMQ 4 sans réglage déprécié, et le comportement réel face aux SMS
 des opérateurs. Sans nouvelle version d'ici là, préparer le client SMPP maison
 comme adaptateur de remplacement.
 
-**Décision : à prendre.**
+## Décision
+
+**29 septembre 2026 : Jasmin est retenu pour le moment.** Aucune nouvelle
+version de Jasmin n'est annoncée ; la plateforme l'utilise derrière la couche
+d'abstraction, avec le réglage déprécié de RabbitMQ décrit plus haut.
+
+La décision se réexamine si l'un de ces signaux apparaît : une version de
+RabbitMQ qui retire les files transitoires non exclusives, un défaut de Jasmin
+face aux SMSC réels des opérateurs, ou un besoin de débit qu'il tient mal. Le
+client SMPP maison reste l'adaptateur de remplacement prévu.
