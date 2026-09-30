@@ -1,0 +1,5 @@
+/* Source de la feuille du portail. Tailwind v4 lit les gabarits pour ne garder
+   que les classes utilisées. Construire : scripts/construire_css.sh */
+@import "tailwindcss";
+@source "../../templates";
+@source "../../apps";

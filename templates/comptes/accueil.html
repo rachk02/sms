@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block bandeaux %}
+  {% if bac_a_sable %}
+    <div class="border-b border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status">
+      Compte en bac à sable : vos envois ne partent que vers vos numéros de test vérifiés.
+      {% if dossier %}Dossier d'ouverture : {{ dossier.get_etat_display|lower }}{% if dossier.etat == "REJETE" %}, motif : {{ dossier.get_motif_rejet_display }}{% if dossier.motif_detail %} ({{ dossier.motif_detail }}){% endif %}{% endif %}.{% else %}Aucun dossier déposé.{% endif %}
+    </div>
+  {% endif %}
+{% endblock %}
+{% block contenu %}
+<div class="flex items-center justify-between">
+  <h1 class="text-2xl font-semibold">{{ client.raison_sociale }}</h1>
+  <form method="post" action="{% url 'deconnexion' %}">
+    {% csrf_token %}
+    <button type="submit" class="text-sm text-slate-600 underline">Se déconnecter</button>
+  </form>
+</div>
+<p class="mt-2 text-sm text-slate-600">Connecté en tant que {{ user.nom }} ({{ user.get_role_display|lower }}).</p>
+{% endblock %}

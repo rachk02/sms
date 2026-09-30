@@ -5,7 +5,7 @@ from django.contrib.auth.models import PermissionsMixin
 from django.db import models
 from django.db.models import Q
 
-from apps.core.models import Base
+from apps.core.models import Base, Identifiable
 
 
 class Client(Base):
@@ -254,3 +254,27 @@ class NumeroTest(Base):
 
     def __str__(self):
         return self.numero_normalise
+
+
+class Connexion(Identifiable):
+    """Journal des tentatives de connexion. Écrit avant que le client soit
+    connu : le rôle applicatif y écrit sans pouvoir y lire, le back-office lit."""
+
+    utilisateur = models.ForeignKey(
+        Utilisateur, on_delete=models.PROTECT, null=True, blank=True, related_name="+"
+    )
+    courriel_saisi = models.CharField(max_length=254)
+    reussie = models.BooleanField()
+    motif = models.CharField(max_length=50, blank=True)
+    adresse_ip = models.GenericIPAddressField(null=True, blank=True)
+    agent_utilisateur = models.CharField(max_length=300, blank=True)
+    horodatage = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "comptes_connexion"
+        indexes = [
+            models.Index(fields=["courriel_saisi", "-horodatage"], name="connexion_courriel")
+        ]
+
+    def __str__(self):
+        return f"{self.courriel_saisi} {'réussie' if self.reussie else 'refusée'}"

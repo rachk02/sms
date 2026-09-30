@@ -54,3 +54,6 @@ desktop.ini
 
 # Sauvegardes locales de PostgreSQL
 sauvegardes/
+
+# Outils téléchargés (binaire Tailwind)
+.outils/

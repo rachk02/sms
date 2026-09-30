@@ -1,0 +1,104 @@
+"""Authentification par courriel et mot de passe, avec verrouillage.
+
+Branchée comme moteur d'authentification de Django : le portail des clients et
+l'administration du back-office passent par elle, si bien que le verrouillage
+et le journal des connexions valent pour les deux.
+
+Cinq échecs sur un même courriel le verrouillent quinze minutes. Le compteur
+porte sur le courriel saisi, qu'il existe ou non : une adresse inconnue se
+verrouille comme une autre, et rien ne révèle si un compte existe. Il vit dans
+Redis ; pour un compte existant, l'état est aussi porté en base
+(`echecs_consecutifs`, `verrouille_jusqu_a`), où le back-office le voit.
+"""
+
+import hashlib
+import logging
+from datetime import timedelta
+
+from django.contrib.auth.backends import ModelBackend
+from django.contrib.auth.hashers import make_password
+from django.utils import timezone
+
+from apps.core.redis import client_redis
+
+from .models import Connexion, GestionnaireUtilisateur, Utilisateur
+
+journal = logging.getLogger(__name__)
+
+MAX_ECHECS = 5
+DUREE_VERROUILLAGE = timedelta(minutes=15)
+CLE = "sms:connexion:echecs:{empreinte}"
+
+
+def _cle(courriel: str) -> str:
+    empreinte = hashlib.sha256(courriel.encode()).hexdigest()[:32]
+    return CLE.format(empreinte=empreinte)
+
+
+def normaliser(courriel: str | None) -> str:
+    return GestionnaireUtilisateur.normaliser_courriel(courriel or "")
+
+
+def verrouille(courriel: str) -> bool:
+    echecs = client_redis().get(_cle(normaliser(courriel)))
+    return int(echecs or 0) >= MAX_ECHECS
+
+
+def _noter_echec(courriel: str, utilisateur: Utilisateur | None) -> None:
+    cle = _cle(courriel)
+    redis = client_redis()
+    with redis.pipeline() as lot:
+        lot.incr(cle)
+        lot.expire(cle, int(DUREE_VERROUILLAGE.total_seconds()), nx=True)
+        echecs = lot.execute()[0]
+    if utilisateur is not None:
+        champs = {"echecs_consecutifs": min(echecs, 32_767)}
+        if echecs >= MAX_ECHECS:
+            champs["verrouille_jusqu_a"] = timezone.now() + DUREE_VERROUILLAGE
+        Utilisateur.objects.filter(pk=utilisateur.pk).update(**champs)
+
+
+def _noter_reussite(courriel: str, utilisateur: Utilisateur) -> None:
+    client_redis().delete(_cle(courriel))
+    Utilisateur.objects.filter(pk=utilisateur.pk).update(
+        echecs_consecutifs=0, verrouille_jusqu_a=None
+    )
+
+
+def _journaliser(request, courriel, utilisateur, reussie, motif=""):
+    meta = getattr(request, "META", {}) if request is not None else {}
+    Connexion.objects.create(
+        utilisateur=utilisateur,
+        courriel_saisi=courriel[:254],
+        reussie=reussie,
+        motif=motif,
+        adresse_ip=meta.get("REMOTE_ADDR"),
+        agent_utilisateur=meta.get("HTTP_USER_AGENT", "")[:300],
+    )
+
+
+class AuthentificationVerrouillee(ModelBackend):
+    def authenticate(self, request, username=None, password=None, courriel=None, **kwargs):
+        courriel = normaliser(courriel or username)
+        if not courriel or password is None:
+            return None
+        if verrouille(courriel):
+            _journaliser(request, courriel, None, False, "VERROUILLE")
+            return None
+        utilisateur = Utilisateur.objects.filter(courriel=courriel).first()
+        if utilisateur is None:
+            make_password(password)  # même durée qu'un vrai contrôle
+            _noter_echec(courriel, None)
+            _journaliser(request, courriel, None, False, "INCONNU")
+            return None
+        if not utilisateur.check_password(password) or not self.user_can_authenticate(utilisateur):
+            _noter_echec(courriel, utilisateur)
+            _journaliser(request, courriel, utilisateur, False, "MOT_DE_PASSE")
+            return None
+        if utilisateur.courriel_verifie_le is None and not utilisateur.is_staff:
+            # Un compte client ne sert qu'une fois son adresse vérifiée (T-32).
+            _journaliser(request, courriel, utilisateur, False, "COURRIEL_NON_VERIFIE")
+            return None
+        _noter_reussite(courriel, utilisateur)
+        _journaliser(request, courriel, utilisateur, True)
+        return utilisateur

@@ -30,6 +30,17 @@ INSTALLED_APPS = [
 ]
 
 AUTH_USER_MODEL = "comptes.Utilisateur"
+AUTHENTICATION_BACKENDS = ["apps.comptes.authentification.AuthentificationVerrouillee"]
+LOGIN_URL = "connexion"
+LOGIN_REDIRECT_URL = "accueil"
+
+# Une session expire après trente minutes sans activité : chaque requête la
+# prolonge. Le cookie n'est lisible ni par le script de la page ni hors HTTPS
+# en production (voir prod.py).
+SESSION_COOKIE_AGE = 30 * 60
+SESSION_SAVE_EVERY_REQUEST = True
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -113,6 +124,7 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_DIRS = [BASE_DIR / "static"]
 
 REDIS_URL = f"redis://{env('REDIS_HOST')}:{env('REDIS_PORT')}/{env('REDIS_DB', '0')}"
 
