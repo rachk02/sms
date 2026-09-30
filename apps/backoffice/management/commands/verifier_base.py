@@ -26,6 +26,7 @@ CLOISONNEES = (
     "comptes_piece",
     "comptes_numero_test",
     "fichiers_fichier",
+    "campagnes_modele",
     "contacts_champ",
     "contacts_contact",
     "contacts_export",

@@ -126,3 +126,4 @@ Règles, reprises de `~/.claude/CLAUDE.md` :
 [2026-09-30 13:43:15] Suivi - Écrans des listes, de la liste noire et des champs personnalisés : suite complète verte en trois parties (460 tests), commit et push.
 [2026-09-30 15:44:02] Instruction permanente - Lot 5 : envoi de test facturé comme un unitaire (rien de gratuit pour l'instant), récurrence recalculée sous plafond confirmé, compositeur et segments en HTMX et Alpine.
 [2026-09-30 16:05:29] Instruction permanente - contacts descend en troisième couche (campagnes lit ses segments, listes et champs) ; ordre des couches vérifié par tests/test_couches.py.
+[2026-09-30 16:30:44] Suivi - T-55 et T-56 : module campagnes, modèles de message avec balises et valeur de repli obligatoire, compteur de segments et coût au cas le plus long, prix provisoire par les réglages jusqu'aux grilles du lot 7 ; suite complète verte (473 tests).

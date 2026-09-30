@@ -269,7 +269,12 @@ EN_PAUSE, TERMINEE, ANNULEE, `politique_expediteur` parmi REFUSER, REPLI,
 ATTENDRE, `planifiee_pour`, `lissage_par_minute`, `destinataires_prevus`,
 `cout_estime`, `cout_reel`, `demarree_le`, `terminee_le`, `creee_par_id`.
 
-**`campagnes_modele`** : `id`, `client_id`, `nom`, `texte`, `variables` en jsonb.
+**`campagnes_modele`** : `id`, `client_id`, `nom` unique par client, `texte`,
+`variables` en jsonb (les noms des balises du texte, dans l'ordre). Une balise
+s'écrit `{prenom|cher client}` : le nom, le prénom et la ville exigent leur
+valeur de repli dans la balise, un champ personnalisé a celle de sa
+déclaration. Un texte n'est enregistré qu'après analyse : une balise inconnue,
+sans repli ou mal fermée est refusée à l'enregistrement, pas à l'envoi.
 
 ## journal
 
