@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% load static %}
+{% block scripts %}
+  <script src="{% static 'js/encodage.js' %}" defer></script>
+  <script src="{% static 'js/compositeur.js' %}" defer></script>
+{% endblock %}
+{% block contenu %}
+<h1 class="mb-4 text-2xl font-semibold">Modèles de message</h1>
+{% if modeles %}
+  <ul class="mb-8 divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white text-sm">
+    {% for modele in modeles %}
+      <li class="px-3 py-2"><a class="underline" href="{% url 'campagnes-modele' modele.id %}">{{ modele.nom }}</a>
+        <span class="block truncate text-slate-500">{{ modele.texte }}</span></li>
+    {% endfor %}
+  </ul>
+{% endif %}
+<h2 class="mb-2 text-lg font-semibold">Nouveau modèle</h2>
+<form method="post" class="space-y-4">
+  {% csrf_token %}
+  {% include "campagnes/_editeur.html" %}
+  <button type="submit" class="rounded bg-slate-900 px-4 py-2 text-white">Enregistrer le modèle</button>
+</form>
+{% endblock %}

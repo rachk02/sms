@@ -27,6 +27,34 @@ ALPHABET_GSM = frozenset(
 # Table d'extension : chaque caractère coûte deux unités.
 EXTENSION_GSM = frozenset("\f^{}\\[~]|€")
 
+# Équivalents GSM des caractères qui font basculer en UCS-2 (T-57). La
+# conversion ne remplace que ces caractères, sans toucher au sens : un accent
+# perdu, une apostrophe droite, trois points. Les emoji n'ont pas d'équivalent,
+# ils restent à retirer à la main. Les tirets longs et les espaces insécables
+# sont écrits par leur point de code, pour ne jamais figurer tels quels dans le
+# dépôt.
+CONVERSIONS = {
+    **dict.fromkeys("âáã", "a"),
+    **dict.fromkeys("êë", "e"),
+    **dict.fromkeys("îïí", "i"),
+    **dict.fromkeys("ôóõ", "o"),
+    **dict.fromkeys("ûú", "u"),
+    "ç": "c",
+    "ÿ": "y",
+    **dict.fromkeys("ÀÂÁÃ", "A"),
+    **dict.fromkeys("ÈÊË", "E"),
+    **dict.fromkeys("ÎÏÍ", "I"),
+    **dict.fromkeys("ÔÓÕ", "O"),
+    **dict.fromkeys("ÙÛÚ", "U"),
+    "œ": "oe",
+    "Œ": "OE",
+    **dict.fromkeys("‘’‚′", "'"),
+    **dict.fromkeys("“”„«»", '"'),
+    **dict.fromkeys(map(chr, (0x2010, 0x2011, 0x2012, 0x2013, 0x2014, 0x2015, 0x2212)), "-"),
+    chr(0x2026): "...",
+    **dict.fromkeys(map(chr, (0x00A0, 0x202F, 0x2009, 0x2007)), " "),
+}
+
 GSM_SIMPLE, GSM_SEGMENT = 160, 153
 UCS2_SIMPLE, UCS2_SEGMENT = 70, 67
 
@@ -126,3 +154,23 @@ def decouper(texte: str, reference: int = 0) -> list[Segment]:
         Segment(morceau, rang, len(morceaux), reference % 256)
         for rang, morceau in enumerate(morceaux, start=1)
     ]
+
+
+def convertir(texte: str) -> str:
+    """Remplace chaque caractère coûteux par son équivalent GSM ; le reste est
+    rendu tel quel."""
+    return "".join(CONVERSIONS.get(caractere, caractere) for caractere in texte)
+
+
+def table_pour_le_navigateur() -> dict:
+    """Les tables, pour le compteur qui suit la saisie dans la page : le même
+    calcul qu'ici, sur les mêmes données, sans aller-retour au serveur."""
+    return {
+        "gsm": "".join(sorted(ALPHABET_GSM)),
+        "extension": "".join(sorted(EXTENSION_GSM)),
+        "conversions": CONVERSIONS,
+        "gsm_simple": GSM_SIMPLE,
+        "gsm_segment": GSM_SEGMENT,
+        "ucs2_simple": UCS2_SIMPLE,
+        "ucs2_segment": UCS2_SEGMENT,
+    }

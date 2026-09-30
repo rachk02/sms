@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% load static %}
+{% block scripts %}
+  <script src="{% static 'js/encodage.js' %}" defer></script>
+  <script src="{% static 'js/compositeur.js' %}" defer></script>
+{% endblock %}
+{% block contenu %}
+<p class="mb-2 text-sm"><a class="underline" href="{% url 'campagnes-modeles' %}">Modèles de message</a></p>
+<h1 class="mb-4 text-2xl font-semibold">{{ modele.nom }}</h1>
+<form method="post" class="space-y-4">
+  {% csrf_token %}
+  {% include "campagnes/_editeur.html" %}
+  <button type="submit" class="rounded bg-slate-900 px-4 py-2 text-white">Enregistrer les modifications</button>
+</form>
+{% endblock %}

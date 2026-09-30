@@ -161,7 +161,9 @@ UCS-2, à cause de l'en-tête de concaténation.
 Le compteur affiché au client doit annoncer le cas le plus long après
 personnalisation, jamais la moyenne, sinon le coût affiché est sous-estimé.
 
-Voir `apps/core/encodage.py`.
+Voir `apps/core/encodage.py`. Le compteur qui suit la saisie dans la page
+(`static/js/encodage.js`) fait le même calcul sur les tables que ce module lui
+fournit ; `tests/test_encodage_navigateur.py` compare les deux sous node.
 
 ## Tests
 

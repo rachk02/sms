@@ -37,6 +37,8 @@ ATTENDUS = {
     "second-facteur-verifier": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "metriques": ("get", {ANONYME: 401, UTILISATEUR: 401, ADMIN: 401}),
     "rappel-jasmin": ("post", {ANONYME: 403, UTILISATEUR: 403, ADMIN: 403}),
+    "campagnes-modeles": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
+    "campagnes-modele": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
     "contacts-repertoire": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "contacts-resultats": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "contacts-exporter": ("post", {ANONYME: CONNEXION, UTILISATEUR: 302, ADMIN: 302}),
@@ -84,9 +86,12 @@ def _adresse(nom, membres):
         return reverse(nom, args=[membres["cible"].pk])
     if nom in ("invitation", "verification"):
         return reverse(nom, args=["jeton-invalide"])
-    if nom in ("rappel-jasmin", "contacts-liste-supprimer", "contacts-champ-supprimer") or (
-        nom.startswith("import-") and nom != "import-deposer"
-    ):
+    if nom in (
+        "rappel-jasmin",
+        "campagnes-modele",
+        "contacts-liste-supprimer",
+        "contacts-champ-supprimer",
+    ) or (nom.startswith("import-") and nom != "import-deposer"):
         return reverse(nom, args=[uuid.uuid7()])
     return reverse(nom)
 
