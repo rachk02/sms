@@ -29,12 +29,17 @@ métier. Un module possède ses tables, ses règles, ses vues et ses gabarits.
 
 Les dépendances ne remontent jamais. L'ordre des couches, du bas vers le haut :
 
-1. `core`, `comptes`
+1. `core`, `comptes` (`comptes` s'appuie sur `core`, jamais l'inverse)
 2. `telecom`, `conformite`, `fichiers`
-3. `journal`, `credits`, `expediteurs`
-4. `campagnes`, `contacts`, `paiements`
+3. `journal`, `credits`, `expediteurs`, `contacts`
+4. `campagnes`, `paiements`
 5. `notifications`, `support`
 6. `api`, `backoffice`
+
+`contacts` est descendu en troisième couche le 30 septembre 2026 : `campagnes`
+lit ses segments, ses listes et ses champs. L'ordre est vérifié par
+`tests/test_couches.py`, qui refuse tout import qui remonte ou qui reste dans
+sa couche.
 
 Deux mécanismes transverses vivent dans `core`, pour que tout module puisse
 s'en servir dans sa propre transaction : la boîte d'envoi des événements

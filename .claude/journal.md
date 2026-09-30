@@ -125,3 +125,4 @@ Règles, reprises de `~/.claude/CLAUDE.md` :
 [2026-09-30 13:27:46] Instruction permanente - Faute de mémoire, la suite complète se lance au premier plan en trois parties plutôt qu'en arrière-plan.
 [2026-09-30 13:43:15] Suivi - Écrans des listes, de la liste noire et des champs personnalisés : suite complète verte en trois parties (460 tests), commit et push.
 [2026-09-30 15:44:02] Instruction permanente - Lot 5 : envoi de test facturé comme un unitaire (rien de gratuit pour l'instant), récurrence recalculée sous plafond confirmé, compositeur et segments en HTMX et Alpine.
+[2026-09-30 16:05:29] Instruction permanente - contacts descend en troisième couche (campagnes lit ses segments, listes et champs) ; ordre des couches vérifié par tests/test_couches.py.
