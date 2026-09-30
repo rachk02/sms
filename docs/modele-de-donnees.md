@@ -205,9 +205,14 @@ fiable. Index sur `(client_id, operateur_presume)`.
 **`contacts_segment`** : `id`, `client_id`, `nom`, `criteres` en jsonb,
 `nombre_estime`, `calcule_le`.
 
-**`contacts_liste_noire`** : `id`, `client_id`, `numero_normalise`, `origine`
-parmi STOP_SMS, MANUEL, IMPORT, API, `message_origine` conservé tel quel,
-`ajoute_le`. Unicité sur `(client_id, numero_normalise)`.
+**`contacts_liste_noire`** : `id`, `client_id` (nul pour la liste noire de la
+plateforme, qui vaut pour tous les expéditeurs), `numero_normalise`, `origine`
+parmi STOP_SMS, MANUEL, IMPORT, API, RECLAMATION, `message_origine` conservé
+tel quel, `motif`, `ajoute_le`. Unicité sur `(client_id, numero_normalise)`,
+les valeurs nulles comptant comme égales. Un client lit ses entrées et celles
+de la plateforme, n'écrit que les siennes ; la liste de la plateforme est tenue
+par le back-office, chaque ajout audité. Le contrôle avant soumission est
+enregistré auprès de `apps.core.controles`.
 
 **`contacts_import`** : `id`, `client_id`, `fichier_id` UUID simple vers
 `fichiers_fichier`, `nom_origine`, `etat` parmi DEPOSE (mappage à confirmer),

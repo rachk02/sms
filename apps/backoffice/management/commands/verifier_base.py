@@ -32,6 +32,7 @@ CLOISONNEES = (
     "contacts_import_transit",
     "contacts_liste",
     "contacts_liste_contact",
+    "contacts_liste_noire",
 )
 RESERVEES_AUX_WORKERS = (
     "telecom_connecteur",

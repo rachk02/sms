@@ -91,6 +91,16 @@ def verifier_numero_test(client, numero_normalise: str, code: str) -> bool:
     return True
 
 
+MOTIF_BAC_A_SABLE = "BAC_A_SABLE_NUMERO_NON_VERIFIE"
+
+
+def controle_bac_a_sable(message) -> str | None:
+    """Contrôle avant soumission, enregistré au démarrage (voir apps.core.controles)."""
+    if envoi_autorise(message.client, message.numero_normalise):
+        return None
+    return MOTIF_BAC_A_SABLE
+
+
 def envoi_autorise(client, numero_normalise: str) -> bool:
     """Le bac à sable : un compte au palier Découverte n'envoie qu'à ses numéros
     de test vérifiés. Contrôlé dans le moteur d'envoi, jamais dans le portail

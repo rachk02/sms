@@ -1,5 +1,7 @@
 """Contacts d'un client. Voir docs/modele-de-donnees.md, section contacts."""
 
+import uuid
+
 from django.db import models
 
 from apps.core.models import BaseClient
@@ -153,3 +155,40 @@ class ListeContact(models.Model):
 
     def __str__(self):
         return f"{self.liste_id} {self.contact_id}"
+
+
+class ListeNoire(models.Model):
+    """Numéro qui ne reçoit plus rien. `client` nul : liste noire de la
+    plateforme, qui vaut pour tous les expéditeurs (décision F-16)."""
+
+    class Origine(models.TextChoices):
+        STOP_SMS = "STOP_SMS", "Désinscription par SMS"
+        MANUEL = "MANUEL", "Ajout manuel"
+        IMPORT = "IMPORT", "Import"
+        API = "API", "API"
+        RECLAMATION = "RECLAMATION", "Réclamation"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
+    client = models.ForeignKey(
+        "comptes.Client", on_delete=models.PROTECT, null=True, blank=True, related_name="+"
+    )
+    numero_normalise = models.CharField(max_length=20)
+    origine = models.CharField(max_length=15, choices=Origine)
+    # Le message d'origine d'un STOP est conservé mot pour mot : il fait preuve.
+    message_origine = models.TextField(blank=True)
+    motif = models.TextField(blank=True)
+    ajoute_le = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "contacts_liste_noire"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["client", "numero_normalise"],
+                nulls_distinct=False,
+                name="liste_noire_unique",
+            )
+        ]
+        indexes = [models.Index(fields=["numero_normalise"], name="liste_noire_numero")]
+
+    def __str__(self):
+        return self.numero_normalise

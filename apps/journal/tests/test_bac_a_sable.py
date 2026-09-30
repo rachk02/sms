@@ -7,13 +7,14 @@ from django.utils import timezone
 
 from apps.comptes.models import Client, NumeroTest
 from apps.comptes.services import (
+    MOTIF_BAC_A_SABLE,
     NumeroTestRefuse,
     creer_client,
     declarer_numero_test,
     verifier_numero_test,
 )
 from apps.core.etats import Etat
-from apps.journal.services import MOTIF_BAC_A_SABLE, enregistrer_message, soumettre
+from apps.journal.services import enregistrer_message, soumettre
 from apps.telecom import correlation
 from apps.telecom.models import Connecteur, Operateur
 from apps.telecom.passerelles import passerelle_pour
