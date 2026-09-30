@@ -1,0 +1,57 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<div class="module">
+  <h2>{{ expediteur.libelle }} pour {{ expediteur.client.raison_sociale }}</h2>
+  <p>
+    État : {{ expediteur.get_etat_display }} ; déclaré le {{ expediteur.cree_le|date:"d/m/Y H:i" }}.
+    {% if lien_mandat %}<a href="{{ lien_mandat }}" target="_blank" rel="noopener">Ouvrir la pièce de mandat (lien valable 15 minutes)</a>{% endif %}
+  </p>
+</div>
+
+{% if expediteur.revue_manuelle %}
+<form method="post" class="module">
+  {% csrf_token %}
+  <h2>Revue manuelle</h2>
+  <p>{{ expediteur.motif_revue }}. Aucun dossier ne se dépose avant la levée de cette revue.</p>
+  <p><label>Motif de la levée (mandat vérifié, autorisation du titulaire...)<br><textarea name="motif" rows="2" cols="60"></textarea></label></p>
+  <div class="submit-row"><input type="submit" name="lever_revue" class="default" value="Lever la revue"></div>
+</form>
+{% endif %}
+
+{% for reseau in reseaux %}
+<div class="module">
+  <h2>{{ reseau.operateur|title }} : {{ reseau.get_etat_display }}</h2>
+  <p>
+    {% if reseau.reference_dossier %}Dossier {{ reseau.reference_dossier }}{% endif %}
+    {% if reseau.depose_le %} déposé le {{ reseau.depose_le|date:"d/m/Y" }}{% endif %}
+    {% if reseau.decide_le %}, décidé le {{ reseau.decide_le|date:"d/m/Y" }}{% endif %}
+    {% if reseau.motif_refus %}<br>Motif : {{ reseau.motif_refus }}{% endif %}
+    {% if reseau.expire_le %}<br>Échéance : {{ reseau.expire_le|date:"d/m/Y" }}{% endif %}
+  </p>
+  {% if reseau.etat == "NON_SOUMIS" or reseau.etat == "REFUSE" %}
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="operateur" value="{{ reseau.operateur }}">
+      <label>Référence du dossier chez l'opérateur <input name="reference" required></label>
+      <label>Déposé le <input type="date" name="date"></label>
+      <input type="submit" name="deposer" value="Enregistrer le dépôt">
+    </form>
+  {% elif reseau.etat == "EN_INSTRUCTION" %}
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="operateur" value="{{ reseau.operateur }}">
+      <p>
+        <label>Décision <select name="decision"><option value="approuve">Approuvé</option><option value="refuse">Refusé</option></select></label>
+        <label>Date de la décision <input type="date" name="date" required></label>
+        <label>Référence <input name="reference" value="{{ reseau.reference_dossier }}" required></label>
+      </p>
+      <p>
+        <label>Motif du refus <input name="motif" size="60"></label>
+        <label>Échéance de l'approbation <input type="date" name="expire_le"></label>
+      </p>
+      <input type="submit" name="decider" class="default" value="Enregistrer la décision">
+    </form>
+  {% endif %}
+</div>
+{% endfor %}
+{% endblock %}

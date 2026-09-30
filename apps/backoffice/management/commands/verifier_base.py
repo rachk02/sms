@@ -37,6 +37,10 @@ CLOISONNEES = (
     "contacts_liste_contact",
     "contacts_liste_noire",
     "contacts_segment",
+    "expediteurs_expediteur",
+    # Lecture et création seules pour le client, lecture seule pour tous.
+    "expediteurs_reseau",
+    "expediteurs_reserve",
 )
 RESERVEES_AUX_WORKERS = (
     "telecom_connecteur",

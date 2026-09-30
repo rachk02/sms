@@ -3,14 +3,20 @@
 Servie dans l'espace du back-office seulement (voir config/urls.py).
 """
 
+from datetime import datetime, time
+
 from django.contrib import admin, messages
 from django.shortcuts import redirect
 from django.template.response import TemplateResponse
 from django.urls import path
+from django.utils import timezone
+from django.utils.dateparse import parse_date
 
 from apps.comptes import second_facteur
 from apps.comptes.models import Client, Dossier, Piece, Utilisateur
 from apps.core.models import Audit
+from apps.expediteurs import services as expediteurs
+from apps.expediteurs.models import Expediteur, ExpediteurReseau, Reserve
 from apps.fichiers.models import Fichier
 from apps.fichiers.services import lien
 
@@ -199,3 +205,88 @@ class AuditAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+def _date(valeur: str):
+    """Une date saisie, à minuit à Ouagadougou ; None si vide ou invalide."""
+    jour = parse_date(valeur or "")
+    if jour is None:
+        return None
+    return timezone.make_aware(datetime.combine(jour, time.min))
+
+
+@admin.register(Expediteur)
+class ExpediteurAdmin(admin.ModelAdmin):
+    """Fiche d'un identifiant : revue manuelle, dépôt et décision par réseau.
+    Chaque décision passe par le service du module et laisse une trace au
+    journal d'audit."""
+
+    list_display = ("libelle", "client", "etat", "revue_manuelle", "cree_le")
+    list_filter = ("etat", "revue_manuelle")
+    search_fields = ("libelle", "client__raison_sociale")
+    ordering = ("cree_le",)
+
+    def has_add_permission(self, request):
+        return False  # un identifiant se déclare depuis l'espace du client
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        expediteur = self.get_object(request, object_id)
+        if expediteur is None:
+            return self._get_obj_does_not_exist_redirect(request, self.model._meta, object_id)
+        if request.method == "POST":
+            operateur = request.POST.get("operateur", "")
+            try:
+                if "lever_revue" in request.POST:
+                    expediteurs.lever_revue(
+                        expediteur.id,
+                        agent=request.user,
+                        motif=request.POST.get("motif", ""),
+                        adresse_ip=adresse_ip(request),
+                    )
+                    messages.success(request, "Revue levée : les dossiers peuvent être déposés.")
+                elif "deposer" in request.POST:
+                    expediteurs.deposer_dossier(
+                        expediteur.id,
+                        operateur,
+                        agent=request.user,
+                        reference=request.POST.get("reference", ""),
+                        depose_le=_date(request.POST.get("date")),
+                        adresse_ip=adresse_ip(request),
+                    )
+                    messages.success(request, f"Dépôt chez {operateur} enregistré.")
+                elif "decider" in request.POST:
+                    expediteurs.decider(
+                        expediteur.id,
+                        operateur,
+                        agent=request.user,
+                        approuve=request.POST.get("decision") == "approuve",
+                        decide_le=_date(request.POST.get("date")),
+                        reference=request.POST.get("reference", ""),
+                        motif=request.POST.get("motif", ""),
+                        expire_le=_date(request.POST.get("expire_le")),
+                        adresse_ip=adresse_ip(request),
+                    )
+                    messages.success(request, f"Décision de {operateur} enregistrée.")
+                return redirect("admin:expediteurs_expediteur_change", expediteur.id)
+            except expediteurs.DecisionRefusee as refus:
+                messages.error(request, str(refus))
+        mandat = Fichier.objects.filter(id=expediteur.justificatif_id).first()
+        contexte = {
+            **self.admin_site.each_context(request),
+            "title": f"Identifiant {expediteur.libelle}",
+            "expediteur": expediteur,
+            "reseaux": ExpediteurReseau.objects.filter(expediteur=expediteur).order_by("operateur"),
+            "lien_mandat": lien(mandat) if mandat else None,
+            "opts": self.model._meta,
+        }
+        return TemplateResponse(request, "admin/backoffice/expediteur.html", contexte)
+
+
+@admin.register(Reserve)
+class ReserveAdmin(admin.ModelAdmin):
+    list_display = ("libelle", "motif", "actif")
+    list_filter = ("actif",)
+    search_fields = ("libelle",)

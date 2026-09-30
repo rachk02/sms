@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block contenu %}
+<h1 class="mb-2 text-2xl font-semibold">Identifiants d'expéditeur</h1>
+<p class="mb-6 text-sm text-slate-600">Le nom qui s'affiche à la place d'un numéro chez vos destinataires. Chaque réseau l'approuve séparément :
+  tant qu'un réseau ne l'a pas approuvé, vos messages vers ses abonnés partent sous notre numéro court.</p>
+{% if expediteurs %}
+  <div class="mb-8 overflow-x-auto rounded-lg border border-slate-200 bg-white">
+    <table class="w-full text-left text-sm">
+      <thead class="bg-slate-50 text-slate-600">
+        <tr><th class="px-3 py-2">Identifiant</th>{% for operateur in operateurs %}<th class="px-3 py-2">{{ operateur|title }}</th>{% endfor %}</tr>
+      </thead>
+      <tbody>
+        {% for ligne in expediteurs %}
+          <tr class="border-t border-slate-200 align-top">
+            <td class="px-3 py-2">
+              <span class="font-mono font-semibold">{{ ligne.expediteur.libelle }}</span>
+              <span class="block text-xs text-slate-500">{{ ligne.expediteur.get_etat_display }}</span>
+              {% if ligne.expediteur.revue_manuelle %}<span class="block text-xs text-amber-700">Vérification manuelle en cours avant dépôt</span>{% endif %}
+            </td>
+            {% for reseau in ligne.reseaux %}
+              <td class="px-3 py-2">
+                {% if reseau %}
+                  <span class="{% if reseau.etat == 'APPROUVE' %}text-green-700{% elif reseau.etat == 'REFUSE' or reseau.etat == 'REVOQUE' %}text-red-700{% endif %}">{{ reseau.get_etat_display }}</span>
+                  {% if reseau.decide_le %}<span class="block text-xs text-slate-500">le {{ reseau.decide_le|date:"d/m/Y" }}</span>
+                  {% elif reseau.depose_le %}<span class="block text-xs text-slate-500">déposé le {{ reseau.depose_le|date:"d/m/Y" }}</span>{% endif %}
+                  {% if reseau.motif_refus %}<span class="block text-xs">{{ reseau.motif_refus }}</span>{% endif %}
+                {% endif %}
+              </td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="mb-8 text-sm text-slate-600">Aucun identifiant déclaré : vos messages partent sous notre numéro court.</p>
+{% endif %}
+{% if peut_declarer %}
+  <h2 class="mb-2 text-lg font-semibold">Déclarer un identifiant</h2>
+  <p class="mb-4 text-sm text-slate-600">{{ longueur_max }} caractères au plus, lettres sans accent et chiffres, au moins une lettre.
+    Joignez le mandat qui vous autorise à utiliser ce nom (PDF, JPEG ou PNG, 5 Mo au plus).</p>
+  <form method="post" action="{% url 'expediteurs-declarer' %}" enctype="multipart/form-data" class="grid grid-cols-1 gap-2 text-sm sm:grid-cols-[1fr_2fr_auto]">
+    {% csrf_token %}
+    <label class="flex flex-col">Identifiant<input name="libelle" required maxlength="{{ longueur_max }}" pattern="[A-Za-z0-9]*[A-Za-z][A-Za-z0-9]*" class="rounded border border-slate-300 px-2 py-1 font-mono"></label>
+    <label class="flex flex-col">Pièce de mandat<input type="file" name="mandat" required accept=".pdf,.jpg,.jpeg,.png" class="text-sm"></label>
+    <button type="submit" class="self-end rounded bg-slate-900 px-4 py-2 text-white">Déclarer</button>
+  </form>
+{% endif %}
+{% endblock %}

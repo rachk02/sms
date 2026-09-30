@@ -25,6 +25,9 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     "contacts.gerer": frozenset({ADMIN, UTILISATEUR}),
     # Les champs personnalisés règlent le compte entier et ses segments.
     "contacts.parametrer": frozenset({ADMIN}),
+    "expediteurs.consulter": frozenset({ADMIN, UTILISATEUR}),
+    # Déclarer un identifiant engage le compte entier auprès des opérateurs.
+    "expediteurs.declarer": frozenset({ADMIN}),
 }
 
 

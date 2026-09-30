@@ -156,10 +156,14 @@ autre envoi (motif BAC_A_SABLE_NUMERO_NON_VERIFIE).
 ## expediteurs
 
 **`expediteurs_expediteur`** : `id`, `client_id`, `libelle` de onze caractères
-au maximum contraint à l'alphabet GSM, `etat` parmi BROUILLON, SOUMIS, ACTIF,
-SUSPENDU, `justificatif_id` référence une pièce, `par_defaut` booléen.
+au maximum, lettres sans accent et chiffres avec au moins une lettre (contrainte
+de la base), `etat` parmi BROUILLON, SOUMIS, ACTIF, SUSPENDU, `justificatif_id`
+référence la pièce de mandat (famille PIECE, chiffrée), `par_defaut` booléen,
+`revue_manuelle` et `motif_revue` quand le libellé contient un nom réservé.
 
-Contrainte d'unicité sur `(client_id, libelle)`.
+Contrainte d'unicité sur `(client_id, upper(libelle))`. Un identifiant devient
+ACTIF dès qu'un réseau l'a approuvé. Un nom réservé n'est jamais déposé chez un
+opérateur avant qu'un agent ait levé la revue, motif au journal d'audit.
 
 **`expediteurs_reseau`** porte une ligne par réseau, ce qui est le point
 structurant : un identifiant peut être approuvé chez un opérateur et refusé
@@ -179,10 +183,16 @@ chez un autre.
 | `expire_le` | timestamptz | surveillé par l'ordonnanceur |
 | `refus_consecutifs` | integer | défaut zéro, déclenche la suspension |
 
-Unicité sur `(expediteur_id, operateur)`.
+Unicité sur `(expediteur_id, operateur)`. Le client lit ses lignes et les crée
+à la déclaration (NON_SOUMIS), sans aucune politique de modification ni de
+suppression : un état réseau ne change que par le back-office, qui saisit
+dépôt et décision (date, référence du dossier, motif) au journal d'audit.
 
 **`expediteurs_reserve`** : liste des noms interdits ou soumis à revue manuelle.
-`id`, `libelle`, `motif`, `actif`.
+`id`, `libelle` en majuscules sans signe, `motif`, `actif`. Commune à tous, lue
+par chacun, écrite par le back-office seul ; un libellé qui contient un nom
+réservé (« ORANGEPROMO » contient « ORANGE ») part en revue manuelle. Liste
+initiale chargée par `manage.py charger_reserves`.
 
 ## contacts
 

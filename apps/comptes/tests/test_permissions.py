@@ -47,6 +47,9 @@ ATTENDUS = {
     "contacts-liste-noire": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "contacts-champs": ("get", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 200}),
     "contacts-champ-supprimer": ("post", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 404}),
+    "expediteurs": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
+    # Sans pièce jointe, la déclaration est refusée et renvoie vers la liste.
+    "expediteurs-declarer": ("post", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 302}),
     "import-deposer": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     # Un import inexistant, ou d'un autre compte, n'existe pas pour le visiteur.
     "import-mappage": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),

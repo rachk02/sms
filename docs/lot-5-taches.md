@@ -26,6 +26,22 @@ Déjà tranché par l'architecture : la politique d'expéditeur par défaut est 
 bascule sur le numéro court, signalée dans le rapport de campagne ; le numéro
 court est partagé entre tous les clients, factice jusqu'à son attribution.
 
+## Choix faits en cours de lot
+
+Choix d'exécution, sans décision de la direction à attendre ; à revoir si l'un
+d'eux ne convient pas.
+
+- **Prix provisoire (T-56).** Jusqu'aux grilles tarifaires datées (lot 7), le
+  prix d'un segment est un entier des réglages, lu par `credits.tarifs`.
+- **Identifiant d'expéditeur strict (T-58).** Lettres sans accent et chiffres,
+  sans espace ni signe, au moins une lettre : ce que les trois réseaux affichent
+  tous. La pièce de mandat est obligatoire.
+- **Nom réservé par inclusion (T-58).** Un libellé qui contient un nom réservé
+  part en revue manuelle ; la liste initiale (opérateurs, institutions, mots
+  génériques trompeurs) est à compléter par le back-office.
+- **Déclarer un identifiant est réservé à l'administrateur du compte** ; les
+  deux rôles consultent les états par réseau.
+
 ## T-55 · Modèles de message et variables
 
 **Produit** L'éditeur de message avec balises de personnalisation issues des champs de contact, valeur de repli obligatoire, et substitution au moment de la soumission.
