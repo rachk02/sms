@@ -173,7 +173,7 @@ def _scenario(connecteur, relever_accuses) -> Message:
         client=client,
         numero_normalise="+22670123456",
         operateur=connecteur.operateur,
-        expediteur_libelle="EXEMPLE",
+        expediteur_libelle=settings.SMS_NUMERO_COURT,
         texte="Essai de bascule",
         cout_unitaire=10,
     )

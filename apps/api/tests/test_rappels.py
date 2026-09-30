@@ -5,6 +5,7 @@ import uuid
 
 import pytest
 from asgiref.sync import sync_to_async
+from django.conf import settings
 from django.utils import timezone
 
 from apps.comptes.models import Client
@@ -105,7 +106,7 @@ def test_du_rappel_a_la_base_accuse_applique_et_entrant_ecrit(client, en_tant_qu
         ),
         numero_normalise="+22670123456",
         operateur="ORANGE",
-        expediteur_libelle="EXEMPLE",
+        expediteur_libelle=settings.SMS_NUMERO_COURT,
         texte="Bonjour",
         cout_unitaire=10,
     )

@@ -4,6 +4,7 @@ from collections import Counter
 from datetime import timedelta
 
 import pytest
+from django.conf import settings
 from django.utils import timezone
 
 from apps.comptes.models import Client
@@ -41,7 +42,7 @@ def _message(client, numero="+22670123456"):
         client=client,
         numero_normalise=numero,
         operateur="ORANGE",
-        expediteur_libelle="EXEMPLE",
+        expediteur_libelle=settings.SMS_NUMERO_COURT,
         texte="Votre code est 4821",
         cout_unitaire=10,
     )

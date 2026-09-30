@@ -215,3 +215,7 @@ SMS_CLE_CHIFFREMENT = env("SMS_CLE_CHIFFREMENT", "")
 # Prix d'un segment en FCFA entiers, sur une grille fictive, jusqu'aux grilles
 # tarifaires datées du lot 7 (voir apps/credits/tarifs.py).
 SMS_PRIX_SEGMENT_PROVISOIRE = int(env("SMS_PRIX_SEGMENT_PROVISOIRE", "20"))
+
+# Numéro court de la plateforme, factice jusqu'à son attribution par l'ARCEP
+# (voir apps/telecom/numero_court.py).
+SMS_NUMERO_COURT = env("SMS_NUMERO_COURT", "36000")

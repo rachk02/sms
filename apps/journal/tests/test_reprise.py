@@ -7,6 +7,7 @@ comme le ferait le courtier en relivrant le message.
 """
 
 import pytest
+from django.conf import settings
 from django.utils import timezone
 
 from apps.comptes.models import Client
@@ -35,7 +36,7 @@ def message(en_tant_que_worker):
         client=client,
         numero_normalise="+22670123456",
         operateur="ORANGE",
-        expediteur_libelle="EXEMPLE",
+        expediteur_libelle=settings.SMS_NUMERO_COURT,
         texte="Votre code est 4821",
         cout_unitaire=10,
     )

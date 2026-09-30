@@ -17,6 +17,7 @@ trace au journal d'audit.
 import re
 
 import pytest
+from django.conf import settings
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client as Navigateur
@@ -81,7 +82,7 @@ def _envoyer(client_id, numero):
         client=Client.objects.using("worker").get(id=client_id),
         numero=numero,
         texte="Premier envoi",
-        expediteur="PARCOURS",
+        expediteur=settings.SMS_NUMERO_COURT,
         passerelle=passerelle,
         cout_unitaire=10,
     )

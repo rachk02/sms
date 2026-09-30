@@ -35,6 +35,7 @@ from apps.core.redis import client_redis
 from apps.journal.models import Evenement, Message
 from apps.journal.services import CLE_SOUMIS, appliquer_accuse, enregistrer_message, soumettre
 from apps.telecom.models import Connecteur, Correlation
+from apps.telecom.numero_court import numero_court
 from apps.telecom.passerelles import passerelle_pour
 
 TAILLE_LOT = 500
@@ -177,7 +178,7 @@ class Command(BaseCommand):
                     client=clients[rang % len(clients)],
                     numero_normalise=f"+2267{rang:07d}",
                     operateur=operateur,
-                    expediteur_libelle="RECETTE",
+                    expediteur_libelle=numero_court(),
                     texte=f"Message de recette {rang}",
                     cout_unitaire=10,
                     campagne_id=campagne,

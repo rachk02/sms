@@ -55,7 +55,7 @@ def test_un_taux_d_echec_a_80_pour_cent_degrade_la_liaison_alors_que_la_session_
             client=client,
             numero_normalise=f"+2266{rang:07d}",
             operateur="MOOV",
-            expediteur_libelle="EXEMPLE",
+            expediteur_libelle=settings.SMS_NUMERO_COURT,
             texte="Bonjour",
             cout_unitaire=10,
         )

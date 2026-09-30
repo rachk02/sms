@@ -16,6 +16,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.core.audit import auditer
+from apps.core.evenements import publier
 from apps.fichiers import services as fichiers
 from apps.fichiers.models import Fichier
 
@@ -238,6 +239,15 @@ def decider(
     if expediteur.etat != etat and expediteur.etat != Expediteur.Etat.SUSPENDU:
         expediteur.etat = etat
         expediteur.save(update_fields=["etat", "modifie_le"])
+    if approuve:
+        # Les campagnes en attente de cette approbation reprennent sur ce réseau.
+        publier(
+            "expediteurs.reseau.approuve",
+            client_id=expediteur.client_id,
+            objet_id=reseau.id,
+            auteur_id=agent.id if agent else None,
+            donnees={"libelle": expediteur.libelle, "operateur": operateur},
+        )
     auditer(
         "expediteurs.reseau.decision",
         reseau,

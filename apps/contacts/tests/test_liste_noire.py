@@ -1,6 +1,7 @@
 """Liste noire, par client et de la plateforme, T-51."""
 
 import pytest
+from django.conf import settings
 from django.db import ProgrammingError, transaction
 from django.utils import timezone
 
@@ -42,7 +43,7 @@ def _message(client, numero):
         client=client,
         numero_normalise=numero,
         operateur="ORANGE",
-        expediteur_libelle="EXEMPLE",
+        expediteur_libelle=settings.SMS_NUMERO_COURT,
         texte="Promotion",
         cout_unitaire=10,
     )

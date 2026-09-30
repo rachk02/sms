@@ -44,7 +44,7 @@ def _envoyer(client, passerelle, texte, numero="70 12 34 56"):
         client=client,
         numero=numero,
         texte=texte,
-        expediteur="EXEMPLE",
+        expediteur=settings.SMS_NUMERO_COURT,
         passerelle=passerelle,
         cout_unitaire=10,
     )

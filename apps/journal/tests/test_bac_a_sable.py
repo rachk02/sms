@@ -3,6 +3,7 @@
 from datetime import timedelta
 
 import pytest
+from django.conf import settings
 from django.utils import timezone
 
 from apps.comptes.models import Client, NumeroTest
@@ -37,7 +38,7 @@ def _envoyer(client, passerelle, numero):
         client=client,
         numero_normalise=numero,
         operateur="ORANGE",
-        expediteur_libelle="EXEMPLE",
+        expediteur_libelle=settings.SMS_NUMERO_COURT,
         texte="Bonjour",
         cout_unitaire=10,
     )

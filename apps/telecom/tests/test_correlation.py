@@ -3,6 +3,7 @@
 import uuid
 
 import pytest
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -37,7 +38,7 @@ def message_soumis(passerelle):
         client=client,
         numero_normalise="+22660123456",
         operateur="MOOV",
-        expediteur_libelle="EXEMPLE",
+        expediteur_libelle=settings.SMS_NUMERO_COURT,
         texte="Bonjour",
         cout_unitaire=10,
     )

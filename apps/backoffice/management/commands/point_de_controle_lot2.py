@@ -47,6 +47,7 @@ from apps.core.models import EvenementSortant
 from apps.journal.models import Message
 from apps.journal.services import enregistrer_message
 from apps.telecom.models import Connecteur, MessageEntrant, Operateur
+from apps.telecom.numero_court import numero_court
 from apps.telecom.rappels import jeton
 
 RACINE = Path(settings.BASE_DIR)
@@ -255,7 +256,7 @@ class Command(BaseCommand):
                     client=client,
                     numero_normalise=f"+2267{int(time.time()) % 1000:03d}{rang:04d}",
                     operateur=Operateur.ORANGE,
-                    expediteur_libelle="CONTROLE",
+                    expediteur_libelle=numero_court(),
                     texte=f"Point de contrôle du lot 2, {lot} {rang}",
                     cout_unitaire=10,
                 )

@@ -6,6 +6,7 @@ import json
 import logging
 
 import pytest
+from django.conf import settings
 from django.db import connections
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
@@ -117,7 +118,7 @@ def test_les_metriques_exposent_files_liaisons_et_debit(
             ),
             numero_normalise=f"+2267000000{rang}",
             operateur="ORANGE",
-            expediteur_libelle="EXEMPLE",
+            expediteur_libelle=settings.SMS_NUMERO_COURT,
             texte="Bonjour",
             cout_unitaire=10,
         )

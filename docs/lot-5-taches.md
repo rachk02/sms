@@ -41,6 +41,12 @@ d'eux ne convient pas.
   génériques trompeurs) est à compléter par le back-office.
 - **Déclarer un identifiant est réservé à l'administrateur du compte** ; les
   deux rôles consultent les états par réseau.
+- **Contrôle de l'expéditeur sur tout envoi (T-60).** Enregistré auprès des
+  contrôles d'avant soumission : un message ne part que sous un identifiant du
+  compte approuvé sur le réseau visé et non suspendu, ou sous le numéro court
+  (réglage `SMS_NUMERO_COURT`, factice jusqu'à son attribution). La politique
+  de campagne se décide par réseau (`expediteurs.controle.choisir`) ; le
+  compte par expéditeur du rapport de campagne vient avec le suivi (T-67).
 
 ## T-55 · Modèles de message et variables
 
