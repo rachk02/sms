@@ -1,0 +1,14 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<p>
+  {{ utilisateur.nom }} ({{ utilisateur.courriel }}) a perdu son second facteur. Avant de le retirer,
+  vérifiez son identité par un canal indépendant de la demande : un rappel au numéro connu du
+  compte, jamais sur simple courriel. L'utilisateur sera prévenu par courriel.
+</p>
+<form method="post">
+  {% csrf_token %}
+  <p><label><input type="checkbox" name="identite_verifiee" value="oui"> Identité vérifiée par un canal indépendant</label></p>
+  <p><label>Motif et canal de vérification<br><textarea name="motif" rows="3" cols="60" required></textarea></label></p>
+  <div class="submit-row"><input type="submit" class="default" value="Réinitialiser le second facteur"></div>
+</form>
+{% endblock %}

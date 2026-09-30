@@ -6,7 +6,9 @@ Servie dans l'espace du back-office seulement (voir config/urls.py).
 from django.contrib import admin, messages
 from django.shortcuts import redirect
 from django.template.response import TemplateResponse
+from django.urls import path
 
+from apps.comptes import second_facteur
 from apps.comptes.models import Client, Dossier, Piece, Utilisateur
 from apps.core.models import Audit
 from apps.fichiers.models import Fichier
@@ -131,7 +133,51 @@ class UtilisateurAdmin(admin.ModelAdmin):
     list_display = ("courriel", "nom", "client", "role", "is_active", "second_facteur_actif")
     list_filter = ("role", "is_active", "is_staff")
     search_fields = ("courriel", "nom")
-    exclude = ("password", "second_facteur_secret", "groups", "user_permissions")
+    exclude = (
+        "password",
+        "second_facteur_secret",
+        "second_facteur_dernier_pas",
+        "groups",
+        "user_permissions",
+    )
+
+    def get_urls(self):
+        propres = [
+            path(
+                "<uuid:pk>/reinitialiser-second-facteur/",
+                self.admin_site.admin_view(self.reinitialiser_second_facteur),
+                name="comptes_utilisateur_reinitialiser_second_facteur",
+            )
+        ]
+        return propres + super().get_urls()
+
+    def reinitialiser_second_facteur(self, request, pk):
+        """Pour un utilisateur qui a perdu son second facteur : identité vérifiée
+        par un canal indépendant, motif obligatoire, trace au journal d'audit."""
+        utilisateur = Utilisateur.objects.get(pk=pk)
+        if request.method == "POST":
+            try:
+                second_facteur.reinitialiser(
+                    utilisateur,
+                    agent=request.user,
+                    motif=request.POST.get("motif", ""),
+                    identite_verifiee=request.POST.get("identite_verifiee") == "oui",
+                    adresse_ip=adresse_ip(request),
+                )
+            except second_facteur.CodeRefuse as refus:
+                messages.error(request, str(refus))
+            else:
+                messages.success(request, f"Second facteur de {utilisateur} réinitialisé.")
+                return redirect("admin:comptes_utilisateur_change", utilisateur.pk)
+        contexte = {
+            **self.admin_site.each_context(request),
+            "title": f"Réinitialiser le second facteur de {utilisateur}",
+            "utilisateur": utilisateur,
+            "opts": self.model._meta,
+        }
+        return TemplateResponse(
+            request, "admin/backoffice/reinitialiser_second_facteur.html", contexte
+        )
 
 
 @admin.register(Audit)

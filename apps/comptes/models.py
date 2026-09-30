@@ -110,8 +110,10 @@ class Utilisateur(AbstractBaseUser, PermissionsMixin, Base):
     role = models.CharField(max_length=30, choices=Role, default=Role.UTILISATEUR)
     courriel_verifie_le = models.DateTimeField(null=True, blank=True)
     second_facteur_actif = models.BooleanField(default=False)
-    # Chiffré au repos à partir du lot 3 (T-34), vide jusque-là.
+    # Chiffré au repos par la clé applicative (apps/core/chiffrement.py).
     second_facteur_secret = models.CharField(max_length=255, blank=True)
+    # Dernier pas de temps TOTP accepté : un code déjà servi ne sert pas deux fois.
+    second_facteur_dernier_pas = models.BigIntegerField(null=True, blank=True)
     echecs_consecutifs = models.SmallIntegerField(default=0)
     verrouille_jusqu_a = models.DateTimeField(null=True, blank=True)
     langue = models.CharField(max_length=2, default="fr")
@@ -278,3 +280,21 @@ class Connexion(Identifiable):
 
     def __str__(self):
         return f"{self.courriel_saisi} {'réussie' if self.reussie else 'refusée'}"
+
+
+class CodeSecours(Identifiable):
+    """Code de secours du second facteur. Seul son condensat est conservé ; un
+    code sert une fois."""
+
+    utilisateur = models.ForeignKey(
+        Utilisateur, on_delete=models.CASCADE, related_name="codes_secours"
+    )
+    condensat = models.CharField(max_length=255)
+    utilise_le = models.DateTimeField(null=True, blank=True)
+    cree_le = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "comptes_code_secours"
+
+    def __str__(self):
+        return f"code de {self.utilisateur_id}"

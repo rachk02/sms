@@ -77,7 +77,8 @@ l'identifiant de connexion, il n'y a pas de nom d'utilisateur séparé.
 | `role` | varchar(30) | ADMIN, UTILISATEUR au lancement ; PROPRIETAIRE, OPERATEUR, COMPTABLE, LECTEUR déclarés pour la suite |
 | `courriel_verifie_le` | timestamptz | nul tant que non vérifié |
 | `second_facteur_actif` | boolean | défaut faux |
-| `second_facteur_secret` | varchar(255) | chiffré au repos |
+| `second_facteur_secret` | varchar(255) | chiffré par la clé applicative `SMS_CLE_CHIFFREMENT` |
+| `second_facteur_dernier_pas` | bigint | dernier pas TOTP accepté, contre le rejeu d'un code |
 | `derniere_connexion_le` | timestamptz | |
 | `echecs_consecutifs` | smallint | défaut zéro |
 | `verrouille_jusqu_a` | timestamptz | nul hors verrouillage |
@@ -134,6 +135,15 @@ attendues selon la forme : IFU, pièce du premier responsable et demande écrite
 pour toutes, plus RCCM (société), récépissé (association), acte de création
 (structure publique), accord de siège (représentation diplomatique) ou
 attestation d'inscription à l'ordre (profession libérale).
+
+**`comptes_code_secours`** : `id`, `utilisateur_id`, `condensat` (jamais le code), `utilise_le`,
+`cree_le`. Dix codes à l'activation du second facteur, montrés une seule fois,
+chacun utilisable une fois.
+
+**`comptes_connexion`** : journal des tentatives de connexion. `id`, `utilisateur_id` nul
+pour une adresse inconnue, `courriel_saisi`, `reussie`, `motif` (INCONNU, MOT_DE_PASSE,
+VERROUILLE, COURRIEL_NON_VERIFIE), `adresse_ip`, `agent_utilisateur`, `horodatage`. Le
+rôle applicatif y écrit sans pouvoir y lire ; le back-office la consulte.
 
 **`comptes_numero_test`** : les numéros du bac à sable. `id`, `client_id`,
 `numero_normalise`, `code_condensat` (condensat du code à six chiffres, jamais

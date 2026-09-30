@@ -1,5 +1,11 @@
 {% extends "base.html" %}
 {% block bandeaux %}
+  {% if second_facteur_avant %}
+    <div class="border-b border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-900" role="status">
+      Votre rôle d'administrateur exige un second facteur : réglez-le avant le {{ second_facteur_avant|date:"d/m/Y" }},
+      date après laquelle la connexion l'imposera. <a class="underline" href="{% url 'second-facteur-activer' %}">L'activer maintenant</a>
+    </div>
+  {% endif %}
   {% if bac_a_sable %}
     <div class="border-b border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status">
       Compte en bac à sable : vos envois ne partent que vers vos numéros de test vérifiés.

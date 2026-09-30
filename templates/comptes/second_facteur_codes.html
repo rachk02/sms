@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block contenu %}
+<div class="mx-auto max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+  <h1 class="mb-2 text-xl font-semibold">Vos codes de secours</h1>
+  <p class="mb-4 text-sm">
+    Chacun remplace une fois le code de votre application, si vous perdez votre téléphone.
+    Notez-les maintenant et gardez-les en lieu sûr : ils ne seront plus jamais affichés.
+  </p>
+  <ul class="mb-4 grid grid-cols-2 gap-2 font-mono text-sm">
+    {% for code in codes %}<li class="rounded bg-slate-100 px-3 py-1 text-center">{{ code }}</li>{% endfor %}
+  </ul>
+  {% if erreur %}<p class="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">{{ erreur }}</p>{% endif %}
+  <form method="post" class="space-y-3">
+    {% csrf_token %}
+    <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="notes" value="oui"> J'ai noté mes codes de secours.</label>
+    <button type="submit" class="w-full rounded bg-slate-900 px-4 py-2 text-white">Continuer</button>
+  </form>
+</div>
+{% endblock %}

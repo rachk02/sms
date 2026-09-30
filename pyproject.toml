@@ -11,6 +11,9 @@ dependencies = [
     "aio-pika>=9.5",
     "gunicorn>=26.2.0",
     "minio>=7.2.20",
+    "pyotp>=2.10.0",
+    "segno>=1.6.6",
+    "cryptography>=50.0.1",
 ]
 
 [dependency-groups]

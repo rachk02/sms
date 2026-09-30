@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block contenu %}
+<div class="mx-auto max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+  <h1 class="mb-2 text-xl font-semibold">Activer le second facteur</h1>
+  {% if impose %}
+    <p class="mb-4 text-sm text-slate-600">Votre rôle donne accès à l'administration : le second facteur y est obligatoire.</p>
+  {% endif %}
+  <ol class="mb-4 list-decimal space-y-2 pl-5 text-sm">
+    <li>Ouvrez une application d'authentification (Google Authenticator, Microsoft Authenticator, FreeOTP...).</li>
+    <li>Scannez ce code, ou saisissez la clé à la main.</li>
+    <li>Entrez le code à six chiffres qu'elle affiche.</li>
+  </ol>
+  <div class="mb-3 flex justify-center">{{ qr|safe }}</div>
+  <p class="mb-4 text-center font-mono text-sm tracking-wider">{{ secret }}</p>
+  {% if erreur %}<p class="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">{{ erreur }}</p>{% endif %}
+  <form method="post" class="space-y-3">
+    {% csrf_token %}
+    <input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required
+           placeholder="123456" class="w-full rounded border border-slate-300 px-3 py-2 text-center font-mono">
+    <button type="submit" class="w-full rounded bg-slate-900 px-4 py-2 text-white">Activer</button>
+  </form>
+</div>
+{% endblock %}

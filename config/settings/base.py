@@ -49,6 +49,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "apps.core.middleware.JournalisationMiddleware",
+    "apps.comptes.middleware.SecondFacteurMiddleware",
     "apps.core.middleware.CloisonnementMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -203,3 +204,6 @@ MAILERS = {
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "EL-IMMEKA SMS <ne-pas-repondre@el-immeka.bf>")
 # Adresse publique du portail, pour les liens des courriels.
 PORTAIL_URL = env("PORTAIL_URL", "http://127.0.0.1:8000").rstrip("/")
+
+# Clé des secrets chiffrés en base (apps/core/chiffrement.py).
+SMS_CLE_CHIFFREMENT = env("SMS_CLE_CHIFFREMENT", "")

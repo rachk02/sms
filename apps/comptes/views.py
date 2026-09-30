@@ -9,7 +9,7 @@ from django.views.decorators.http import require_POST
 
 from apps.core.cloisonnement import poser_client
 
-from . import jetons, services
+from . import jetons, second_facteur, services
 from .authentification import DUREE_VERROUILLAGE, verrouille
 from .models import Client, Dossier, Utilisateur
 
@@ -67,6 +67,11 @@ def accueil(request):
             "client": client,
             "dossier": dossier,
             "bac_a_sable": client.palier == Client.Palier.DECOUVERTE,
+            "second_facteur_avant": (
+                request.user.cree_le + second_facteur.DELAI_DE_GRACE
+                if second_facteur.exige(request.user) and not request.user.second_facteur_actif
+                else None
+            ),
         },
     )
 
