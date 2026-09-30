@@ -1,8 +1,7 @@
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
-from django.contrib.auth.decorators import login_required
-from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
@@ -12,6 +11,7 @@ from apps.core.cloisonnement import poser_client
 from . import jetons, second_facteur, services
 from .authentification import DUREE_VERROUILLAGE, verrouille
 from .models import Client, Dossier, Utilisateur
+from .permissions import permission_requise
 
 MESSAGE_ECHEC = "Courriel ou mot de passe incorrect."
 MESSAGE_VERROUILLE = (
@@ -56,7 +56,7 @@ def deconnexion(request):
     return redirect("connexion")
 
 
-@login_required
+@permission_requise("compte.consulter")
 def accueil(request):
     client = request.user.client
     dossier = Dossier.objects.filter(client=client).order_by("-cree_le").first()
@@ -144,22 +144,12 @@ def renvoi(request):
 # Membres du compte (T-36) ---------------------------------------------------
 
 
-def administrateur_requis(vue):
-    @login_required
-    def verifiee(request, *args, **kwargs):
-        if request.user.role != Utilisateur.Role.ADMIN:
-            raise PermissionDenied
-        return vue(request, *args, **kwargs)
-
-    return verifiee
-
-
 def _membre(request, pk) -> Utilisateur:
     # comptes_utilisateur n'est pas cloisonnée : le filtre sur le client est ici.
     return get_object_or_404(Utilisateur, pk=pk, client=request.user.client, is_active=True)
 
 
-@administrateur_requis
+@permission_requise("membres.gerer")
 def membres(request):
     erreur = ""
     if request.method == "POST":
@@ -183,7 +173,7 @@ def membres(request):
 
 
 @require_POST
-@administrateur_requis
+@permission_requise("membres.gerer")
 def changer_role(request, pk):
     membre = _membre(request, pk)
     try:
@@ -196,7 +186,7 @@ def changer_role(request, pk):
 
 
 @require_POST
-@administrateur_requis
+@permission_requise("membres.gerer")
 def retirer(request, pk):
     membre = _membre(request, pk)
     try:

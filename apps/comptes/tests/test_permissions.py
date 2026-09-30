@@ -1,0 +1,102 @@
+"""Rôles et permissions, T-35 : chaque route, chaque rôle, le code attendu.
+
+La table ATTENDUS doit couvrir toutes les routes nommées de l'espace client :
+une route ajoutée sans y être déclarée fait échouer le test, si bien qu'aucune
+page ne peut naître sans que ses droits aient été pensés.
+"""
+
+import uuid
+
+import pytest
+from django.urls import URLPattern, URLResolver, get_resolver, reverse
+from django.utils import timezone
+
+from apps.comptes.models import Client
+from apps.comptes.permissions import PERMISSIONS, autorise
+from apps.comptes.services import creer_client, creer_utilisateur
+
+pytestmark = pytest.mark.django_db
+
+ANONYME, UTILISATEUR, ADMIN = "anonyme", "UTILISATEUR", "ADMIN"
+CONNEXION = 302  # renvoi vers la page de connexion
+PUBLIC = {ANONYME: 200, UTILISATEUR: 200, ADMIN: 200}
+
+# route : (méthode, codes attendus par rôle)
+ATTENDUS = {
+    "connexion": ("get", PUBLIC),
+    "deconnexion": ("post", {ANONYME: 302, UTILISATEUR: 302, ADMIN: 302}),
+    "invitation": ("get", {ANONYME: 404, UTILISATEUR: 404, ADMIN: 404}),
+    "verification": ("get", {ANONYME: 404, UTILISATEUR: 404, ADMIN: 404}),
+    "renvoi": ("post", PUBLIC),
+    "accueil": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
+    "membres": ("get", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 200}),
+    "membre-role": ("post", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 302}),
+    "membre-retirer": ("post", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 302}),
+    "second-facteur-activer": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
+    "second-facteur-codes": ("get", {ANONYME: CONNEXION, UTILISATEUR: 302, ADMIN: 302}),
+    "second-facteur-verifier": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
+    "metriques": ("get", {ANONYME: 401, UTILISATEUR: 401, ADMIN: 401}),
+    "rappel-jasmin": ("post", {ANONYME: 403, UTILISATEUR: 403, ADMIN: 403}),
+}
+
+
+def _routes_nommees(motifs=None, prefixe=""):
+    for motif in motifs if motifs is not None else get_resolver().url_patterns:
+        if isinstance(motif, URLResolver):
+            if str(motif.pattern).startswith("admin/"):
+                continue
+            yield from _routes_nommees(motif.url_patterns, prefixe)
+        elif isinstance(motif, URLPattern) and motif.name:
+            yield motif.name
+
+
+@pytest.fixture
+def membres():
+    client = creer_client(raison_sociale="Exemple SA", forme=Client.Forme.SOCIETE)
+    commun = {
+        "client": client,
+        "courriel_verifie_le": timezone.now(),
+        "mot_de_passe": "x-1234-abcd",
+    }
+    admin = creer_utilisateur(courriel="a@exemple.bf", nom="A", role=ADMIN, **commun)
+    creer_utilisateur(courriel="a2@exemple.bf", nom="A2", role=ADMIN, **commun)
+    simple = creer_utilisateur(courriel="u@exemple.bf", nom="U", role=UTILISATEUR, **commun)
+    cible = creer_utilisateur(courriel="c@exemple.bf", nom="C", role=UTILISATEUR, **commun)
+    return {ADMIN: admin, UTILISATEUR: simple, "cible": cible}
+
+
+def _adresse(nom, membres):
+    if nom in ("membre-role", "membre-retirer"):
+        return reverse(nom, args=[membres["cible"].pk])
+    if nom in ("invitation", "verification"):
+        return reverse(nom, args=["jeton-invalide"])
+    if nom == "rappel-jasmin":
+        return reverse(nom, args=[uuid.uuid7()])
+    return reverse(nom)
+
+
+def test_chaque_route_de_l_espace_client_a_ses_droits_declares():
+    assert set(_routes_nommees()) == set(ATTENDUS)
+
+
+@pytest.mark.parametrize("role", [ANONYME, UTILISATEUR, ADMIN])
+@pytest.mark.parametrize("nom", sorted(ATTENDUS))
+def test_chaque_route_refuse_ou_sert_selon_le_role(client, membres, role, nom):
+    methode, codes = ATTENDUS[nom]
+    if role != ANONYME:
+        client.force_login(membres[role])
+    donnees = {"role": UTILISATEUR, "courriel": "x@exemple.bf"} if methode == "post" else None
+    reponse = getattr(client, methode)(_adresse(nom, membres), donnees)
+    assert reponse.status_code == codes[role], (nom, role, reponse.status_code)
+    if role == ANONYME and codes[role] == CONNEXION and nom not in ("deconnexion",):
+        assert reponse["Location"].startswith("/connexion?next=")
+
+
+def test_un_utilisateur_sans_compte_client_n_a_aucune_permission(membres):
+    agent = creer_utilisateur(courriel="agent@el-immeka.test", mot_de_passe="x", nom="Agent")
+    assert not any(autorise(agent, permission) for permission in PERMISSIONS)
+
+
+def test_une_permission_inconnue_est_une_erreur(membres):
+    with pytest.raises(KeyError):
+        autorise(membres[ADMIN], "membres.effacer")
