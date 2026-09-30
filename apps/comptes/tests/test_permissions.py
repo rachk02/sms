@@ -37,6 +37,11 @@ ATTENDUS = {
     "second-facteur-verifier": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "metriques": ("get", {ANONYME: 401, UTILISATEUR: 401, ADMIN: 401}),
     "rappel-jasmin": ("post", {ANONYME: 403, UTILISATEUR: 403, ADMIN: 403}),
+    "campagnes": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
+    "campagne-nouvelle": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
+    "campagne": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
+    "campagne-test": ("post", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
+    "campagne-confirmer": ("post", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
     "campagnes-modeles": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "campagnes-modele": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
     "contacts-repertoire": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
@@ -92,6 +97,9 @@ def _adresse(nom, membres):
     if nom in (
         "rappel-jasmin",
         "campagnes-modele",
+        "campagne",
+        "campagne-test",
+        "campagne-confirmer",
         "contacts-liste-supprimer",
         "contacts-champ-supprimer",
     ) or (nom.startswith("import-") and nom != "import-deposer"):

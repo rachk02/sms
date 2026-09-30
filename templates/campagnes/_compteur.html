@@ -1,0 +1,17 @@
+{# À inclure dans un bloc x-data="compositeur(...)" : compteur, caractères coûteux, conversion. #}
+<p class="text-xs text-slate-500">Balises : <code>{prenom|cher client}</code>, <code>{nom|client}</code>, <code>{ville|votre ville}</code>{% for nom in replis %}, <code>{{ "{" }}{{ nom }}{{ "}" }}</code>{% endfor %}.
+  La valeur après la barre remplace un champ vide.</p>
+<p class="text-sm" aria-live="polite">
+  <span x-text="analyse.unites + ' / ' + analyse.capacite"></span> caractères,
+  <span x-text="analyse.segments"></span> SMS,
+  encodage <span x-text="analyse.encodage === 'GSM7' ? 'GSM' : 'Unicode (UCS-2)'"></span>
+</p>
+<div x-show="analyse.encodage === 'UCS2'" x-cloak class="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm" role="status">
+  <p>Ces caractères font passer chaque SMS de 160 à 70 caractères :
+    <span class="font-mono" x-text="analyse.hors_gsm.join(' ')"></span></p>
+  <p class="mt-1 whitespace-pre-wrap break-words font-mono [&_mark]:bg-amber-200" x-html="surligne"></p>
+  <button type="button" x-show="convertibles.length" @click="convertir()" class="mt-2 rounded border border-amber-400 px-3 py-1">
+    Remplacer par leur équivalent sans surcoût
+  </button>
+  <p x-show="convertibles.length < analyse.hors_gsm.length" class="mt-1 text-xs">Les emoji et symboles sans équivalent sont à retirer vous-même.</p>
+</div>

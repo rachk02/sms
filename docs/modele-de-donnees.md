@@ -277,7 +277,21 @@ TRANSACTIONNEL, OTP, `expediteur_id`, `modele_texte`, `encodage_prevu`,
 `segments_prevus`, `etat` parmi BROUILLON, PLANIFIEE, EN_ATTENTE, EN_COURS,
 EN_PAUSE, TERMINEE, ANNULEE, `politique_expediteur` parmi REFUSER, REPLI,
 ATTENDRE, `planifiee_pour`, `lissage_par_minute`, `destinataires_prevus`,
-`cout_estime`, `cout_reel`, `demarree_le`, `terminee_le`, `creee_par_id`.
+`cout_estime`, `cout_reel`, `demarree_le`, `terminee_le`, `creee_par_id`, et
+`cible` en jsonb (`listes` et `segment_id`), `confirmee_le`. `expediteur_id`
+nul : la campagne part sous le numéro court. `politique_expediteur` vaut REPLI
+par défaut.
+
+L'aperçu recalcule tout à chaque affichage. La confirmation refait le calcul et
+refuse si les chiffres diffèrent de ceux que le client a lus ; sinon elle fige
+les destinataires, réserve le coût annoncé en une fois et passe EN_ATTENTE.
+
+**`campagnes_destinataire`** : les destinataires figés à la confirmation. Clé
+primaire composée `(campagne_id, contact_id)`, `client_id`, `numero_normalise`,
+`operateur` (confirmé, sinon présumé), `expediteur` retenu pour son réseau,
+`action` parmi ENVOYER, REPLI (numéro court), ATTENDRE (approbation en cours).
+Les contacts refusés par la politique n'y figurent pas. `contact_id` est un
+UUID simple : supprimer un contact n'empêche pas une campagne de se terminer.
 
 **`campagnes_modele`** : `id`, `client_id`, `nom` unique par client, `texte`,
 `variables` en jsonb (les noms des balises du texte, dans l'ordre). Une balise

@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% load static %}
+{% block scripts %}
+  <script src="{% static 'js/encodage.js' %}" defer></script>
+  <script src="{% static 'js/compositeur.js' %}" defer></script>
+{% endblock %}
+{% block contenu %}
+<p class="mb-2 text-sm"><a class="underline" href="{% url 'campagnes' %}">Campagnes</a></p>
+<h1 class="mb-4 text-2xl font-semibold">Nouvelle campagne</h1>
+{% if erreur %}<p class="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">{{ erreur }}</p>{% endif %}
+{{ table_encodage|json_script:"table-encodage" }}
+{{ replis|json_script:"replis-declares" }}
+{{ saisie.texte|json_script:"texte-initial" }}
+<form method="post" class="space-y-6">
+  {% csrf_token %}
+  <div class="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+    <label class="flex flex-col">Nom de la campagne
+      <input name="nom" value="{{ saisie.nom }}" required maxlength="150" class="rounded border border-slate-300 px-2 py-1">
+    </label>
+    <label class="flex flex-col">Nature
+      <select name="type" class="rounded border border-slate-300 px-2 py-1">
+        {% for valeur, libelle in types %}<option value="{{ valeur }}"{% if saisie.type == valeur %} selected{% endif %}>{{ libelle }}</option>{% endfor %}
+      </select>
+    </label>
+  </div>
+
+  <fieldset x-data="compositeur('table-encodage', 'replis-declares', 'texte-initial')" class="space-y-2">
+    <legend class="mb-1 text-lg font-semibold">Message</legend>
+    {% if modeles %}
+      <label class="flex flex-col text-sm">Partir d'un modèle
+        <select @change="if ($event.target.value) texte = $event.target.selectedOptions[0].dataset.texte" class="rounded border border-slate-300 px-2 py-1">
+          <option value="">Aucun</option>
+          {% for modele in modeles %}<option value="{{ modele.id }}" data-texte="{{ modele.texte }}">{{ modele.nom }}</option>{% endfor %}
+        </select>
+      </label>
+    {% endif %}
+    <label class="flex flex-col text-sm">Texte
+      <textarea name="texte" rows="6" required x-model="texte" class="rounded border border-slate-300 px-2 py-1 font-mono">{{ saisie.texte }}</textarea>
+    </label>
+    {% include "campagnes/_compteur.html" %}
+  </fieldset>
+
+  <fieldset class="space-y-2 text-sm">
+    <legend class="mb-1 text-lg font-semibold">Destinataires</legend>
+    {% if listes %}
+      <p>Listes :</p>
+      <div class="grid grid-cols-1 gap-1 sm:grid-cols-3">
+        {% for liste in listes %}
+          <label class="flex items-center gap-2"><input type="checkbox" name="listes" value="{{ liste.id }}"{% if liste.id|stringformat:"s" in saisie.listes %} checked{% endif %}> {{ liste.nom }} ({{ liste.nombre_contacts }})</label>
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% if segments %}
+      <label class="flex flex-col sm:w-1/2">Segment
+        <select name="segment" class="rounded border border-slate-300 px-2 py-1">
+          <option value="">Aucun</option>
+          {% for segment in segments %}<option value="{{ segment.id }}"{% if saisie.segment == segment.id|stringformat:"s" %} selected{% endif %}>{{ segment.nom }} (environ {{ segment.nombre_estime }})</option>{% endfor %}
+        </select>
+      </label>
+    {% endif %}
+    {% if not listes and not segments %}
+      <p>Aucune liste ni segment : <a class="underline" href="{% url 'contacts-listes' %}">créez d'abord une liste</a>.</p>
+    {% endif %}
+    <p class="text-xs text-slate-500">Un numéro présent dans plusieurs listes ne reçoit qu'un message. La liste noire est exclue d'office.</p>
+  </fieldset>
+
+  <fieldset class="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+    <legend class="mb-1 text-lg font-semibold">Expéditeur</legend>
+    <label class="flex flex-col">Identifiant
+      <select name="expediteur" class="rounded border border-slate-300 px-2 py-1">
+        <option value="">Numéro court de la plateforme</option>
+        {% for expediteur in expediteurs %}<option value="{{ expediteur.id }}"{% if saisie.expediteur == expediteur.id|stringformat:"s" %} selected{% endif %}>{{ expediteur.libelle }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="flex flex-col">Sur un réseau qui n'a pas approuvé l'identifiant
+      <select name="politique" class="rounded border border-slate-300 px-2 py-1">
+        {% for valeur, libelle in politiques %}<option value="{{ valeur }}"{% if saisie.politique == valeur or not saisie.politique and valeur == "REPLI" %} selected{% endif %}>{{ libelle }}</option>{% endfor %}
+      </select>
+    </label>
+  </fieldset>
+
+  <button type="submit" class="rounded bg-slate-900 px-4 py-2 text-white">Enregistrer et voir l'aperçu</button>
+</form>
+{% endblock %}
