@@ -192,3 +192,14 @@ RAPPELS_SECRET = env("RAPPELS_SECRET", "")
 # agents EL-IMMEKA, joignable du seul réseau interne, avec
 # SMS_CONNEXION_PAR_DEFAUT=BACKOFFICE.
 ESPACE = env("SMS_ESPACE", "client")
+
+# Courriels transactionnels. La console en développement ; le prestataire
+# d'envoi est à choisir (point ouvert n°7 de l'architecture).
+MAILERS = {
+    "default": {
+        "BACKEND": env("SMS_MOTEUR_COURRIEL", "django.core.mail.backends.console.EmailBackend")
+    }
+}
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "EL-IMMEKA SMS <ne-pas-repondre@el-immeka.bf>")
+# Adresse publique du portail, pour les liens des courriels.
+PORTAIL_URL = env("PORTAIL_URL", "http://127.0.0.1:8000").rstrip("/")

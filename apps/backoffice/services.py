@@ -10,7 +10,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.comptes.models import Client, Dossier, Piece, Utilisateur, pieces_attendues
-from apps.comptes.services import creer_client, creer_utilisateur
+from apps.comptes.services import creer_client, creer_utilisateur, envoyer_invitation
 from apps.core.audit import auditer
 from apps.fichiers.models import Fichier
 from apps.fichiers.services import FichierRefuse, deposer
@@ -103,7 +103,7 @@ def enregistrer_client(
         except FichierRefuse as refus:
             raise EnregistrementRefuse({f"piece_{type_piece}": [str(refus)]}) from None
         Piece.objects.create(client=client, dossier=dossier, type=type_piece, fichier_id=fichier.id)
-    creer_utilisateur(
+    representant = creer_utilisateur(
         courriel=identite["representant_courriel"],
         mot_de_passe=None,
         nom=identite["representant_nom"].strip(),
@@ -111,6 +111,7 @@ def enregistrer_client(
         role=Utilisateur.Role.ADMIN,
         telephone=(identite.get("representant_telephone") or "").strip(),
     )
+    envoyer_invitation(representant)
     auditer(
         "comptes.client.enregistre",
         client,

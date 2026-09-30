@@ -1,6 +1,7 @@
 """Enregistrement d'un client par l'équipe, T-31 et T-37 (décision F-11 du 29 septembre 2026)."""
 
 import pytest
+from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from apps.backoffice.services import EnregistrementRefuse, PieceDeposee, enregistrer_client
@@ -91,6 +92,7 @@ def test_un_client_complet_est_enregistre_avec_son_dossier_ses_pieces_et_son_adm
     assert representant.client_id == dossier.client_id
     assert representant.role == Utilisateur.Role.ADMIN
     assert not representant.has_usable_password()  # activé par son invitation (T-32)
+    assert mail.outbox[-1].to == ["awa@exemple.bf"] and "/invitation/" in mail.outbox[-1].body
 
     audit = Audit.objects.get(action="comptes.client.enregistre")
     assert audit.auteur_id == agent.id and audit.client_id == dossier.client_id

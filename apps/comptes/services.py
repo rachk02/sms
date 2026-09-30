@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from apps.core.cloisonnement import client_pose, poser_client
 
-from .models import Client, NumeroTest, Utilisateur
+from .models import Client, GestionnaireUtilisateur, NumeroTest, Utilisateur
 
 # Plafonds d'envoi par palier, en messages. Valeurs provisoires : la fiche F-11
 # laisse les plafonds de chaque palier à trancher. Elles ne servent qu'à remplir
@@ -100,3 +100,175 @@ def envoi_autorise(client, numero_normalise: str) -> bool:
     return NumeroTest.objects.filter(
         client=client, numero_normalise=numero_normalise, verifie_le__isnull=False
     ).exists()
+
+
+# Membres et invitations (T-32, T-36) ---------------------------------------
+
+ROLES_DE_LANCEMENT = (Utilisateur.Role.ADMIN, Utilisateur.Role.UTILISATEUR)
+
+
+class MembreRefuse(ValueError):
+    pass
+
+
+def _lien(chemin: str, jeton: str) -> str:
+    from django.conf import settings
+
+    return f"{settings.PORTAIL_URL}/{chemin}/{jeton}"
+
+
+def envoyer_invitation(utilisateur: Utilisateur) -> None:
+    from apps.core.courriels import envoyer
+
+    from . import jetons
+
+    lien = _lien("invitation", jetons.creer(utilisateur, jetons.INVITATION))
+    envoyer(
+        utilisateur.courriel,
+        "Votre accès à EL-IMMEKA SMS",
+        f"Bonjour {utilisateur.nom},\n\n"
+        f"Un accès au compte {utilisateur.client} vous est ouvert. Pour le "
+        f"créer, choisissez votre mot de passe par ce lien, valable sept jours :\n\n"
+        f"{lien}\n\nSi vous n'attendiez pas ce message, ignorez-le.",
+    )
+
+
+def envoyer_verification(utilisateur: Utilisateur) -> None:
+    from apps.core.courriels import envoyer
+
+    from . import jetons
+
+    lien = _lien("verification", jetons.creer(utilisateur, jetons.VERIFICATION))
+    envoyer(
+        utilisateur.courriel,
+        "Vérifiez votre adresse, EL-IMMEKA SMS",
+        f"Bonjour {utilisateur.nom},\n\nPour vérifier votre adresse, ouvrez ce lien, "
+        f"valable vingt-quatre heures :\n\n{lien}",
+    )
+
+
+@transaction.atomic
+def inviter(*, client, courriel: str, nom: str, role: str, auteur, adresse_ip=None) -> Utilisateur:
+    from apps.core.audit import auditer
+
+    courriel = GestionnaireUtilisateur.normaliser_courriel(courriel)
+    if role not in ROLES_DE_LANCEMENT:
+        raise MembreRefuse("Rôle non ouvert au lancement.")
+    existant = Utilisateur.objects.filter(courriel=courriel).first()
+    if existant is not None:
+        if existant.client_id == client.id:
+            raise MembreRefuse(f"{courriel} est déjà membre de ce compte.")
+        raise MembreRefuse(f"{courriel} ne peut pas être invitée.")
+    membre = Utilisateur.objects.create_user(
+        courriel, None, nom=nom.strip(), client=client, role=role
+    )
+    envoyer_invitation(membre)
+    auditer(
+        "comptes.membre.invite",
+        membre,
+        auteur=auteur,
+        client=client,
+        apres={"courriel": courriel, "role": role},
+        adresse_ip=adresse_ip,
+    )
+    return membre
+
+
+@transaction.atomic
+def accepter_invitation(jeton: str, mot_de_passe: str) -> Utilisateur:
+    """Pose le mot de passe et vérifie l'adresse : le lien prouve que la
+    personne reçoit bien les courriels de cette adresse. Lève LienExpire,
+    LienInvalide, ou ValidationError si le mot de passe est refusé."""
+    from django.contrib.auth.password_validation import validate_password
+
+    from . import jetons
+
+    membre = jetons.lire(jeton, jetons.INVITATION)
+    validate_password(mot_de_passe, membre)
+    membre.set_password(mot_de_passe)
+    membre.courriel_verifie_le = timezone.now()
+    membre.save(update_fields=["password", "courriel_verifie_le", "modifie_le"])
+    return membre
+
+
+@transaction.atomic
+def verifier_courriel(jeton: str) -> Utilisateur:
+    from . import jetons
+
+    utilisateur = jetons.lire(jeton, jetons.VERIFICATION)
+    utilisateur.courriel_verifie_le = timezone.now()
+    utilisateur.save(update_fields=["courriel_verifie_le", "modifie_le"])
+    return utilisateur
+
+
+@transaction.atomic
+def renvoyer_lien(courriel: str) -> None:
+    """Renvoie un lien à qui n'a pas encore activé son accès ou vérifié son
+    adresse. Sans effet visible sinon : la réponse est la même que l'adresse
+    existe ou non."""
+    utilisateur = Utilisateur.objects.filter(
+        courriel=GestionnaireUtilisateur.normaliser_courriel(courriel), is_active=True
+    ).first()
+    if utilisateur is None or utilisateur.courriel_verifie_le is not None:
+        return
+    # Page anonyme : aucun client posé. Le courriel nomme le compte, qu'on ne
+    # verrait pas sans poser celui de l'utilisateur, le temps de l'envoi.
+    poser_client(utilisateur.client_id)
+    if utilisateur.has_usable_password():
+        envoyer_verification(utilisateur)
+    else:
+        envoyer_invitation(utilisateur)
+
+
+def _administrateurs_verrouilles(client) -> list:
+    return list(
+        Utilisateur.objects.select_for_update()
+        .filter(client=client, role=Utilisateur.Role.ADMIN, is_active=True)
+        .values_list("pk", flat=True)
+    )
+
+
+@transaction.atomic
+def changer_role(membre: Utilisateur, role: str, *, auteur, adresse_ip=None) -> Utilisateur:
+    from apps.core.audit import auditer
+
+    if role not in ROLES_DE_LANCEMENT:
+        raise MembreRefuse("Rôle non ouvert au lancement.")
+    administrateurs = _administrateurs_verrouilles(membre.client)
+    if role != Utilisateur.Role.ADMIN and administrateurs == [membre.pk]:
+        raise MembreRefuse("Le dernier administrateur du compte ne peut pas être rétrogradé.")
+    avant = membre.role
+    if avant == role:
+        return membre
+    Utilisateur.objects.filter(pk=membre.pk).update(role=role, modifie_le=timezone.now())
+    auditer(
+        "comptes.role.modifie",
+        membre,
+        auteur=auteur,
+        client=membre.client,
+        avant={"role": avant},
+        apres={"role": role},
+        adresse_ip=adresse_ip,
+    )
+    membre.role = role
+    return membre
+
+
+@transaction.atomic
+def retirer_membre(membre: Utilisateur, *, auteur, adresse_ip=None) -> None:
+    """Retire l'accès sans effacer : les actions passées gardent leur auteur."""
+    from apps.core.audit import auditer
+
+    administrateurs = _administrateurs_verrouilles(membre.client)
+    if administrateurs == [membre.pk]:
+        raise MembreRefuse("Le dernier administrateur du compte ne peut pas être retiré.")
+    Utilisateur.objects.filter(pk=membre.pk).update(is_active=False, modifie_le=timezone.now())
+    auditer(
+        "comptes.membre.retire",
+        membre,
+        auteur=auteur,
+        client=membre.client,
+        avant={"actif": True, "role": membre.role},
+        apres={"actif": False},
+        adresse_ip=adresse_ip,
+    )
