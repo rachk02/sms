@@ -31,6 +31,14 @@
       </tbody>
     </table>
   </div>
+  {% if listes %}
+    <label class="mt-6 flex flex-col text-sm sm:w-1/2">Ajouter les contacts importés à une liste (facultatif)
+      <select name="liste" class="rounded border border-slate-300 px-2 py-1">
+        <option value="">Aucune</option>
+        {% for liste in listes %}<option value="{{ liste.id }}">{{ liste.nom }}</option>{% endfor %}
+      </select>
+    </label>
+  {% endif %}
   <button type="submit" class="mt-6 rounded bg-slate-900 px-4 py-2 text-white">Lancer l'import</button>
 </form>
 {% endblock %}

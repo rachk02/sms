@@ -12,7 +12,7 @@ from apps.fichiers.services import FichierRefuse
 from . import imports
 from .champs import noms_declares
 from .lecture import FichierIllisible
-from .models import ChampPersonnalise, Import
+from .models import ChampPersonnalise, Import, Liste
 
 CHOIX_FIXES = (
     ("", "Ignorer"),
@@ -70,6 +70,7 @@ def _mappage_saisi(request, lignes: list[list[str]], largeur: int) -> dict:
         "largeur": largeur,
         "colonnes": colonnes,
         "personnalises": personnalises,
+        "liste_id": request.POST.get("liste", ""),
     }
 
 
@@ -107,6 +108,7 @@ def mappage(request, pk):
             {"rang": rang, "choix": par_rang.get(rang, "")} for rang in range(propose["largeur"])
         ],
         "choix": _choix_colonne(request.user.client),
+        "listes": Liste.objects.filter(client=request.user.client).order_by("nom"),
         "entetes": propose["entetes"],
         "erreur": erreur,
     }

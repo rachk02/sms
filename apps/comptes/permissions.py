@@ -21,6 +21,9 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     "contacts.consulter": frozenset({ADMIN, UTILISATEUR}),
     "contacts.importer": frozenset({ADMIN, UTILISATEUR}),
     "contacts.exporter": frozenset({ADMIN, UTILISATEUR}),
+    "contacts.gerer": frozenset({ADMIN, UTILISATEUR}),
+    # Les champs personnalisés règlent le compte entier et ses segments.
+    "contacts.parametrer": frozenset({ADMIN}),
 }
 
 

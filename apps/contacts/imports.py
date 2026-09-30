@@ -13,6 +13,7 @@ import csv
 import io
 import re
 import unicodedata
+import uuid
 from collections import Counter
 from itertools import islice
 
@@ -179,9 +180,14 @@ def lancer(import_, mappage: dict) -> Import:
     import_ = Import.objects.select_for_update().get(id=import_.id)
     if import_.etat != Import.Etat.DEPOSE:
         raise MappageInvalide("Cet import est déjà lancé.")
-    liste_id = mappage.get("liste_id")
-    if liste_id and not Liste.objects.filter(id=liste_id, client_id=import_.client_id).exists():
-        raise MappageInvalide("Liste introuvable pour ce compte.")
+    if liste_id := mappage.get("liste_id"):
+        try:
+            liste_id = str(uuid.UUID(str(liste_id)))
+        except ValueError:
+            raise MappageInvalide("Liste introuvable pour ce compte.") from None
+        if not Liste.objects.filter(id=liste_id, client_id=import_.client_id).exists():
+            raise MappageInvalide("Liste introuvable pour ce compte.")
+        mappage = mappage | {"liste_id": liste_id}
     import_.mappage = _verifier_mappage(mappage, noms_declares(import_.client))
     import_.etat = Import.Etat.EN_FILE
     import_.save(update_fields=["mappage", "etat", "modifie_le"])

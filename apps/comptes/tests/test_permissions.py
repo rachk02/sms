@@ -40,6 +40,11 @@ ATTENDUS = {
     "contacts-repertoire": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "contacts-resultats": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "contacts-exporter": ("post", {ANONYME: CONNEXION, UTILISATEUR: 302, ADMIN: 302}),
+    "contacts-listes": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
+    "contacts-liste-supprimer": ("post", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
+    "contacts-liste-noire": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
+    "contacts-champs": ("get", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 200}),
+    "contacts-champ-supprimer": ("post", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 404}),
     "import-deposer": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     # Un import inexistant, ou d'un autre compte, n'existe pas pour le visiteur.
     "import-mappage": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
@@ -79,7 +84,9 @@ def _adresse(nom, membres):
         return reverse(nom, args=[membres["cible"].pk])
     if nom in ("invitation", "verification"):
         return reverse(nom, args=["jeton-invalide"])
-    if nom == "rappel-jasmin" or nom.startswith("import-") and nom != "import-deposer":
+    if nom in ("rappel-jasmin", "contacts-liste-supprimer", "contacts-champ-supprimer") or (
+        nom.startswith("import-") and nom != "import-deposer"
+    ):
         return reverse(nom, args=[uuid.uuid7()])
     return reverse(nom)
 

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block contenu %}
+<h1 class="mb-2 text-2xl font-semibold">Listes de contacts</h1>
+<p class="mb-6 text-sm text-slate-600">Une liste regroupe des contacts du répertoire. Supprimer une liste ne supprime aucun contact.
+  Pour remplir une liste, choisissez-la au moment d'un import.</p>
+<form method="post" class="mb-6 grid grid-cols-1 gap-2 text-sm sm:grid-cols-[1fr_2fr_auto]">
+  {% csrf_token %}
+  <label class="flex flex-col">Nom<input name="nom" required maxlength="150" class="rounded border border-slate-300 px-2 py-1"></label>
+  <label class="flex flex-col">Description<input name="description" class="rounded border border-slate-300 px-2 py-1"></label>
+  <button type="submit" class="self-end rounded bg-slate-900 px-4 py-2 text-white">Créer la liste</button>
+</form>
+{% if listes %}
+  <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+    <table class="w-full text-left text-sm">
+      <thead class="bg-slate-50 text-slate-600">
+        <tr><th class="px-3 py-2">Liste</th><th class="px-3 py-2">Contacts</th><th class="px-3 py-2"></th></tr>
+      </thead>
+      <tbody>
+        {% for liste in listes %}
+          <tr class="border-t border-slate-200">
+            <td class="px-3 py-2"><a class="underline" href="{% url 'contacts-repertoire' %}?liste={{ liste.id }}">{{ liste.nom }}</a>
+              {% if liste.description %}<span class="block text-xs text-slate-500">{{ liste.description }}</span>{% endif %}</td>
+            <td class="px-3 py-2">{{ liste.nombre_contacts }}</td>
+            <td class="px-3 py-2 text-right">
+              <form method="post" action="{% url 'contacts-liste-supprimer' liste.id %}" x-data @submit="if (!confirm('Supprimer la liste « {{ liste.nom|escapejs }} » ? Les contacts restent dans le répertoire.')) $event.preventDefault()">
+                {% csrf_token %}
+                <button type="submit" class="text-red-700 underline">Supprimer</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="text-sm text-slate-600">Aucune liste pour l'instant.</p>
+{% endif %}
+{% endblock %}

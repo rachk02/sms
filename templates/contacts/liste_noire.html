@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block contenu %}
+<h1 class="mb-2 text-2xl font-semibold">Liste noire</h1>
+<p class="mb-6 text-sm text-slate-600">Un numéro inscrit ici ne reçoit plus aucun de vos messages, même s'il figure dans une liste ou un segment.
+  Les désinscriptions par SMS (STOP) s'y ajoutent d'elles-mêmes.</p>
+<form method="post" class="mb-6 grid grid-cols-1 gap-2 text-sm sm:grid-cols-[1fr_2fr_auto]">
+  {% csrf_token %}
+  <label class="flex flex-col">Numéro<input name="numero" required inputmode="tel" class="rounded border border-slate-300 px-2 py-1"></label>
+  <label class="flex flex-col">Motif<input name="motif" placeholder="Demande du client, réclamation..." class="rounded border border-slate-300 px-2 py-1"></label>
+  <button type="submit" class="self-end rounded bg-slate-900 px-4 py-2 text-white">Bloquer ce numéro</button>
+</form>
+<form method="get" class="mb-4 flex gap-2 text-sm">
+  <input type="search" name="numero" value="{{ cherche }}" inputmode="tel" placeholder="Chercher un numéro" class="rounded border border-slate-300 px-2 py-1">
+  <button type="submit" class="rounded border border-slate-300 px-3 py-1">Chercher</button>
+</form>
+{% if erreur %}<p class="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">{{ erreur }}</p>{% endif %}
+{% if entrees %}
+  <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+    <table class="w-full text-left text-sm">
+      <thead class="bg-slate-50 text-slate-600">
+        <tr><th class="px-3 py-2">Numéro</th><th class="px-3 py-2">Origine</th><th class="px-3 py-2">Motif ou message</th><th class="px-3 py-2">Ajouté le</th></tr>
+      </thead>
+      <tbody>
+        {% for entree in entrees %}
+          <tr class="border-t border-slate-200">
+            <td class="px-3 py-2 font-mono">{{ entree.numero_normalise }}</td>
+            <td class="px-3 py-2">{{ entree.get_origine_display }}</td>
+            <td class="px-3 py-2">{{ entree.motif|default:entree.message_origine }}</td>
+            <td class="px-3 py-2">{{ entree.ajoute_le|date:"d/m/Y H:i" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if not cherche %}<p class="mt-2 text-xs text-slate-500">Les {{ affiches }} dernières entrées ; cherchez un numéro pour les autres.</p>{% endif %}
+{% else %}
+  <p class="text-sm text-slate-600">{% if cherche %}Ce numéro n'est pas sur votre liste noire.{% else %}Votre liste noire est vide.{% endif %}</p>
+{% endif %}
+{% endblock %}

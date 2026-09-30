@@ -118,8 +118,7 @@ d'eux ne convient pas.
 
 ## Bilan du lot, 30 septembre 2026
 
-Les douze tâches sont faites côté services, testées ; trois écrans restent à
-faire (voir plus bas). Le point de contrôle (T-54) est un test
+Les douze tâches sont faites. Le point de contrôle (T-54) est un test
 automatique, `apps/contacts/tests/test_point_de_controle.py` : un fichier de
 deux cent mille lignes (trois opérateurs, doublons, numéros invalides, deux
 champs personnalisés) passe par le vrai stockage objet et le service d'import,
@@ -135,5 +134,8 @@ segment de 16 496 contacts calculé en 0,06 seconde.
   îlot React selon la charte, vient avec le compositeur de campagne (lot 5).
 - T-53 : l'export passe par la file `import.contacts` ; la suppression des
   exports au bout de sept jours reste à faire avec le cycle de vie des fichiers.
-- Les écrans des listes, de la liste noire et des champs personnalisés ne sont
-  pas encore faits : les services et leurs tests le sont.
+- Écrans des listes, de la liste noire et des champs personnalisés : une liste
+  se remplit en la choisissant au mappage d'un import ; un client ne retire pas
+  un numéro de sa liste noire par l'écran (un STOP se respecte) ; déclarer ou
+  supprimer un champ personnalisé est réservé à l'administrateur du compte,
+  parce que cela touche tous les segments.
