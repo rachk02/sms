@@ -1,4 +1,4 @@
-"""Porte d'écriture du module conformite."""
+"""Écriture au journal d'audit, ouverte à tous les modules."""
 
 from django.db import models
 

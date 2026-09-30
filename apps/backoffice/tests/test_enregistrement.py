@@ -6,7 +6,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from apps.backoffice.services import EnregistrementRefuse, PieceDeposee, enregistrer_client
 from apps.comptes.models import Client, Dossier, Piece, Utilisateur
 from apps.comptes.services import creer_utilisateur
-from apps.conformite.models import Audit
+from apps.core.models import Audit
 from apps.fichiers.models import Fichier
 
 pytestmark = pytest.mark.django_db(transaction=True)

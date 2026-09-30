@@ -8,6 +8,7 @@ from django.shortcuts import redirect
 from django.template.response import TemplateResponse
 
 from apps.comptes.models import Client, Dossier, Piece, Utilisateur
+from apps.core.models import Audit
 from apps.fichiers.models import Fichier
 from apps.fichiers.services import lien
 
@@ -131,3 +132,24 @@ class UtilisateurAdmin(admin.ModelAdmin):
     list_filter = ("role", "is_active", "is_staff")
     search_fields = ("courriel", "nom")
     exclude = ("password", "second_facteur_secret", "groups", "user_permissions")
+
+
+@admin.register(Audit)
+class AuditAdmin(admin.ModelAdmin):
+    """Consultation seule : personne, super-administrateur compris, ne peut
+    ajouter, modifier ou supprimer une entrée depuis l'administration."""
+
+    list_display = ("horodatage", "action", "objet_type", "objet_id", "auteur", "client", "motif")
+    list_filter = ("action", "objet_type", "horodatage")
+    search_fields = ("objet_id", "motif", "auteur__courriel", "client__raison_sociale")
+    date_hierarchy = "horodatage"
+    readonly_fields = [champ.name for champ in Audit._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

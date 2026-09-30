@@ -13,8 +13,7 @@ from apps.backoffice.services import (
 )
 from apps.comptes.models import Client, Dossier, Piece
 from apps.comptes.services import PLAFONDS_PAR_PALIER, creer_utilisateur
-from apps.conformite.models import Audit
-from apps.core.models import EvenementSortant
+from apps.core.models import Audit, EvenementSortant
 
 pytestmark = pytest.mark.django_db(transaction=True)
 

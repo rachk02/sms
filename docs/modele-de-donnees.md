@@ -36,6 +36,14 @@ Clé primaire composée sur les deux premiers. Écrite dans la même transaction
 que le traitement : un événement relivré après un traitement validé est
 reconnu et ignoré.
 
+**`core_audit`** : `id`, `auteur_id`, `client_id` du compte concerné (nul
+pour une action de plateforme), `action`, `objet_type`, `objet_id`,
+`valeur_avant` en jsonb, `valeur_apres` en jsonb, `motif`, `adresse_ip`,
+`horodatage`. En écriture seule pour tous les rôles, par le modèle et par un
+déclencheur. Le rôle applicatif y écrit sans pouvoir y lire ; le back-office la
+consulte. Dans `core` pour que tout module
+audite dans la transaction même de son action (décision du 30 septembre 2026).
+
 ## comptes
 
 **`comptes_client`** porte l'identité juridique de l'organisation cliente.
@@ -397,12 +405,7 @@ année, `periode_debut`, `periode_fin`, `montant_ht`, `tva`, `montant_ttc`,
 **`conformite_consentement`** : `id`, `client_id`, `contact_id` UUID simple,
 `source`, `preuve` en jsonb, `obtenu_le`.
 
-**`conformite_audit`** : `id`, `auteur_id`, `client_id` du compte concerné (nul
-pour une action de plateforme), `action`, `objet_type`, `objet_id`,
-`valeur_avant` en jsonb, `valeur_apres` en jsonb, `motif`, `adresse_ip`,
-`horodatage`. En écriture seule pour tous les rôles, par le modèle et par un
-déclencheur. Le rôle applicatif y écrit sans pouvoir y lire ; le back-office la
-consulte.
+Le journal d'audit est passé dans `core` (voir `core_audit`).
 
 ## notifications
 

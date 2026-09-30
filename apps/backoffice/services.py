@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from apps.comptes.models import Client, Dossier, Piece, Utilisateur, pieces_attendues
 from apps.comptes.services import creer_client, creer_utilisateur
-from apps.conformite.services import auditer
+from apps.core.audit import auditer
 from apps.fichiers.models import Fichier
 from apps.fichiers.services import FichierRefuse, deposer
 

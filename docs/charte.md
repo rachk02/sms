@@ -36,6 +36,11 @@ Les dépendances ne remontent jamais. L'ordre des couches, du bas vers le haut :
 5. `notifications`, `support`
 6. `api`, `backoffice`
 
+Deux mécanismes transverses vivent dans `core`, pour que tout module puisse
+s'en servir dans sa propre transaction : la boîte d'envoi des événements
+(`apps.core.evenements.publier`) et le journal d'audit
+(`apps.core.audit.auditer`).
+
 Un module n'importe que ce qui est sous lui. Quand une couche basse doit
 signaler quelque chose à une couche haute, elle publie un événement par
 `apps.core.evenements.publier`, elle n'importe rien. Concrètement, `telecom` ne

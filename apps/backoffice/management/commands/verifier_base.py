@@ -32,7 +32,7 @@ RESERVEES_AUX_WORKERS = (
     "telecom_correlation",
     "telecom_accuse_orphelin",
     "core_evenement_sortant",
-    "conformite_audit",
+    "core_audit",
     "comptes_connexion",
 )
 
@@ -85,7 +85,7 @@ class Command(BaseCommand):
             ),
             (
                 "écriture seule de l'audit",
-                "SELECT 1 FROM pg_trigger WHERE tgname = 'conformite_audit_ecriture_seule'",
+                "SELECT 1 FROM pg_trigger WHERE tgname = 'core_audit_ecriture_seule'",
             ),
             (
                 "partition du mois courant",

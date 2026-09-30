@@ -5,8 +5,8 @@ from django.db import ProgrammingError, connections, transaction
 
 from apps.comptes.models import Client, Utilisateur
 from apps.comptes.services import creer_client, creer_utilisateur
-from apps.conformite.models import Audit, EcritureSeuleError
-from apps.conformite.services import auditer
+from apps.core.audit import auditer
+from apps.core.models import Audit, AuditEcritureSeuleError
 
 
 @pytest.fixture
@@ -55,20 +55,18 @@ def test_une_action_laisse_une_ecriture_complete(entree, agent):
 def test_aucune_methode_ne_modifie_ni_ne_supprime_une_entree(entree):
     lue = _lire().get(id=entree.id)
     lue.motif = "réécrit"
-    with pytest.raises(EcritureSeuleError):
+    with pytest.raises(AuditEcritureSeuleError):
         lue.save()
-    with pytest.raises(EcritureSeuleError):
+    with pytest.raises(AuditEcritureSeuleError):
         lue.delete()
-    with pytest.raises(EcritureSeuleError):
+    with pytest.raises(AuditEcritureSeuleError):
         _lire().filter(id=entree.id).update(motif="réécrit")
-    with pytest.raises(EcritureSeuleError):
+    with pytest.raises(AuditEcritureSeuleError):
         _lire().filter(id=entree.id).delete()
 
 
 @pytest.mark.django_db(transaction=True, databases=["default", "backoffice"])
-@pytest.mark.parametrize(
-    "sql", ["UPDATE conformite_audit SET motif = 'x'", "DELETE FROM conformite_audit"]
-)
+@pytest.mark.parametrize("sql", ["UPDATE core_audit SET motif = 'x'", "DELETE FROM core_audit"])
 def test_meme_le_back_office_ne_peut_rien_modifier_en_sql(entree, sql):
     with (
         pytest.raises(ProgrammingError, match="écriture seule"),
@@ -90,14 +88,14 @@ def test_le_journal_se_consulte_et_se_filtre_au_back_office(
     client, entree, agent, en_tant_que_backoffice
 ):
     client.force_login(Utilisateur.objects.get(id=agent.id))
-    liste = client.get("/admin/conformite/audit/")
+    liste = client.get("/admin/core/audit/")
     # Le motif n'apparaît que dans les lignes de résultat, pas dans les filtres.
     assert liste.status_code == 200 and "Nouvelle responsable" in liste.content.decode()
-    filtre = client.get("/admin/conformite/audit/?action=autre.action")
+    filtre = client.get("/admin/core/audit/?action=autre.action")
     assert "Nouvelle responsable" not in filtre.content.decode()
-    retenu = client.get("/admin/conformite/audit/?action=comptes.role.modifie")
+    retenu = client.get("/admin/core/audit/?action=comptes.role.modifie")
     assert "Nouvelle responsable" in retenu.content.decode()
-    assert client.get("/admin/conformite/audit/add/").status_code == 403
-    detail = client.post(f"/admin/conformite/audit/{entree.id}/change/", {"motif": "x"})
+    assert client.get("/admin/core/audit/add/").status_code == 403
+    detail = client.post(f"/admin/core/audit/{entree.id}/change/", {"motif": "x"})
     assert detail.status_code in (403, 200)
     assert _lire().get(id=entree.id).motif == "Nouvelle responsable des campagnes"
