@@ -47,7 +47,7 @@ class MappageInvalide(ValueError):
     pass
 
 
-def _cle(entete: str) -> str:
+def cle_entete(entete: str) -> str:
     sans_accent = unicodedata.normalize("NFKD", entete).encode("ascii", "ignore").decode()
     return re.sub(r"[^a-z0-9 ]+", " ", sans_accent.lower()).strip()
 
@@ -99,14 +99,14 @@ def proposer_mappage(lignes: list[list[str]], precedent: dict | None = None) -> 
     largeur = max(len(ligne) for ligne in lignes)
     premiere = lignes[0]
     entetes = not any(_est_numero(v) for v in premiere) and any(v.strip() for v in premiere)
-    entete = [_cle(v) for v in premiere] if entetes else []
+    entete = [cle_entete(v) for v in premiere] if entetes else []
     if precedent and precedent.get("largeur") == largeur and precedent.get("entete") == entete:
         return precedent
     colonnes: dict[str, int] = {}
     personnalises: dict[str, int] = {}
     if entetes:
         for rang, entete in enumerate(premiere):
-            cle = _cle(entete)
+            cle = cle_entete(entete)
             fixe = next((c for c, noms in SYNONYMES.items() if cle in noms), None)
             if fixe and fixe not in colonnes:
                 colonnes[fixe] = rang

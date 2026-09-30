@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block contenu %}
+<h1 class="mb-2 text-2xl font-semibold">Importer des contacts</h1>
+<p class="mb-6 text-sm text-slate-600">Fichier CSV, tableur (.xlsx) ou document (.docx), 200 Mo au plus.
+  Les lignes invalides seront écartées et listées dans un rapport, les autres importées.</p>
+{% if erreur %}<p class="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">{{ erreur }}</p>{% endif %}
+<form method="post" enctype="multipart/form-data" class="space-y-4" x-data="{ envoi: false }" @submit="envoi = true">
+  {% csrf_token %}
+  <input type="file" name="fichier" required accept=".csv,.txt,.xlsx,.docx" class="block text-sm">
+  <button type="submit" class="rounded bg-slate-900 px-4 py-2 text-white" :disabled="envoi">
+    <span x-show="!envoi">Déposer le fichier</span><span x-show="envoi" x-cloak>Envoi en cours...</span>
+  </button>
+</form>
+{% endblock %}

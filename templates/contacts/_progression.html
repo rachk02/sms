@@ -1,0 +1,25 @@
+<div id="progression"
+     {% if not fini %}hx-get="{% url 'import-progression' import.pk %}" hx-trigger="every 5s [document.visibilityState === 'visible']" hx-swap="outerHTML"{% endif %}
+     class="rounded-lg border border-slate-200 bg-white p-6">
+  <p class="mb-3 text-sm font-medium">{{ import.get_etat_display }}</p>
+  {% if import.etat == "ECHOUE" %}
+    <p class="rounded bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">{{ import.erreur }} Rien n'a été importé : corrigez le fichier et déposez-le de nouveau.</p>
+  {% else %}
+    <dl class="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+      <div><dt class="text-slate-500">Lignes lues</dt><dd class="text-lg">{{ import.lignes_total }}</dd></div>
+      {% if fini %}
+        <div><dt class="text-slate-500">Importées</dt><dd class="text-lg">{{ import.lignes_acceptees }}</dd></div>
+        <div><dt class="text-slate-500">Doublons</dt><dd class="text-lg">{{ import.doublons }}</dd></div>
+      {% endif %}
+      <div><dt class="text-slate-500">Rejetées</dt><dd class="text-lg">{{ import.lignes_rejetees }}</dd></div>
+    </dl>
+    {% if not fini %}<p class="mt-3 text-xs text-slate-500">Le traitement continue si vous quittez cette page.</p>{% endif %}
+    {% if fini and import.lignes_rejetees %}
+      <p class="mt-4 text-sm">
+        {% if not import.lignes_acceptees %}Aucune ligne n'a pu être importée. Cause la plus fréquente : {{ cause }}.{% else %}Motif le plus fréquent des rejets : {{ cause }}.{% endif %}
+        <a class="underline" href="{% url 'import-rejets' import.pk %}">Télécharger le rapport des lignes rejetées</a>,
+        à corriger puis à réimporter.
+      </p>
+    {% endif %}
+  {% endif %}
+</div>

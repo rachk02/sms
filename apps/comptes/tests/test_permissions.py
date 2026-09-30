@@ -37,6 +37,12 @@ ATTENDUS = {
     "second-facteur-verifier": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "metriques": ("get", {ANONYME: 401, UTILISATEUR: 401, ADMIN: 401}),
     "rappel-jasmin": ("post", {ANONYME: 403, UTILISATEUR: 403, ADMIN: 403}),
+    "import-deposer": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
+    # Un import inexistant, ou d'un autre compte, n'existe pas pour le visiteur.
+    "import-mappage": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
+    "import-suivi": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
+    "import-progression": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
+    "import-rejets": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
 }
 
 
@@ -70,7 +76,7 @@ def _adresse(nom, membres):
         return reverse(nom, args=[membres["cible"].pk])
     if nom in ("invitation", "verification"):
         return reverse(nom, args=["jeton-invalide"])
-    if nom == "rappel-jasmin":
+    if nom == "rappel-jasmin" or nom.startswith("import-") and nom != "import-deposer":
         return reverse(nom, args=[uuid.uuid7()])
     return reverse(nom)
 

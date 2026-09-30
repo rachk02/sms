@@ -135,6 +135,11 @@ n'ouvre jamais l'accès à tout. Trois détails font que cela tient vraiment :
   du propriétaire des tables : le propriétaire échappe sinon à la politique.
 - `comptes_utilisateur` n'est pas cloisonnée : la connexion cherche un
   utilisateur par son courriel avant que le client soit connu.
+- Une réponse en flux (`StreamingHttpResponse`, export) est lue après la fin de
+  la transaction de la requête : le client posé a disparu. Le générateur pose
+  le client lui-même, dans sa propre transaction.
+- Une page anonyme qui agit pour une personne identifiée par un lien signé
+  (invitation, renvoi) pose le client de cette personne.
 
 ## Encodage des SMS
 

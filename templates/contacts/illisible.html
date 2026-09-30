@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block contenu %}
+<h1 class="mb-2 text-2xl font-semibold">Fichier illisible</h1>
+<p class="rounded bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">{{ erreur }}</p>
+<p class="mt-4 text-sm"><a class="underline" href="{% url 'import-deposer' %}">Déposer un autre fichier</a></p>
+{% endblock %}
