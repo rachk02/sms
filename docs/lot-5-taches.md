@@ -53,6 +53,16 @@ d'eux ne convient pas.
   (réglage `SMS_NUMERO_COURT`, factice jusqu'à son attribution). La politique
   de campagne se décide par réseau (`expediteurs.controle.choisir`) ; le
   compte par expéditeur du rapport de campagne vient avec le suivi (T-67).
+- **Publication par l'ordonnanceur (T-62).** L'ordonnanceur, seul actif, publie
+  les campagnes par lots de 500, quelques lots par tour. Le texte est rendu à la
+  publication avec les données du contact à cet instant et les valeurs de repli
+  figées à la confirmation. Avant chaque lot, l'expéditeur est réévalué : un
+  identifiant révoqué suit la politique de la campagne (bascule, ou attente
+  pour « refuser » et « attendre »), une approbation libère les destinataires
+  en attente. Un contact au réseau inconnu n'est ni figé ni facturé.
+- **Le coût réel ne dépasse jamais le coût annoncé.** Un message plus long que
+  prévu (contact modifié depuis la confirmation) consomme au plus ce qui reste
+  de la réservation de sa campagne ; la plateforme absorbe l'écart.
 
 ## T-55 · Modèles de message et variables
 

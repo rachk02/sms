@@ -35,6 +35,7 @@
         {% endfor %}
       </tbody>
     </table>
+    {% if apercu.inconnus %}<p class="mb-2 text-slate-600">{{ apercu.inconnus }} contact(s) au réseau inconnu ne seront pas servis : vérifiez leur numéro.</p>{% endif %}
     {% if not apercu.suffisant %}
       <p class="mt-2 rounded bg-red-50 px-3 py-2 text-red-800" role="alert">Solde insuffisant : il manque {{ apercu.manque }} FCFA. Rechargez votre compte avant de confirmer.</p>
     {% endif %}

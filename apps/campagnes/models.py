@@ -58,6 +58,9 @@ class Campagne(BaseClient):
     modele_texte = models.TextField()
     # {"listes": ["<uuid>", ...], "segment_id": "<uuid>" ou null}
     cible = models.JSONField(default=dict)
+    # Valeurs de repli des champs personnalisés, figées à la confirmation : un
+    # champ supprimé ensuite n'empêche pas la diffusion.
+    replis = models.JSONField(default=dict, blank=True)
     politique_expediteur = models.CharField(
         max_length=10, choices=Politique, default=Politique.REPLI
     )

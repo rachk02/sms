@@ -278,7 +278,7 @@ TRANSACTIONNEL, OTP, `expediteur_id`, `modele_texte`, `encodage_prevu`,
 EN_PAUSE, TERMINEE, ANNULEE, `politique_expediteur` parmi REFUSER, REPLI,
 ATTENDRE, `planifiee_pour`, `lissage_par_minute`, `destinataires_prevus`,
 `cout_estime`, `cout_reel`, `demarree_le`, `terminee_le`, `creee_par_id`, et
-`cible` en jsonb (`listes` et `segment_id`), `confirmee_le`. `expediteur_id`
+`cible` en jsonb (`listes` et `segment_id`), `confirmee_le`, `replis` en jsonb (valeurs de repli des champs personnalisés figées à la confirmation). `expediteur_id`
 nul : la campagne part sous le numéro court. `politique_expediteur` vaut REPLI
 par défaut.
 

@@ -24,7 +24,7 @@ from apps.core.audit import auditer
 from apps.core.numeros import NumeroInvalide, normaliser
 from apps.credits import services as credits
 from apps.credits.tarifs import prix_segment
-from apps.expediteurs.controle import Action, choisir
+from apps.expediteurs.controle import Action, Choix, choisir
 from apps.expediteurs.models import OPERATEURS, Expediteur
 from apps.journal.services import enregistrer_message, mettre_en_file
 from apps.telecom.numero_court import numero_court
@@ -133,14 +133,23 @@ def _libelle(campagne: Campagne) -> str:
 
 
 def _choix_par_reseau(campagne: Campagne, reseaux) -> dict:
+    """L'expéditeur retenu par réseau. Un contact dont le réseau est inconnu
+    (préfixe absent de la table) ne peut être acheminé : il n'est pas servi."""
     libelle, politique = _libelle(campagne), campagne.politique_expediteur
-    return {reseau: choisir(campagne.client_id, libelle, reseau, politique) for reseau in reseaux}
+    return {
+        reseau: choisir(campagne.client_id, libelle, reseau, politique)
+        if reseau
+        else Choix(Action.REFUSER, "")
+        for reseau in reseaux
+    }
 
 
 @dataclass(frozen=True)
 class Apercu:
     destinataires: int
     refuses: int
+    # Contacts au réseau inconnu, non servis.
+    inconnus: int
     par_reseau: dict
     # (action, expéditeur) -> nombre de destinataires
     par_expediteur: dict
@@ -174,11 +183,13 @@ def apercu(campagne: Campagne) -> Apercu:
     estimation = estimer(client, gabarit, vises.filter(condition))
     par_expediteur = Counter()
     for reseau, nombre in par_reseau.items():
-        par_expediteur[(choix[reseau].action, choix[reseau].expediteur)] += nombre
+        if reseau:
+            par_expediteur[(choix[reseau].action, choix[reseau].expediteur)] += nombre
     return Apercu(
         destinataires=estimation.destinataires,
-        refuses=sum(n for r, n in par_reseau.items() if r not in servis),
-        par_reseau=dict(par_reseau),
+        refuses=sum(n for r, n in par_reseau.items() if r and r not in servis),
+        inconnus=par_reseau.get("", 0),
+        par_reseau={r: n for r, n in par_reseau.items() if r},
         par_expediteur=dict(par_expediteur),
         estimation=estimation,
         disponible=credits.solde(client.id).disponible,
@@ -287,6 +298,7 @@ def confirmer(campagne: Campagne, *, auteur, destinataires_lus: int, cout_lu: in
     campagne.segments_prevus = vu.estimation.segments
     campagne.encodage_prevu = str(vu.estimation.encodage)
     campagne.confirmee_le = timezone.now()
+    campagne.replis = modeles.replis_declares(campagne.client)
     campagne.save()
     auditer(
         "campagnes.confirmation",

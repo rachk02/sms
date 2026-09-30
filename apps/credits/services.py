@@ -205,9 +205,18 @@ def solder_message(
     reservation = Reservation.objects.filter(client_id=compte.client_id, **filtre).first()
     if reservation is None:
         raise SansReservation(f"Aucune réservation pour {reference}.")
+    if campagne_id and soumis and reservation.etat == Reservation.Etat.REGLEE:
+        return None  # coût annoncé entièrement consommé : plus rien à facturer
     if reservation.etat != Reservation.Etat.ACTIVE:
         raise ReservationClose(f"Réservation {reservation.id} déjà close pour {reference}.")
     if soumis:
+        if campagne_id:
+            # Le coût réel d'une campagne ne dépasse jamais le coût annoncé : un
+            # message plus long que prévu (contact modifié depuis la
+            # confirmation) consomme au plus ce qui reste de la réservation.
+            montant = min(montant, reservation.montant_restant)
+            if montant == 0:
+                return None
         return regler(reservation.id, montant, reference=reference)
     if not campagne_id:
         liberer(reservation.id)

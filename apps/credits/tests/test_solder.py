@@ -127,3 +127,22 @@ def test_un_message_sans_reservation_est_signale(client):
         services.solder_message(
             client_id=client.id, message_id=uuid.uuid7(), montant=40, soumis=True
         )
+
+def test_une_campagne_ne_consomme_jamais_plus_que_sa_reservation(client):
+    """Un message plus long que prévu (contact modifié depuis la confirmation)
+    est facturé dans la limite de ce qui reste réservé : le coût réel d'une
+    campagne ne dépasse jamais le coût annoncé."""
+    campagne_id = uuid.uuid7()
+    reservation = services.reserver(client.id, 100, campagne_id=campagne_id)
+    for montant in (40, 40, 40, 40):
+        services.solder_message(
+            client_id=client.id,
+            message_id=uuid.uuid7(),
+            campagne_id=campagne_id,
+            montant=montant,
+            soumis=True,
+        )
+    reservation.refresh_from_db()
+    assert (reservation.montant_restant, reservation.etat) == (0, "REGLEE")
+    assert sum(_consommations(client).values_list("montant", flat=True)) == -100
+    assert services.solde(client.id) == services.solde_recalcule(client.id)

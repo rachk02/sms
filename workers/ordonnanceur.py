@@ -40,6 +40,7 @@ class Ordonnanceur(Worker):
         from asgiref.sync import sync_to_async
         from django.db import connections
 
+        from apps.campagnes.diffusion import publier as publier_campagnes
         from apps.core import bus
         from apps.journal.services import creer_partitions_a_venir
         from apps.telecom.sante import surveiller
@@ -72,6 +73,9 @@ class Ordonnanceur(Worker):
                         await sync_to_async(surveiller)()
                         await sync_to_async(publier_etat_liaisons)()
                         derniere_supervision = time.monotonic()
+                    # Quelques lots par campagne à chaque tour : le relais et les
+                    # autres campagnes avancent aussi.
+                    await sync_to_async(publier_campagnes)()
                     await bus.relayer(canal)
                     await self._attendre(self.periode_relais_s)
             finally:
