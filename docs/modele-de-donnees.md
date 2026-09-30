@@ -209,14 +209,25 @@ fiable. Index sur `(client_id, operateur_presume)`.
 parmi STOP_SMS, MANUEL, IMPORT, API, `message_origine` conservé tel quel,
 `ajoute_le`. Unicité sur `(client_id, numero_normalise)`.
 
-**`contacts_import`** : `id`, `client_id`, `fichier_chemin`, `nom_origine`,
-`etat` parmi DEPOSE, EN_COURS, TERMINE, ECHOUE, `lignes_total`,
-`lignes_acceptees`, `lignes_rejetees`, `doublons`, `mappage` en jsonb,
-`demarre_le`, `termine_le`. Un fichier d'import pèse au plus 200 Mo, limite
-appliquée par le serveur.
+**`contacts_import`** : `id`, `client_id`, `fichier_id` UUID simple vers
+`fichiers_fichier`, `nom_origine`, `etat` parmi DEPOSE (mappage à confirmer),
+EN_FILE, EN_COURS, TERMINE, ECHOUE, `mappage` en jsonb (entêtes, largeur,
+colonnes des champs fixes, champs personnalisés), `lignes_total`,
+`lignes_acceptees`, `lignes_rejetees`, `doublons`, `erreur`, `demarre_le`,
+`termine_le`. Un fichier d'import pèse au plus 200 Mo, limite appliquée par le
+serveur ; son type (CSV, tableur, traitement de texte) est reconnu au contenu.
+Le compte final tient toujours : acceptées plus rejetées plus doublons égale
+le nombre de lignes non vides du fichier.
 
 **`contacts_import_rejet`** : `id`, `client_id`, `import_id`, `numero_ligne`,
-`contenu_ligne`, `motif`.
+`contenu_ligne`, `motif` en clair (« numéro trop court », « colonne du numéro
+vide »...).
+
+**`contacts_import_transit`** : table de transit, `import_id`, `client_id`,
+`numero_ligne` et les champs du contact. Les lignes valides y sont écrites par
+paquets de mille, puis versées d'un seul coup dans `contacts_contact` (un
+contact par numéro, sans écraser l'existant), et la table est vidée : un import
+interrompu n'a rien intégré.
 
 ## campagnes
 
