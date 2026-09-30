@@ -6,6 +6,26 @@ Découpage provisoire, à revoir en entrant dans le lot.
 
 C'est le coeur du produit et le lot le plus long. C'est aussi celui où une erreur se facture à des milliers d'exemplaires.
 
+## Décisions prises avant d'entrer dans le lot
+
+Tranchées le 30 septembre 2026 par la direction du projet.
+
+- **Envoi de test facturé (F-20).** Rien n'est gratuit pour l'instant : un
+  envoi de test est débité du solde comme un envoi unitaire ordinaire, hors de
+  la réservation de la campagne.
+- **Récurrence sous plafond (F-22).** À chaque occurrence, le segment est
+  recalculé et figé ; l'occurrence part seule si son coût reste sous un plafond
+  confirmé à la création de la campagne, sinon elle attend une confirmation et
+  le client est prévenu.
+- **Compositeur et constructeur de segments en HTMX et Alpine.** Même pile que
+  le reste de l'interface ; le compteur de segments et l'analyse de l'encodage
+  se calculent en Alpine. L'îlot React reste possible plus tard si l'état
+  devient ingérable.
+
+Déjà tranché par l'architecture : la politique d'expéditeur par défaut est la
+bascule sur le numéro court, signalée dans le rapport de campagne ; le numéro
+court est partagé entre tous les clients, factice jusqu'à son attribution.
+
 ## T-55 · Modèles de message et variables
 
 **Produit** L'éditeur de message avec balises de personnalisation issues des champs de contact, valeur de repli obligatoire, et substitution au moment de la soumission.

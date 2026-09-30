@@ -124,3 +124,4 @@ Règles, reprises de `~/.claude/CLAUDE.md` :
 [2026-09-30 13:24:02] Suivi - Lot 4 : commit a657315 poussé, intégration continue verte. Écrans des listes, de la liste noire et des champs personnalisés écrits et testés (94 tests verts) ; suite complète de nouveau interrompue par le système faute de mémoire, écrans non commités.
 [2026-09-30 13:27:46] Instruction permanente - Faute de mémoire, la suite complète se lance au premier plan en trois parties plutôt qu'en arrière-plan.
 [2026-09-30 13:43:15] Suivi - Écrans des listes, de la liste noire et des champs personnalisés : suite complète verte en trois parties (460 tests), commit et push.
+[2026-09-30 15:44:02] Instruction permanente - Lot 5 : envoi de test facturé comme un unitaire (rien de gratuit pour l'instant), récurrence recalculée sous plafond confirmé, compositeur et segments en HTMX et Alpine.
