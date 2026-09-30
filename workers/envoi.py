@@ -50,7 +50,26 @@ class WorkerEnvoi(Worker):
         connecteur = connecteur_pour(message.operateur)
         if connecteur is None:
             raise LookupError(f"aucune liaison active pour {message.operateur}")
-        soumettre(message, self._passerelle(connecteur), source=Evenement.Source.WORKER)
+        self._solder(
+            soumettre(message, self._passerelle(connecteur), source=Evenement.Source.WORKER)
+        )
+
+    @staticmethod
+    def _solder(message) -> None:
+        """Consommation à la soumission, ou libération d'un refus. Idempotent :
+        une relivraison après une soumission déjà faite ne consomme pas deux fois."""
+        from apps.credits.services import SansReservation, solder_message
+
+        try:
+            solder_message(
+                client_id=message.client_id,
+                message_id=message.id,
+                campagne_id=message.campagne_id,
+                montant=message.cout_total,
+                soumis=message.date_soumission is not None,
+            )
+        except SansReservation:
+            journal.warning("Message %s envoyé sans réservation de crédit.", message.id)
 
     async def traiter(self, message, canal, file_origine: str) -> None:
         from asgiref.sync import sync_to_async
@@ -95,6 +114,7 @@ class WorkerEnvoi(Worker):
                 details={"code": rejet.code, "motif": rejet.motif},
                 motif_echec=f"{rejet.code} {rejet.motif}"[:100],
             )
+        WorkerEnvoi._solder(courant)
 
 
 if __name__ == "__main__":

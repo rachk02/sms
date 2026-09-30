@@ -346,3 +346,24 @@ def envoyer_unitaire(
             source=source,
         )
     return soumettre(message, passerelle)
+
+
+def mettre_en_file(message: Message, *, prioritaire: bool) -> str:
+    """Dépose le message dans la file d'envoi de son réseau, prioritaire (code,
+    transactionnel, envoi de test) ou de masse (campagne). À appeler dans la
+    transaction qui a enregistré le message : la boîte d'envoi ne le publie
+    qu'une fois cette transaction validée."""
+    from apps.core.files import TOPOLOGIE
+
+    nature = "prioritaire" if prioritaire else "masse"
+    return publier(
+        TOPOLOGIE.nom(f"envoi.{nature}.{message.operateur.lower()}"),
+        echange=TOPOLOGIE.echange,
+        client_id=message.client_id,
+        objet_id=message.id,
+        donnees={
+            "message_id": str(message.id),
+            "date_reception": message.date_reception.isoformat(),
+        },
+        cle_idempotence=f"envoi:{message.id}",
+    )

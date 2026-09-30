@@ -378,6 +378,12 @@ integer, pas forcément la somme de toutes.
 Le registre refuse toute modification et toute suppression à deux niveaux : le
 modèle Django, et un déclencheur PostgreSQL qui vaut pour tous les rôles.
 
+Une consommation par message au plus : les écritures CONSOMMATION de référence
+message:<id>` sont uniques (index partiel). Jusqu'au lot 7, le worker d'envoi
+solde chaque message après sa soumission (`credits.services.solder_message`) :
+consommation sur la réservation de la campagne ou sur celle du message, rien
+pour un refus avant le réseau ; une relivraison ne consomme pas deux fois.
+
 **`credits_reservation`** porte soit une campagne entière, soit un envoi
 unitaire. Une campagne réserve en une seule fois, à son lancement, son coût
 estimé au cas le plus long : c'est ce qui permet à deux campagnes lancées en

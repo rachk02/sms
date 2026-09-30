@@ -53,6 +53,13 @@ class Ecriture(Identifiable):
         db_table = "credits_registre"
         indexes = [models.Index(fields=["client", "cree_le"], name="registre_client_date")]
         constraints = [
+            # Un message ne consomme qu'une fois, quelle que soit la relivraison
+            # de sa soumission : la base le garantit, pas seulement le service.
+            models.UniqueConstraint(
+                fields=["reference"],
+                condition=Q(type="CONSOMMATION") & Q(reference__startswith="message:"),
+                name="registre_consommation_unique_par_message",
+            ),
             models.CheckConstraint(
                 condition=~Q(type="AJUSTEMENT") | ~Q(motif=""), name="registre_ajustement_motive"
             ),

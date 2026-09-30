@@ -30,6 +30,11 @@ class ReservationClose(Exception):
     pass
 
 
+class SansReservation(ReservationClose):
+    """Message envoyé sans réservation : l'envoi unitaire de l'API, facturé
+    avec les modèles de règlement du lot 7."""
+
+
 @dataclass(frozen=True)
 class Solde:
     acquis: int
@@ -173,6 +178,40 @@ def liberer(reservation_id) -> int:
     reservation.resolue_le = timezone.now()
     reservation.save(update_fields=["montant_restant", "etat", "resolue_le"])
     return libere
+
+
+def reference_message(message_id) -> str:
+    return f"message:{message_id}"
+
+
+@transaction.atomic
+def solder_message(
+    *, client_id, message_id, campagne_id=None, montant: int, soumis: bool
+) -> Ecriture | None:
+    """Suite comptable d'une soumission. Jusqu'au lot 7, un message consomme son
+    coût quand le réseau l'accepte (décision du 30 septembre 2026).
+
+    Soumis : écriture CONSOMMATION sur la réservation de sa campagne, ou sur la
+    sienne pour un envoi hors campagne. Refusé avant le réseau : rien n'est
+    consommé ; la réservation propre au message est libérée, celle d'une
+    campagne attend la fin de la campagne. Idempotent : une relivraison de la
+    soumission ne consomme pas deux fois, ce que la base garantit aussi.
+    """
+    compte = _compte_verrouille(client_id)
+    reference = reference_message(message_id)
+    if Ecriture.objects.filter(type=Ecriture.Type.CONSOMMATION, reference=reference).exists():
+        return None
+    filtre = {"campagne_id": campagne_id} if campagne_id else {"message_id": message_id}
+    reservation = Reservation.objects.filter(client_id=compte.client_id, **filtre).first()
+    if reservation is None:
+        raise SansReservation(f"Aucune réservation pour {reference}.")
+    if reservation.etat != Reservation.Etat.ACTIVE:
+        raise ReservationClose(f"Réservation {reservation.id} déjà close pour {reference}.")
+    if soumis:
+        return regler(reservation.id, montant, reference=reference)
+    if not campagne_id:
+        liberer(reservation.id)
+    return None
 
 
 def solde(client_id) -> Solde:

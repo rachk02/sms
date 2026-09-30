@@ -17,6 +17,12 @@ Tranchées le 30 septembre 2026 par la direction du projet.
   recalculé et figé ; l'occurrence part seule si son coût reste sous un plafond
   confirmé à la création de la campagne, sinon elle attend une confirmation et
   le client est prévenu.
+- **Règlement à la soumission jusqu'au lot 7.** Une campagne réserve son coût
+  au cas le plus long à sa confirmation ; chaque message consomme son coût
+  quand le réseau l'accepte, un message refusé avant le réseau ne coûte rien, et
+  le reliquat est libéré en fin de campagne. Un envoi de test consomme de même,
+  hors de la réservation de la campagne. Le lot 7 (T-78) ajoutera le règlement
+  à la livraison.
 - **Compositeur et constructeur de segments en HTMX et Alpine.** Même pile que
   le reste de l'interface ; le compteur de segments et l'analyse de l'encodage
   se calculent en Alpine. L'îlot React reste possible plus tard si l'état
