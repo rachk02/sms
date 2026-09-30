@@ -6,6 +6,22 @@ Découpage provisoire, à revoir en entrant dans le lot.
 
 C'est le lot où le volume apparaît pour la première fois. Deux millions de lignes dans un fichier interdisent toutes les approches naïves, et la plupart des erreurs commises ici ne se voient qu'en production.
 
+## Décisions prises avant d'entrer dans le lot
+
+Tranchées le 30 septembre 2026 par la direction du projet.
+
+- **Import partiel (F-12).** Les lignes valides sont importées ; les autres
+  sont rangées, avec leur motif, dans un rapport téléchargeable qui se
+  réimporte après correction.
+- **Un seul SMS par destinataire et par campagne (F-13).** Un numéro présent
+  dans plusieurs listes visées par une même campagne ne reçoit qu'un message,
+  facturé une fois. `journal_destinataire` le garantit déjà en base.
+- **Segment figé à la confirmation (F-15).** Recalculé à l'aperçu, figé quand
+  le client confirme : nombre et coût affichés sont ceux facturés.
+- **Liste noire globale en plus des listes par client (F-16).** Un abonné peut
+  se désinscrire de tous les expéditeurs à la fois, et EL-IMMEKA peut bloquer
+  un numéro après une réclamation.
+
 ## T-43 · Modèle de contact et normalisation à l'écriture
 
 **Produit** La table des contacts avec le numéro normalisé en colonne dédiée, l'opérateur présumé, les dix champs personnalisés en jsonb, et l'unicité garantie par contrainte de base.
