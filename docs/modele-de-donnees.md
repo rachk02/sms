@@ -363,6 +363,10 @@ Seuls les workers la voient.
 
 **`telecom_prefixe`** : `id`, `pays`, `prefixe`, `operateur`, `actif`. Chargée
 en base et modifiable sans redéploiement : le plan de numérotation évolue.
+Unicité sur `(pays, prefixe)` ; le plus long préfixe qui correspond au numéro
+national l'emporte. Le rôle applicatif la lit sans pouvoir y écrire ; elle se
+charge d'un fichier CSV tenu auprès de l'ARCEP (`manage.py charger_prefixes`,
+par le rôle du back-office). Aucun préfixe n'est écrit dans le code.
 
 **`telecom_correlation`** : `id`, `reference_smsc`, `message_id` UUID simple,
 `message_date_reception`, `connecteur_id`, `cree_le`, `expire_le`. Reprise en

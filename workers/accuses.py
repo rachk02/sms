@@ -28,9 +28,26 @@ def _enregistrer_entrant(corps: bytes) -> None:
     )
 
 
+def _confirmer_operateur(message) -> None:
+    """Un accusé livré confirme l'opérateur du contact. Traité au plus une fois :
+    le bus peut relivrer un événement."""
+    from apps.contacts.services import confirmer_operateur
+    from apps.core.evenements import traiter_une_fois
+
+    evenement = json.loads(message.body)
+    donnees = evenement["donnees"]
+    traiter_une_fois(
+        "contacts.operateurs",
+        message.message_id or evenement["cle_idempotence"],
+        lambda: confirmer_operateur(
+            evenement["client_id"], donnees["numero_normalise"], donnees["operateur"]
+        ),
+    )
+
+
 class WorkerAccuses(Worker):
     nom = "accuses"
-    files = ("accuses.entrants", "messages.entrants")
+    files = ("accuses.entrants", "messages.entrants", "contacts.operateurs")
     prefetch = 20
 
     async def traiter(self, message, canal, file_origine: str) -> None:
@@ -43,6 +60,8 @@ class WorkerAccuses(Worker):
         try:
             if file_origine == self.topologie.nom(FILE):
                 await sync_to_async(appliquer_accuse)(depuis_json(message.body))
+            elif file_origine == self.topologie.nom("contacts.operateurs"):
+                await sync_to_async(_confirmer_operateur)(message)
             else:
                 await sync_to_async(_enregistrer_entrant)(message.body)
         except Exception as erreur:

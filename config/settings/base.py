@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     "apps.conformite",
     "apps.journal",
     "apps.credits",
+    "apps.contacts",
     "apps.api",
     "apps.backoffice",
 ]

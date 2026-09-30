@@ -30,6 +30,12 @@ FILES = (
     "rebut",
 )
 
+# Files abonnées à des événements du bus (échange `evenements`) : nom de la
+# file et motif de clé de routage.
+ABONNEMENTS = {
+    "contacts.operateurs": "journal.accuse.livre",
+}
+
 # Une minute, cinq, trente, deux heures, six heures, en millisecondes.
 PALIERS_MS = (60_000, 300_000, 1_800_000, 7_200_000, 21_600_000)
 
@@ -84,6 +90,12 @@ async def declarer(canal, topologie: Topologie = TOPOLOGIE) -> None:
         file = await canal.declare_queue(topologie.nom(base), durable=True)
         if base != "rebut":
             await file.bind(echange, routing_key=topologie.nom(base))
+    evenements = await canal.declare_exchange(
+        topologie.nom("evenements"), aio_pika.ExchangeType.TOPIC, durable=True
+    )
+    for base, motif in ABONNEMENTS.items():
+        file = await canal.declare_queue(topologie.nom(base), durable=True)
+        await file.bind(evenements, routing_key=motif)
     for palier, duree_ms in enumerate(topologie.paliers_ms, start=1):
         file = await canal.declare_queue(
             topologie.file_palier(palier),

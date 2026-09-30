@@ -9,7 +9,7 @@ import aio_pika
 import pytest
 
 from apps.core import bus
-from apps.core.files import ENTETE_TENTATIVE, FILES, Topologie
+from apps.core.files import ABONNEMENTS, ENTETE_TENTATIVE, FILES, Topologie
 from workers.accuses import WorkerAccuses
 from workers.base import Worker, WorkerEnAttente
 from workers.envoi import WorkerEnvoi
@@ -138,8 +138,9 @@ def test_un_worker_en_attente_de_son_lot_ne_perd_aucun_message(signaux_restaures
 def test_chaque_point_d_entree_ecoute_ses_files():
     assert set(WorkerEnvoi.files) == {f for f in FILES if f.startswith("envoi.")}
     assert len(WorkerEnvoi.files) == 6
-    assert WorkerAccuses.files == ("accuses.entrants", "messages.entrants")
-    assert not {f for w in (WorkerEnvoi, WorkerAccuses) for f in w.files} - set(FILES)
+    assert WorkerAccuses.files == ("accuses.entrants", "messages.entrants", "contacts.operateurs")
+    connues = set(FILES) | set(ABONNEMENTS)
+    assert not {f for w in (WorkerEnvoi, WorkerAccuses) for f in w.files} - connues
 
 
 @pytest.mark.django_db(databases=["default", "worker"])

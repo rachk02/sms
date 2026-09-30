@@ -9,9 +9,11 @@ from django.utils import timezone
 from apps.comptes.services import envoi_autorise
 from apps.core.encodage import analyser
 from apps.core.etats import ETATS_TERMINAUX, Etat, transition_permise
+from apps.core.evenements import publier
 from apps.core.numeros import normaliser
 from apps.core.redis import client_redis
 from apps.telecom import correlation, sante
+from apps.telecom.models import Connecteur
 from apps.telecom.passerelles import SortSoumission, Soumission
 
 from .models import Destinataire, Evenement, Message
@@ -293,6 +295,19 @@ def appliquer_accuse(accuse) -> bool:
     if message.date_soumission:
         delai = (accuse.horodatage - message.date_soumission).total_seconds()
     positif = accuse.etat == Etat.LIVRE
+    if positif and message.connecteur_id:
+        # Les contacts sont au-dessus du journal : ils l'apprennent par le bus.
+        publier(
+            "journal.accuse.livre",
+            client_id=message.client_id,
+            objet_id=message.id,
+            donnees={
+                "numero_normalise": message.numero_normalise,
+                # L'opérateur de la route qui a livré, non celui présumé à l'envoi.
+                "operateur": Connecteur.objects.get(id=message.connecteur_id).operateur,
+            },
+            cle_idempotence=f"livre:{message.id}",
+        )
     transaction.on_commit(
         lambda: sante.enregistrer_accuse(accuse.connecteur_id, positif, delai, accuse.horodatage)
     )

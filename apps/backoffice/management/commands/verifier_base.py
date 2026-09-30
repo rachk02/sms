@@ -26,6 +26,7 @@ CLOISONNEES = (
     "comptes_piece",
     "comptes_numero_test",
     "fichiers_fichier",
+    "contacts_contact",
 )
 RESERVEES_AUX_WORKERS = (
     "telecom_connecteur",
@@ -34,6 +35,7 @@ RESERVEES_AUX_WORKERS = (
     "core_evenement_sortant",
     "core_audit",
     "comptes_connexion",
+    "telecom_prefixe",
 )
 
 

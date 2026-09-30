@@ -124,3 +124,24 @@ class MessageEntrant(Identifiable):
 
     def __str__(self):
         return f"{self.numero_expediteur} {self.recu_le:%Y-%m-%d %H:%M}"
+
+
+class Prefixe(Identifiable):
+    """Tranche de numérotation attribuée à un opérateur, sur le numéro national.
+    Tenue en base et modifiable sans redéploiement : le plan de numérotation
+    évolue. Jamais écrite dans le code."""
+
+    pays = models.CharField(max_length=2, default="BF")
+    prefixe = models.CharField(max_length=10)
+    operateur = models.CharField(max_length=20, choices=Operateur)
+    actif = models.BooleanField(default=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "telecom_prefixe"
+        constraints = [
+            models.UniqueConstraint(fields=["pays", "prefixe"], name="prefixe_unique_par_pays")
+        ]
+
+    def __str__(self):
+        return f"{self.pays} {self.prefixe} {self.operateur}"
