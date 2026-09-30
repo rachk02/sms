@@ -2,7 +2,10 @@
 
 import uuid
 
+from django.contrib.postgres.indexes import GinIndex, OpClass
 from django.db import models
+from django.db.models import F
+from django.db.models.functions import Upper
 
 from apps.core.models import BaseClient
 
@@ -38,7 +41,23 @@ class Contact(BaseClient):
             )
         ]
         indexes = [
-            models.Index(fields=["client", "operateur_presume"], name="contact_client_operateur")
+            models.Index(fields=["client", "operateur_presume"], name="contact_client_operateur"),
+            models.Index(fields=["client", "ville"], name="contact_client_ville"),
+            models.Index(fields=["client", "cree_le"], name="contact_client_entree"),
+            # Critères sur les champs personnalisés, par inclusion (@>).
+            GinIndex(fields=["champs"], name="contact_champs", opclasses=["jsonb_path_ops"]),
+            # Recherche par début de numéro et de nom (LIKE 'x%') : la collation
+            # de la base n'étant pas « C », il faut les classes de motif.
+            models.Index(
+                fields=["client", "numero_normalise"],
+                name="contact_numero_prefixe",
+                opclasses=["uuid_ops", "varchar_pattern_ops"],
+            ),
+            models.Index(
+                F("client"),
+                OpClass(Upper("nom"), name="text_pattern_ops"),
+                name="contact_nom_prefixe",
+            ),
         ]
 
     def __str__(self):
@@ -192,3 +211,79 @@ class ListeNoire(models.Model):
 
     def __str__(self):
         return self.numero_normalise
+
+
+class ChampPersonnalise(BaseClient):
+    """Champ déclaré par le client, en plus du nom, du prénom et de la ville.
+    Sa valeur de repli, obligatoire, remplace une valeur absente dans un
+    message : jamais de « Bonjour , » adressé à personne."""
+
+    class Type(models.TextChoices):
+        TEXTE = "TEXTE", "Texte"
+        NOMBRE = "NOMBRE", "Nombre"
+        DATE = "DATE", "Date"
+
+    MAXIMUM_PAR_CLIENT = 10
+
+    nom = models.SlugField(max_length=50)
+    libelle = models.CharField(max_length=100)
+    type = models.CharField(max_length=10, choices=Type, default=Type.TEXTE)
+    valeur_repli = models.CharField(max_length=200)
+
+    class Meta:
+        db_table = "contacts_champ"
+        constraints = [
+            models.UniqueConstraint(fields=["client", "nom"], name="champ_nom_unique"),
+            models.CheckConstraint(
+                condition=~models.Q(valeur_repli=""), name="champ_valeur_repli_obligatoire"
+            ),
+        ]
+
+    def __str__(self):
+        return self.libelle
+
+
+class Segment(BaseClient):
+    """Contacts définis par critères. Recalculé à l'aperçu, figé à la
+    confirmation d'une campagne (décision F-15)."""
+
+    nom = models.CharField(max_length=150)
+    # [{"champ": "ville", "operation": "egal", "valeur": "Bobo"}, ...]
+    criteres = models.JSONField(default=list)
+    nombre_estime = models.IntegerField(default=0)
+    calcule_le = models.DateTimeField(null=True, blank=True)
+    actif = models.BooleanField(default=True)
+    motif_desactivation = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        db_table = "contacts_segment"
+
+    def __str__(self):
+        return self.nom
+
+
+class Export(BaseClient):
+    """Une demande d'export de contacts, produite par le worker. Le lien signé
+    part par courriel au demandeur, dont l'adresse est gardée ici."""
+
+    class Etat(models.TextChoices):
+        EN_FILE = "EN_FILE", "En attente de traitement"
+        EN_COURS = "EN_COURS", "En cours"
+        TERMINE = "TERMINE", "Terminé"
+        ECHOUE = "ECHOUE", "Échoué"
+
+    courriel = models.EmailField()
+    # Les filtres de la recherche, tels que saisis (voir contacts.recherche.Filtres).
+    filtres = models.JSONField(default=dict)
+    etat = models.CharField(max_length=10, choices=Etat, default=Etat.EN_FILE)
+    lignes = models.IntegerField(default=0)
+    # Référence au fichier produit dans le stockage objet (module fichiers).
+    fichier_id = models.UUIDField(null=True, blank=True)
+    erreur = models.TextField(blank=True)
+    termine_le = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "contacts_export"
+
+    def __str__(self):
+        return f"Export {self.id}"

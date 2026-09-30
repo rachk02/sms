@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from apps.comptes.models import Client
 from apps.comptes.services import creer_client
-from apps.contacts import imports
+from apps.contacts import champs, imports
 from apps.contacts.models import Contact, Import, ImportRejet, ImportTransit
 from apps.contacts.services import creer_contact
 from apps.telecom.models import Prefixe
@@ -54,12 +54,21 @@ def test_l_apercu_montre_les_vingt_premieres_lignes_et_propose_un_mappage(client
     assert mappage["entetes"] is False and mappage["colonnes"] == {"numero": 0}
 
 
-def test_les_entetes_sont_reconnues_et_les_colonnes_libres_deviennent_des_champs(client):
+def test_les_entetes_sont_reconnues_et_seuls_les_champs_declares_sont_proposes(client):
     import_ = _deposer(client, FICHIER)
     mappage = imports.proposer_mappage(imports.apercu(import_))
     assert mappage["entetes"] is True
     assert mappage["colonnes"] == {"numero": 0, "nom": 1, "prenom": 2, "ville": 3}
+    assert mappage["personnalises"] == {}  # « Entreprise » n'est pas déclaré
+    mappage = imports.proposer_mappage(imports.apercu(import_), champs={"entreprise"})
     assert mappage["personnalises"] == {"entreprise": 4}
+
+
+def test_une_colonne_ne_nourrit_pas_un_champ_non_declare(client):
+    import_ = _deposer(client, FICHIER)
+    mappage = {"entetes": True, "colonnes": {"numero": 0}, "personnalises": {"entreprise": 4}}
+    with pytest.raises(imports.MappageInvalide, match="non déclarés : entreprise"):
+        imports.lancer(import_, mappage)
 
 
 def test_un_fichier_sans_entetes_se_mappe_par_position(client):
@@ -78,13 +87,14 @@ def test_aucun_import_ne_demarre_sans_mappage_confirme(client):
 
 def _importer(client, texte, **kw):
     import_ = _deposer(client, texte, **kw)
-    mappage = imports.proposer_mappage(imports.apercu(import_))
+    mappage = imports.proposer_mappage(imports.apercu(import_), champs=champs.noms_declares(client))
     imports.lancer(import_, mappage)
     return imports.traiter(import_.id)
 
 
 def test_le_compte_final_egale_le_nombre_de_lignes_du_fichier(client):
     creer_contact(client=client, numero="+22670999999", origine="SAISIE")  # déjà connu
+    champs.declarer(client=client, libelle="Entreprise", valeur_repli="votre entreprise")
     fini = _importer(client, FICHIER)
     assert fini.etat == Import.Etat.TERMINE
     assert (fini.lignes_total, fini.lignes_acceptees, fini.lignes_rejetees, fini.doublons) == (
@@ -163,11 +173,16 @@ def test_un_fichier_abime_fait_echouer_l_import_sans_rien_integrer(client):
 
 
 def test_le_mappage_d_un_import_de_meme_forme_est_repris(client):
+    code = champs.declarer(client=client, libelle="Code client", valeur_repli="inconnu")
     premier = _importer(client, "Tel;Nom;Code client\n70111111;Awa;C1\n")
     retouche = dict(premier.mappage, personnalises={"code_client": 2}, colonnes={"numero": 0})
     Import.objects.filter(id=premier.id).update(mappage=retouche, termine_le=timezone.now())
     second = _deposer(client, "Tel;Nom;Code client\n71222222;Moussa;C2\n")
     assert imports.mappage_precedent(client, imports.apercu(second)) == retouche
+    # Le champ supprimé depuis ne se propose plus.
+    champs.supprimer(code)
+    repris = imports.mappage_precedent(client, imports.apercu(second))
+    assert repris["personnalises"] == {} and repris["colonnes"] == {"numero": 0}
 
 
 def test_un_fichier_au_type_non_admis_est_refuse_a_son_contenu(client):

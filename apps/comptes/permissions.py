@@ -18,7 +18,9 @@ ADMIN, UTILISATEUR = Utilisateur.Role.ADMIN, Utilisateur.Role.UTILISATEUR
 PERMISSIONS: dict[str, frozenset[str]] = {
     "compte.consulter": frozenset({ADMIN, UTILISATEUR}),
     "membres.gerer": frozenset({ADMIN}),
+    "contacts.consulter": frozenset({ADMIN, UTILISATEUR}),
     "contacts.importer": frozenset({ADMIN, UTILISATEUR}),
+    "contacts.exporter": frozenset({ADMIN, UTILISATEUR}),
 }
 
 

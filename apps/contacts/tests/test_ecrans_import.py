@@ -5,13 +5,14 @@ sans client posé, le cloisonnement lui masquerait tout."""
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import connections
+from django.db import connections, transaction
 from django.utils import timezone
 
 from apps.comptes.models import Client, Utilisateur
 from apps.comptes.services import creer_client, creer_utilisateur
-from apps.contacts import imports
+from apps.contacts import champs, imports
 from apps.contacts.models import Contact, Import
+from apps.core.cloisonnement import poser_client
 
 pytestmark = pytest.mark.django_db(transaction=True, databases=["default", "worker"])
 
@@ -45,6 +46,9 @@ def _traiter_comme_le_worker(import_id):
 
 
 def test_du_depot_au_rapport_par_le_portail(client, membre):
+    with transaction.atomic():
+        poser_client(membre.client_id)
+        champs.declarer(client=membre.client, libelle="Code client", valeur_repli="inconnu")
     client.force_login(membre)
     fichier = SimpleUploadedFile("contacts.csv", FICHIER.encode(), "text/csv")
     reponse = client.post("/contacts/import", {"fichier": fichier})
@@ -53,10 +57,16 @@ def test_du_depot_au_rapport_par_le_portail(client, membre):
 
     page = client.get(reponse["Location"]).content.decode()
     assert "Awa" in page and 'value="numero" selected' in page and "checked" in page
+    assert 'value="champ:code_client" selected' in page  # le champ déclaré, reconnu à l'entête
 
     reponse = client.post(
         f"/contacts/import/{import_.pk}/mappage",
-        {"entetes": "oui", "colonne_0": "numero", "colonne_1": "nom", "colonne_2": "personnalise"},
+        {
+            "entetes": "oui",
+            "colonne_0": "numero",
+            "colonne_1": "nom",
+            "colonne_2": "champ:code_client",
+        },
     )
     assert reponse["Location"] == f"/contacts/import/{import_.pk}"
     en_file = client.get(f"/contacts/import/{import_.pk}/fragments/progression").content.decode()

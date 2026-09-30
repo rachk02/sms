@@ -1,0 +1,18 @@
+{% for contact in contacts %}
+  <tr class="border-t border-slate-200{% if not contact.actif %} text-slate-400{% endif %}">
+    <td class="px-3 py-2 font-mono">{{ contact.numero_normalise }}</td>
+    <td class="px-3 py-2">{{ contact.nom }} {{ contact.prenom }}</td>
+    <td class="px-3 py-2">{{ contact.ville }}</td>
+    <td class="px-3 py-2">{{ contact.operateur_confirme|default:contact.operateur_presume|title }}</td>
+    <td class="px-3 py-2">{{ contact.cree_le|date:"d/m/Y" }}</td>
+  </tr>
+{% endfor %}
+{% if suivante %}
+  <tr id="suite">
+    <td colspan="5" class="px-3 py-2 text-center">
+      <a class="underline" href="{% url 'contacts-repertoire' %}?{% if requete %}{{ requete }}&amp;{% endif %}apres={{ suivante }}"
+         hx-get="{% url 'contacts-resultats' %}?{% if requete %}{{ requete }}&amp;{% endif %}apres={{ suivante }}"
+         hx-target="#suite" hx-swap="outerHTML">Afficher la suite</a>
+    </td>
+  </tr>
+{% endif %}

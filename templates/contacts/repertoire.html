@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block contenu %}
+<div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+  <h1 class="text-2xl font-semibold">Contacts</h1>
+  <a class="rounded bg-slate-900 px-4 py-2 text-sm text-white" href="{% url 'import-deposer' %}">Importer des contacts</a>
+</div>
+<form method="get" action="{% url 'contacts-repertoire' %}"
+      hx-get="{% url 'contacts-resultats' %}" hx-target="#resultats" hx-swap="outerHTML" hx-push-url="{% url 'contacts-repertoire' %}"
+      hx-trigger="submit, input changed delay:400ms from:input[type=search], change from:select, change from:input[type=date]"
+      class="mb-4 grid grid-cols-1 gap-2 text-sm sm:grid-cols-3 lg:grid-cols-6">
+  <label class="flex flex-col">Numéro<input type="search" name="numero" value="{{ filtres.numero }}" inputmode="tel" placeholder="70 12..." class="rounded border border-slate-300 px-2 py-1"></label>
+  <label class="flex flex-col">Nom<input type="search" name="nom" value="{{ filtres.nom }}" placeholder="Début du nom" class="rounded border border-slate-300 px-2 py-1"></label>
+  <label class="flex flex-col">Liste
+    <select name="liste" class="rounded border border-slate-300 px-2 py-1">
+      <option value="">Toutes</option>
+      {% for liste in listes %}<option value="{{ liste.id }}"{% if filtres.liste_id == liste.id|stringformat:"s" %} selected{% endif %}>{{ liste.nom }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="flex flex-col">Opérateur
+    <select name="operateur" class="rounded border border-slate-300 px-2 py-1">
+      <option value="">Tous</option>
+      {% for operateur in operateurs %}<option value="{{ operateur }}"{% if filtres.operateur == operateur %} selected{% endif %}>{{ operateur|title }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="flex flex-col">Entré depuis<input type="date" name="depuis" value="{{ filtres.depuis }}" class="rounded border border-slate-300 px-2 py-1"></label>
+  <label class="flex flex-col">Entré avant<input type="date" name="jusqu_au" value="{{ filtres.jusqu_au }}" class="rounded border border-slate-300 px-2 py-1"></label>
+  <noscript><button type="submit" class="rounded border border-slate-300 px-3 py-1">Rechercher</button></noscript>
+</form>
+{% include "contacts/_resultats.html" %}
+{% endblock %}

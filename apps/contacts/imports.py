@@ -27,6 +27,7 @@ from apps.fichiers.models import Fichier
 from apps.telecom.prefixes import classer, table
 
 from . import listes
+from .champs import nom_de, noms_declares
 from .lecture import FichierIllisible, lecteur_pour
 from .models import Import, ImportRejet, ImportTransit, Liste
 
@@ -91,7 +92,9 @@ def apercu(import_) -> list[list[str]]:
     return [valeurs for _, valeurs in islice(_lignes(import_), LIGNES_APERCU)]
 
 
-def proposer_mappage(lignes: list[list[str]], precedent: dict | None = None) -> dict:
+def proposer_mappage(
+    lignes: list[list[str]], precedent: dict | None = None, champs: set[str] = frozenset()
+) -> dict:
     """Propose un mappage : par les entêtes s'il y en a, sinon par position, la
     colonne du numéro étant celle dont les valeurs se lisent le plus comme des
     numéros. Un mappage précédent de même forme est repris tel quel."""
@@ -111,8 +114,9 @@ def proposer_mappage(lignes: list[list[str]], precedent: dict | None = None) -> 
             fixe = next((c for c, noms in SYNONYMES.items() if cle in noms), None)
             if fixe and fixe not in colonnes:
                 colonnes[fixe] = rang
-            elif cle and len(personnalises) < MAX_CHAMPS_PERSONNALISES:
-                personnalises[cle.replace(" ", "_")] = rang
+            elif nom_de(cle) in champs:
+                # Seuls les champs déclarés par le client reçoivent une colonne.
+                personnalises[nom_de(cle)] = rang
     if "numero" not in colonnes:
         donnees = lignes[1:] if entetes else lignes
         scores = Counter(
@@ -130,8 +134,13 @@ def proposer_mappage(lignes: list[list[str]], precedent: dict | None = None) -> 
     }
 
 
-def _verifier_mappage(mappage: dict) -> dict:
+def _verifier_mappage(mappage: dict, champs: set[str]) -> dict:
     colonnes = mappage.get("colonnes") or {}
+    non_declares = set(mappage.get("personnalises") or {}) - champs
+    if non_declares:
+        raise MappageInvalide(
+            f"Champs personnalisés non déclarés : {', '.join(sorted(non_declares))}."
+        )
     if "numero" not in colonnes:
         raise MappageInvalide("Indiquez la colonne qui porte le numéro de téléphone.")
     inconnus = set(colonnes) - set(CHAMPS_FIXES)
@@ -145,7 +154,8 @@ def _verifier_mappage(mappage: dict) -> dict:
 def mappage_precedent(client, lignes: list[list[str]]) -> dict | None:
     """Le mappage du dernier import terminé du client dont le fichier avait la
     même forme (même largeur, mêmes entêtes) : proposé par défaut."""
-    propose = proposer_mappage(lignes)
+    champs = noms_declares(client)
+    propose = proposer_mappage(lignes, champs=champs)
     for ancien in Import.objects.filter(client=client, etat=Import.Etat.TERMINE).order_by(
         "-termine_le"
     )[:20]:
@@ -154,7 +164,11 @@ def mappage_precedent(client, lignes: list[list[str]]) -> dict | None:
             mappage.get("largeur") == propose["largeur"]
             and mappage.get("entete") == propose["entete"]
         ):
-            return mappage
+            # Un champ supprimé depuis ne se propose plus.
+            personnalises = mappage.get("personnalises") or {}
+            return mappage | {
+                "personnalises": {n: r for n, r in personnalises.items() if n in champs}
+            }
     return None
 
 
@@ -168,7 +182,7 @@ def lancer(import_, mappage: dict) -> Import:
     liste_id = mappage.get("liste_id")
     if liste_id and not Liste.objects.filter(id=liste_id, client_id=import_.client_id).exists():
         raise MappageInvalide("Liste introuvable pour ce compte.")
-    import_.mappage = _verifier_mappage(mappage)
+    import_.mappage = _verifier_mappage(mappage, noms_declares(import_.client))
     import_.etat = Import.Etat.EN_FILE
     import_.save(update_fields=["mappage", "etat", "modifie_le"])
     publier(

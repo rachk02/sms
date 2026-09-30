@@ -194,7 +194,11 @@ champs personnalisés, `origine` parmi IMPORT, API, SAISIE, `consentement_le`,
 
 Unicité sur `(client_id, numero_normalise)`, garantie par la base et non par
 l'application : sur deux imports simultanés, la contrainte est le seul garde-fou
-fiable. Index sur `(client_id, operateur_presume)`.
+fiable. Index sur `(client_id, operateur_presume)`, `(client_id, ville)`,
+`(client_id, cree_le)` (pagination par curseur sur `(cree_le, id)`), et, pour la
+recherche par début de numéro et de nom, `(client_id, numero_normalise)` et
+`(client_id, upper(nom))` en classes d'opérateurs de motif : la collation de la
+base n'est pas « C », et aucune recherche n'emploie de motif ouvert à gauche.
 
 **`contacts_liste`** : `id`, `client_id`, `nom`, `description`,
 `nombre_contacts` en compteur dénormalisé.
@@ -202,8 +206,23 @@ fiable. Index sur `(client_id, operateur_presume)`.
 **`contacts_liste_contact`** : table de liaison, `client_id`, `liste_id`,
 `contact_id`, `ajoute_le`. Unicité sur le couple.
 
-**`contacts_segment`** : `id`, `client_id`, `nom`, `criteres` en jsonb,
-`nombre_estime`, `calcule_le`.
+**`contacts_champ`** : `id`, `client_id`, `nom` technique, `libelle`, `type`
+parmi TEXTE, NOMBRE, DATE, `valeur_repli` non vide (contrainte de la base).
+Dix champs au plus par client ; un champ ne prend pas le nom d'une donnée fixe
+du contact ou d'un critère de segment. Le nom se calcule du libellé comme d'un
+entête de colonne, si bien que l'entête « Référence client » d'un fichier
+retrouve le champ du même libellé. Une colonne d'import ne nourrit qu'un champ
+déclaré. Supprimer un champ laisse les valeurs sur les contacts et désactive,
+avec un message, les segments qui s'en servaient.
+
+**`contacts_segment`** : `id`, `client_id`, `nom`, `criteres` en jsonb (liste
+de `{champ, operation, valeur}` : opérateur, ville, date d'entrée, liste,
+champ personnalisé), `nombre_estime`, `calcule_le`, `actif`,
+`motif_desactivation`. L'estimation compte les contacts actifs hors liste
+noire, ce que la diffusion enverra ; un segment vide est refusé à sa création.
+Les contacts d'un segment sont figés à la confirmation de la campagne. Le
+filtre par client y est explicite, la confirmation passant par un rôle qui
+ignore le cloisonnement. Index GIN (`jsonb_path_ops`) sur `champs`.
 
 **`contacts_liste_noire`** : `id`, `client_id` (nul pour la liste noire de la
 plateforme, qui vaut pour tous les expéditeurs), `numero_normalise`, `origine`
@@ -223,6 +242,13 @@ colonnes des champs fixes, champs personnalisés), `lignes_total`,
 serveur ; son type (CSV, tableur, traitement de texte) est reconnu au contenu.
 Le compte final tient toujours : acceptées plus rejetées plus doublons égale
 le nombre de lignes non vides du fichier.
+
+**`contacts_export`** : `id`, `client_id`, `courriel` du demandeur, `filtres`
+en jsonb (ceux de la recherche), `etat` parmi EN_FILE, EN_COURS, TERMINE,
+ECHOUE, `lignes`, `fichier_id` UUID simple vers `fichiers_fichier` (famille
+EXPORT), `erreur`, `termine_le`. Produit par le worker d'import, sur la file
+`import.contacts` ; le lien signé, valable sept jours, part par courriel. La
+demande est tracée au journal d'audit.
 
 **`contacts_import_rejet`** : `id`, `client_id`, `import_id`, `numero_ligne`,
 `contenu_ligne`, `motif` en clair (« numéro trop court », « colonne du numéro

@@ -10,17 +10,23 @@ from apps.core.cloisonnement import poser_client
 from apps.fichiers.services import FichierRefuse
 
 from . import imports
+from .champs import noms_declares
 from .lecture import FichierIllisible
-from .models import Import
+from .models import ChampPersonnalise, Import
 
-CHOIX_COLONNE = (
+CHOIX_FIXES = (
     ("", "Ignorer"),
     ("numero", "Numéro de téléphone"),
     ("nom", "Nom"),
     ("prenom", "Prénom"),
     ("ville", "Ville"),
-    ("personnalise", "Champ personnalisé"),
 )
+
+
+def _choix_colonne(client):
+    """Les champs fixes, puis les champs personnalisés déclarés par le client."""
+    declares = ChampPersonnalise.objects.filter(client=client).order_by("libelle")
+    return CHOIX_FIXES + tuple((f"champ:{c.nom}", f"Champ : {c.libelle}") for c in declares)
 
 
 def _import(request, pk) -> Import:
@@ -54,9 +60,8 @@ def _mappage_saisi(request, lignes: list[list[str]], largeur: int) -> dict:
     colonnes, personnalises = {}, {}
     for rang in range(largeur):
         choix = request.POST.get(f"colonne_{rang}", "")
-        if choix == "personnalise":
-            nom = (entete[rang] if rang < len(entete) else "") or f"colonne {rang + 1}"
-            personnalises[nom.replace(" ", "_")] = rang
+        if choix.startswith("champ:"):
+            personnalises[choix.removeprefix("champ:")] = rang
         elif choix:
             colonnes[choix] = rang
     return {
@@ -69,7 +74,9 @@ def _mappage_saisi(request, lignes: list[list[str]], largeur: int) -> dict:
 
 
 def _mappage_propose(client, lignes) -> dict:
-    return imports.mappage_precedent(client, lignes) or imports.proposer_mappage(lignes)
+    return imports.mappage_precedent(client, lignes) or imports.proposer_mappage(
+        lignes, champs=noms_declares(client)
+    )
 
 
 @permission_requise("contacts.importer")
@@ -92,14 +99,14 @@ def mappage(request, pk):
             messages.success(request, "Import lancé : vous pouvez quitter cette page.")
             return redirect("import-suivi", import_.pk)
     par_rang = {rang: champ for champ, rang in propose["colonnes"].items()}
-    par_rang |= {rang: "personnalise" for rang in propose["personnalises"].values()}
+    par_rang |= {rang: f"champ:{nom}" for nom, rang in propose["personnalises"].items()}
     contexte = {
         "import": import_,
         "lignes": lignes,
         "colonnes": [
             {"rang": rang, "choix": par_rang.get(rang, "")} for rang in range(propose["largeur"])
         ],
-        "choix": CHOIX_COLONNE,
+        "choix": _choix_colonne(request.user.client),
         "entetes": propose["entetes"],
         "erreur": erreur,
     }

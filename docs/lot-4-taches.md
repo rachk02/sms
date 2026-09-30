@@ -22,6 +22,28 @@ Tranchées le 30 septembre 2026 par la direction du projet.
   se désinscrire de tous les expéditeurs à la fois, et EL-IMMEKA peut bloquer
   un numéro après une réclamation.
 
+## Choix faits en cours de lot
+
+Choix d'exécution, sans décision de la direction à attendre ; à revoir si l'un
+d'eux ne convient pas.
+
+- **Champs personnalisés déclarés d'abord (T-52).** Une colonne de fichier ne
+  nourrit qu'un champ déclaré, avec sa valeur de repli : l'import ne crée plus
+  de champ à partir des entêtes. Un champ ne prend pas le nom d'une donnée fixe
+  du contact (numéro, nom, prénom, ville) ni d'un critère de segment.
+- **Critères de segment sur un champ personnalisé : l'égalité seule.** Les
+  valeurs importées sont des textes ; les comparaisons de nombres et de dates
+  sur ces champs viendront avec le constructeur de segments, s'il les demande.
+- **L'export passe par la file `import.contacts`.** L'architecture compte
+  douze files et aucune pour les exports ; le worker d'import traite les deux
+  tâches longues du répertoire, une à la fois. Lien signé valable sept jours,
+  demande tracée au journal d'audit, ouverte aux deux rôles.
+- **Recherche par début de nom sensible aux accents.** « oue » ne trouve pas
+  « Ouédraogo ». Une recherche qui les ignore demande l'extension `unaccent`
+  et un index dédié ; à faire si l'usage le réclame.
+- **Suppression des exports au bout de sept jours : pas encore faite.** Elle
+  relève du cycle de vie des fichiers (module fichiers) et viendra avec lui.
+
 ## T-43 · Modèle de contact et normalisation à l'écriture
 
 **Produit** La table des contacts avec le numéro normalisé en colonne dédiée, l'opérateur présumé, les dix champs personnalisés en jsonb, et l'unicité garantie par contrainte de base.
@@ -93,3 +115,25 @@ Tranchées le 30 septembre 2026 par la direction du projet.
 **Produit** Un import réel de deux cent mille lignes mélangeant les trois opérateurs, avec doublons, numéros invalides et champs personnalisés, suivi d'une segmentation et d'un export.
 
 **Critères** L'import se termine sans dépassement mémoire, le rapport de rejets est exploitable, la répartition par opérateur correspond à la table des préfixes, et un segment construit sur ce jeu revient en moins de deux secondes.
+
+## Bilan du lot, 30 septembre 2026
+
+Les douze tâches sont faites côté services, testées ; trois écrans restent à
+faire (voir plus bas). Le point de contrôle (T-54) est un test
+automatique, `apps/contacts/tests/test_point_de_controle.py` : un fichier de
+deux cent mille lignes (trois opérateurs, doublons, numéros invalides, deux
+champs personnalisés) passe par le vrai stockage objet et le service d'import,
+puis sert à une segmentation et à un export. Mesures sur le poste de
+développement : import en 137 secondes sous traçage mémoire, pic de 2,9 Mio ;
+segment de 16 496 contacts calculé en 0,06 seconde.
+
+Écarts par rapport au découpage d'origine :
+
+- T-52 : les champs personnalisés se déclarent avant l'import ; l'import n'en
+  crée plus à partir des entêtes (voir les choix faits en cours de lot).
+- T-50 : le constructeur de segments est un service ; son écran, candidat à un
+  îlot React selon la charte, vient avec le compositeur de campagne (lot 5).
+- T-53 : l'export passe par la file `import.contacts` ; la suppression des
+  exports au bout de sept jours reste à faire avec le cycle de vie des fichiers.
+- Les écrans des listes, de la liste noire et des champs personnalisés ne sont
+  pas encore faits : les services et leurs tests le sont.

@@ -26,13 +26,16 @@ CLOISONNEES = (
     "comptes_piece",
     "comptes_numero_test",
     "fichiers_fichier",
+    "contacts_champ",
     "contacts_contact",
+    "contacts_export",
     "contacts_import",
     "contacts_import_rejet",
     "contacts_import_transit",
     "contacts_liste",
     "contacts_liste_contact",
     "contacts_liste_noire",
+    "contacts_segment",
 )
 RESERVEES_AUX_WORKERS = (
     "telecom_connecteur",

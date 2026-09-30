@@ -1,0 +1,35 @@
+<section id="resultats">
+  {% if erreur %}
+    <p class="rounded bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">{{ erreur }}</p>
+  {% else %}
+    <div class="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+      {% if au_dela %}
+        <p class="text-slate-600">Plus de {{ seuil }} contacts répondent : affinez la recherche, ou exportez-les.</p>
+      {% else %}
+        <p class="text-slate-600">{% if contacts %}Du plus récent au plus ancien.{% else %}Aucun contact ne répond à cette recherche.{% endif %}</p>
+      {% endif %}
+      {% if contacts %}
+        <form method="post" action="{% url 'contacts-exporter' %}">
+          {% csrf_token %}
+          <input type="hidden" name="numero" value="{{ filtres.numero }}">
+          <input type="hidden" name="nom" value="{{ filtres.nom }}">
+          <input type="hidden" name="liste" value="{{ filtres.liste_id }}">
+          <input type="hidden" name="operateur" value="{{ filtres.operateur }}">
+          <input type="hidden" name="depuis" value="{{ filtres.depuis }}">
+          <input type="hidden" name="jusqu_au" value="{{ filtres.jusqu_au }}">
+          <button type="submit" class="rounded border border-slate-300 px-3 py-1">Exporter ces contacts</button>
+        </form>
+      {% endif %}
+    </div>
+    {% if contacts %}
+      <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-slate-50 text-slate-600">
+            <tr><th class="px-3 py-2">Numéro</th><th class="px-3 py-2">Nom</th><th class="px-3 py-2">Ville</th><th class="px-3 py-2">Opérateur</th><th class="px-3 py-2">Entré le</th></tr>
+          </thead>
+          <tbody>{% include "contacts/_lignes.html" %}</tbody>
+        </table>
+      </div>
+    {% endif %}
+  {% endif %}
+</section>

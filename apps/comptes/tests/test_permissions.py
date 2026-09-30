@@ -37,6 +37,9 @@ ATTENDUS = {
     "second-facteur-verifier": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "metriques": ("get", {ANONYME: 401, UTILISATEUR: 401, ADMIN: 401}),
     "rappel-jasmin": ("post", {ANONYME: 403, UTILISATEUR: 403, ADMIN: 403}),
+    "contacts-repertoire": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
+    "contacts-resultats": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
+    "contacts-exporter": ("post", {ANONYME: CONNEXION, UTILISATEUR: 302, ADMIN: 302}),
     "import-deposer": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     # Un import inexistant, ou d'un autre compte, n'existe pas pour le visiteur.
     "import-mappage": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),

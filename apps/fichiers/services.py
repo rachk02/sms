@@ -78,6 +78,7 @@ MO = 1024 * 1024
 REGLES = {
     Fichier.Famille.PIECE: ((PDF, JPEG, PNG), 5 * MO, True),
     Fichier.Famille.IMPORT: ((XLSX, DOCX, CSV), 200 * MO, False),
+    Fichier.Famille.EXPORT: ((CSV,), 200 * MO, False),
 }
 
 
