@@ -27,6 +27,11 @@ CLOISONNEES = (
     "comptes_numero_test",
     "fichiers_fichier",
     "contacts_contact",
+    "contacts_import",
+    "contacts_import_rejet",
+    "contacts_import_transit",
+    "contacts_liste",
+    "contacts_liste_contact",
 )
 RESERVEES_AUX_WORKERS = (
     "telecom_connecteur",

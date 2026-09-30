@@ -26,8 +26,9 @@ from apps.fichiers import services as fichiers
 from apps.fichiers.models import Fichier
 from apps.telecom.prefixes import classer, table
 
+from . import listes
 from .lecture import FichierIllisible, lecteur_pour
-from .models import Import, ImportRejet, ImportTransit
+from .models import Import, ImportRejet, ImportTransit, Liste
 
 PAQUET = 1000
 LIGNES_APERCU = 20
@@ -164,6 +165,9 @@ def lancer(import_, mappage: dict) -> Import:
     import_ = Import.objects.select_for_update().get(id=import_.id)
     if import_.etat != Import.Etat.DEPOSE:
         raise MappageInvalide("Cet import est déjà lancé.")
+    liste_id = mappage.get("liste_id")
+    if liste_id and not Liste.objects.filter(id=liste_id, client_id=import_.client_id).exists():
+        raise MappageInvalide("Liste introuvable pour ce compte.")
     import_.mappage = _verifier_mappage(mappage)
     import_.etat = Import.Etat.EN_FILE
     import_.save(update_fields=["mappage", "etat", "modifie_le"])
@@ -302,6 +306,9 @@ def traiter(import_id) -> Import:
         with connection.cursor() as curseur:
             curseur.execute(FUSION, [str(import_.id)])
             acceptees = curseur.rowcount
+        if mappage.get("liste_id"):
+            # Ajout en masse : tous les numéros du fichier, nouveaux ou déjà connus.
+            listes.ajouter_depuis_import(mappage["liste_id"], import_.id, import_.client_id)
         ImportTransit.objects.filter(import_lie=import_).delete()
         Import.objects.filter(id=import_.id).update(
             etat=Import.Etat.TERMINE,

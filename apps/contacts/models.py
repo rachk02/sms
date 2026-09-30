@@ -122,3 +122,34 @@ class ImportTransit(models.Model):
 
     def __str__(self):
         return f"ligne {self.numero_ligne} : {self.numero_normalise}"
+
+
+class Liste(BaseClient):
+    nom = models.CharField(max_length=150)
+    description = models.TextField(blank=True)
+    # Compteur dénormalisé, tenu dans la transaction de chaque ajout ou retrait :
+    # l'affichage d'une liste ne compte jamais ses membres à la volée.
+    nombre_contacts = models.IntegerField(default=0)
+
+    class Meta:
+        db_table = "contacts_liste"
+        constraints = [models.UniqueConstraint(fields=["client", "nom"], name="liste_nom_unique")]
+
+    def __str__(self):
+        return self.nom
+
+
+class ListeContact(models.Model):
+    pk = models.CompositePrimaryKey("liste_id", "contact_id")
+    liste = models.ForeignKey(Liste, on_delete=models.CASCADE, related_name="+")
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="+")
+    client = models.ForeignKey(
+        "comptes.Client", on_delete=models.PROTECT, related_name="+", db_index=False
+    )
+    ajoute_le = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "contacts_liste_contact"
+
+    def __str__(self):
+        return f"{self.liste_id} {self.contact_id}"
