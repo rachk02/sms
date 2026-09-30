@@ -72,3 +72,40 @@ def en_tant_que_backoffice(transactional_db, settings):
     settings.ESPACE = "client"
     importlib.reload(config.urls)
     clear_url_caches()
+
+
+@pytest.fixture
+def espaces(transactional_db, settings):
+    """Passer d'un espace à l'autre dans un même test : « client » (portail,
+    rôle applicatif) ou « backoffice » (administration, rôle du back-office).
+    Rend une fonction qui bascule l'espace, ses routes et le rôle de `default`."""
+    import importlib
+
+    from django.urls import clear_url_caches
+
+    import config.urls
+
+    reglages = connections["default"].settings_dict
+    origine = reglages["USER"], reglages["PASSWORD"]
+    roles = {
+        "client": origine,
+        "backoffice": (
+            connections["backoffice"].settings_dict["USER"],
+            connections["backoffice"].settings_dict["PASSWORD"],
+        ),
+        # Pas un espace servi : le rôle d'un worker, avec les routes du portail.
+        "worker": (
+            connections["worker"].settings_dict["USER"],
+            connections["worker"].settings_dict["PASSWORD"],
+        ),
+    }
+
+    def basculer(espace):
+        connections["default"].close()
+        reglages["USER"], reglages["PASSWORD"] = roles[espace]
+        settings.ESPACE = "backoffice" if espace == "backoffice" else "client"
+        importlib.reload(config.urls)
+        clear_url_caches()
+
+    yield basculer
+    basculer("client")

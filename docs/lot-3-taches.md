@@ -101,3 +101,24 @@ Tranchées le 29 septembre 2026 par la direction du projet.
 **Produit** Un parcours complet joué de bout en bout : inscription, vérification, dépôt du dossier, revue par un agent, approbation, premier envoi réel sous palier vérifié.
 
 **Critères** Le parcours s'effectue entièrement par l'interface, sans commande. Un second parcours avec rejet du dossier aboutit à un compte resté en bac à sable et à un client informé du motif. Les deux parcours laissent une trace complète au journal d'audit.
+
+## Bilan du lot, 30 septembre 2026
+
+Les douze tâches sont faites, avec les décisions de lancement ci-dessus. Le
+point de contrôle (T-42) est un test automatique qui joue les deux parcours par
+les écrans, chacun dans l'espace et sous le rôle PostgreSQL qui le servent :
+`tests/test_point_de_controle_lot3.py`.
+
+Écarts par rapport au découpage d'origine :
+
+- T-31 et T-37 : enregistrement par un agent au back-office au lieu d'une
+  inscription libre et d'un parcours en quatre étapes (décision F-11).
+- T-32 et T-36 : l'invitation vérifie l'adresse en même temps qu'elle crée
+  l'accès ; la vérification seule (vingt-quatre heures) sert au renvoi et
+  servira au changement d'adresse.
+- T-42 : le premier envoi passe par le service d'envoi, l'écran d'envoi
+  arrivant au lot 5.
+- Courriels : envoyés par le moteur de courriel de Django après validation de
+  la transaction ; la file `courriels.sortants`, le prestataire et le journal
+  des envois viennent avec le module notifications.
+- Le journal d'audit est passé de `conformite` à `core`.
