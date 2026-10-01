@@ -128,6 +128,7 @@ def test_un_message_sans_reservation_est_signale(client):
             client_id=client.id, message_id=uuid.uuid7(), montant=40, soumis=True
         )
 
+
 def test_une_campagne_ne_consomme_jamais_plus_que_sa_reservation(client):
     """Un message plus long que prévu (contact modifié depuis la confirmation)
     est facturé dans la limite de ce qui reste réservé : le coût réel d'une

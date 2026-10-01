@@ -60,6 +60,12 @@ d'eux ne convient pas.
   identifiant révoqué suit la politique de la campagne (bascule, ou attente
   pour « refuser » et « attendre »), une approbation libère les destinataires
   en attente. Un contact au réseau inconnu n'est ni figé ni facturé.
+- **Débit par connecteur, partagé par tous les workers (T-63).** Créneaux
+  espacés en Redis (horloge de Redis), retenus et attendus juste avant l'appel
+  à la passerelle ; marge de sécurité de 3 % sous le débit accordé. Groupes de
+  workers par variables d'environnement : `SMS_FILES_ENVOI` (files prioritaires
+  d'un côté, files de masse d'un réseau de l'autre) et `SMS_PREFETCH_ENVOI`,
+  aligné sur le débit de l'opérateur.
 - **Le coût réel ne dépasse jamais le coût annoncé.** Un message plus long que
   prévu (contact modifié depuis la confirmation) consomme au plus ce qui reste
   de la réservation de sa campagne ; la plateforme absorbe l'écart.
