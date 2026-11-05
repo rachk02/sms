@@ -191,6 +191,7 @@ def test_un_envoi_transactionnel_passe_devant_une_campagne_de_quarante_mille(cli
         async with connexion:
             canal = await connexion.channel(publisher_confirms=False)
             echange = await canal.get_exchange(topologie.echange)
+            debut_publication = time.monotonic()
             for identifiant, date_reception in arriere:
                 corps = json.dumps(
                     {"message_id": str(identifiant), "date_reception": date_reception.isoformat()}
@@ -214,13 +215,14 @@ def test_un_envoi_transactionnel_passe_devant_une_campagne_de_quarante_mille(cli
                 topologie.nom("envoi.masse.orange"), passive=True
             )
             restant = file_masse.declaration_result.message_count
+            ecoule = time.monotonic() - debut_publication
         masse.arret.set()
         prioritaire.arret.set()
         await asyncio.wait_for(asyncio.gather(*taches), 15)
-        return depart, restant
+        return depart, restant, ecoule
 
     try:
-        depart, restant = asyncio.run(scenario())
+        depart, restant, ecoule = asyncio.run(scenario())
     finally:
         asyncio.run(_nettoyer(topologie))
     assert code.date_soumission is not None, "le code n'est pas parti"
@@ -228,5 +230,8 @@ def test_un_envoi_transactionnel_passe_devant_une_campagne_de_quarante_mille(cli
     delai_masse = restant / connecteur.debit_max  # attente du dernier message de la campagne
     print(f"code soumis en {delai_code:.2f} s ; {restant} messages de campagne encore en file")
     assert delai_code < 2.0
-    assert restant > QUARANTE_MILLE - 200
+    # La campagne ne s'écoule qu'au débit du connecteur, depuis le début de sa
+    # publication (qui dure plus ou moins selon le poste), plus ce que les
+    # workers tiennent en cours.
+    assert QUARANTE_MILLE - restant <= connecteur.debit_max * ecoule + 2 * masse.prefetch + 10
     assert delai_masse > 1_000 * delai_code
