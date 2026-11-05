@@ -35,6 +35,20 @@ désinscription l'emportant sur le chiffre d'affaires. Le webhook du client
 (T-71) se limite pour l'instant à la publication d'un événement : les webhooks
 sortants arrivent au lot 9 (T-111).
 
+## Choix faits en cours de lot
+
+- **Reconnaissance stricte du mot-clé (T-69).** Le texte reçu est ramené en
+  majuscules, sans accent, chaque signe remplacé par une espace. Il est reconnu
+  s'il n'est que le mot-clé, au plus entouré de formules de politesse (svp,
+  stp, merci, s'il vous plaît, s'il te plaît), ou s'il donne le mot-clé une
+  fois ses espaces retirées (« S T O P »). Un mot-clé pris dans une phrase
+  n'est pas reconnu. Les mots-clés vivent dans `telecom_mot_cle`, relue à
+  chaque message entrant ; la plateforme y sème STOP, ARRET et ARRETER. Les
+  formules de politesse sont une donnée de la langue et restent dans le code.
+- **Reconnaissance à l'enregistrement (T-69).** Le mot-clé reconnu s'écrit
+  avec le message entrant, dans la même instruction ; le texte reçu est gardé
+  mot pour mot. Un rappel rejoué ne refait rien.
+
 ## T-69 · Détection du STOP entrant
 
 **Produit** La normalisation du message reçu, sans accents ni casse, et sa comparaison à la table des mots-clés : STOP, ARRET, ARRETER, et les variantes avec espaces ou ponctuation.

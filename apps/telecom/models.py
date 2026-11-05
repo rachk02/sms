@@ -126,6 +126,36 @@ class MessageEntrant(Identifiable):
         return f"{self.numero_expediteur} {self.recu_le:%Y-%m-%d %H:%M}"
 
 
+class MotCle(Identifiable):
+    """Mot-clé reconnu dans un SMS entrant. `client` nul : mot-clé de la
+    plateforme, valable sur tous les numéros. Écrit en majuscules, sans accent
+    ni signe, tel que `mots_cles.normaliser` le produit. Tenu en base : ajouter
+    ou retirer un mot-clé change la reconnaissance sans redéploiement."""
+
+    class Action(models.TextChoices):
+        DESINSCRIPTION = "DESINSCRIPTION", "Désinscription"
+        AIDE = "AIDE", "Aide"
+        CONTACT = "CONTACT", "Contact"
+
+    client = models.ForeignKey(
+        "comptes.Client", on_delete=models.PROTECT, null=True, blank=True, related_name="+"
+    )
+    mot_cle = models.CharField(max_length=30)
+    action = models.CharField(max_length=15, choices=Action)
+    reponse_automatique = models.TextField(blank=True)
+
+    class Meta:
+        db_table = "telecom_mot_cle"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["client", "mot_cle"], nulls_distinct=False, name="mot_cle_unique"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.mot_cle} {self.action}"
+
+
 class Prefixe(Identifiable):
     """Tranche de numérotation attribuée à un opérateur, sur le numéro national.
     Tenue en base et modifiable sans redéploiement : le plan de numérotation

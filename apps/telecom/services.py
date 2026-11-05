@@ -3,6 +3,7 @@
 from datetime import datetime
 
 from .models import MessageEntrant
+from .mots_cles import reconnaitre
 
 
 def enregistrer_entrant(
@@ -14,8 +15,10 @@ def enregistrer_entrant(
     texte: str,
     recu_le: datetime,
 ) -> tuple[MessageEntrant, bool]:
-    """Écrit un SMS entrant. Sans effet si la passerelle rejoue le même rappel :
-    renvoie le message et vrai s'il vient d'être créé."""
+    """Écrit un SMS entrant et le mot-clé qu'il porte, s'il en porte un. Sans
+    effet si la passerelle rejoue le même rappel : renvoie le message et vrai
+    s'il vient d'être créé."""
+    mot_cle = reconnaitre(texte)
     return MessageEntrant.objects.get_or_create(
         connecteur_id=connecteur_id,
         reference=reference,
@@ -23,6 +26,7 @@ def enregistrer_entrant(
             "numero_expediteur": numero_expediteur,
             "numero_destination": numero_destination,
             "texte": texte,
+            "mot_cle_reconnu": mot_cle.mot_cle if mot_cle else "",
             "recu_le": recu_le,
         },
     )

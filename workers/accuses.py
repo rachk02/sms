@@ -3,8 +3,9 @@
 Chaque accusé passe par `journal.services.appliquer_accuse`, qui corrèle,
 vérifie la transition et écrit l'événement. Un accusé rejoué est sans effet,
 si bien que la relivraison par le courtier ne produit jamais de doublon. Les
-SMS entrants de `messages.entrants` sont écrits dans telecom_message_entrant ;
-leur rapprochement avec un client et le STOP viennent au lot 6.
+SMS entrants de `messages.entrants` sont écrits dans telecom_message_entrant,
+avec le mot-clé qu'ils portent ; leur rapprochement avec un client vient avec
+T-70.
 """
 
 import json
