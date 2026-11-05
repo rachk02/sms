@@ -91,10 +91,12 @@ d'eux ne convient pas.
   inconnu retient la clôture jusqu'à sa vérification. Des destinataires en
   attente d'approbation retiennent aussi une campagne en cours ; le client peut
   l'annuler.
-- **Bilan lu à l'affichage, en attendant les compteurs (T-64).** L'écran d'une
-  campagne confirmée compte ses messages par état au journal, borné à ses
+- **Bilan lu à l'affichage, exception temporaire autorisée (T-64).** L'écran
+  d'une campagne confirmée compte ses messages par état au journal, borné à ses
   partitions et porté par l'index (campagne_id, etat), sans rafraîchissement.
-  Le suivi en direct (T-67) le remplacera par les compteurs pré-agrégés.
+  C'est une exception à l'interdit des compteurs calculés à la volée sur le
+  journal, autorisée par l'utilisateur le 5 novembre 2026 jusqu'au suivi en
+  direct (T-67), qui la remplacera par les compteurs pré-agrégés.
 
 ## T-55 · Modèles de message et variables
 
