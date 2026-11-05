@@ -8,11 +8,20 @@ from django.db import migrations, models
 # Les mots-clés de désinscription de la plateforme, nommés par la fiche F-23.
 DESINSCRIPTION = ("STOP", "ARRET", "ARRETER")
 
+# Leur réponse automatique (T-71), choisie par l'utilisateur le 5 novembre 2026 :
+# un seul segment GSM, même avec un expéditeur de onze caractères. Semée ici,
+# avant le cloisonnement de la table (core 0027), qui interdit ensuite au
+# propriétaire d'écrire une ligne de la plateforme.
+CONFIRMATION = (
+    "Vous ne recevrez plus de SMS de {expediteur}. Votre désinscription est enregistrée."
+)
+
 
 def semer(apps, schema_editor):
     MotCle = apps.get_model("telecom", "MotCle")
     MotCle.objects.using(schema_editor.connection.alias).bulk_create(
-        MotCle(mot_cle=mot, action="DESINSCRIPTION") for mot in DESINSCRIPTION
+        MotCle(mot_cle=mot, action="DESINSCRIPTION", reponse_automatique=CONFIRMATION)
+        for mot in DESINSCRIPTION
     )
 
 

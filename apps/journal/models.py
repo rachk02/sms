@@ -20,6 +20,13 @@ class Encodage(models.TextChoices):
 
 
 class Message(models.Model):
+    class Nature(models.TextChoices):
+        CLIENT = "CLIENT", "Envoi du client"
+        # Obligation de la plateforme, envoyée au nom du client : la
+        # confirmation d'une désinscription (T-71). Gratuite, hors registre de
+        # crédits, et soumise même vers un numéro de la liste noire.
+        SYSTEME = "SYSTEME", "Message système"
+
     pk = models.CompositePrimaryKey("id", "date_reception")
     id = models.UUIDField(default=uuid.uuid7, editable=False)
     client = models.ForeignKey(
@@ -31,6 +38,9 @@ class Message(models.Model):
     operateur = models.CharField(max_length=20)
     expediteur_libelle = models.CharField(max_length=11)
     texte = models.TextField()
+    nature = models.CharField(
+        max_length=10, choices=Nature, default=Nature.CLIENT, db_default=Nature.CLIENT
+    )
     encodage = models.CharField(max_length=10, choices=Encodage)
     segments = models.SmallIntegerField()
     cout_unitaire = models.IntegerField()

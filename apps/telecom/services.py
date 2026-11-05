@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from apps.core.evenements import publier
 
-from .models import MessageEntrant, MotCle
+from .models import Connecteur, MessageEntrant, MotCle
 from .mots_cles import reconnaitre
 
 # Un STOP reçu est annoncé ; le journal, au-dessus, le rapproche des clients qui
@@ -49,6 +49,9 @@ def enregistrer_entrant(
                     "numero_expediteur": entrant.numero_expediteur,
                     "texte": entrant.texte,
                     "recu_le": entrant.recu_le.isoformat(),
+                    "mot_cle": mot_cle.mot_cle,
+                    # Le réseau d'où vient le STOP : celui qui porte la réponse.
+                    "operateur": Connecteur.objects.get(id=connecteur_id).operateur,
                 },
                 cle_idempotence=f"desinscription:{entrant.id}",
             )

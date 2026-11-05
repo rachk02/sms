@@ -346,6 +346,7 @@ date de soumission, et qu'une clé de partitionnement ne peut pas être nulle.
 | `operateur` | varchar(20) | non nul |
 | `expediteur_libelle` | varchar(11) | figé à la soumission |
 | `texte` | text | après personnalisation |
+| `nature` | varchar(10) | CLIENT, ou SYSTEME pour la confirmation d'une désinscription : coût nul, hors registre, exemptée de la seule liste noire |
 | `encodage` | varchar(10) | GSM7 ou UCS2 |
 | `segments` | smallint | non nul |
 | `cout_unitaire` | integer | figé à la soumission, en FCFA |
@@ -514,6 +515,11 @@ d'aucun client.
 
 **`telecom_mot_cle`** : `id`, `client_id` nul pour les mots-clés globaux,
 `mot_cle`, `action` parmi DESINSCRIPTION, AIDE, CONTACT, `reponse_automatique`.
+Le mot-clé s'écrit en majuscules, sans accent ni signe ; unicité sur
+`(client_id, mot_cle)`. La réponse automatique peut porter `{expediteur}`,
+remplacé par l'expéditeur du dernier message soumis par le client au numéro.
+Un client lit ses mots-clés et ceux de la plateforme ; ceux de la plateforme ne
+s'écrivent que par les workers et le back-office.
 
 ## paiements
 

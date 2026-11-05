@@ -84,7 +84,10 @@ class WorkerEnvoi(Worker):
         Un message de campagne non soumis ne coûte rien et ne touche pas à la
         réservation de sa campagne, qui peut déjà être close (T-64)."""
         from apps.credits.services import SansReservation, solder_message
+        from apps.journal.models import Message
 
+        if message.nature == Message.Nature.SYSTEME:
+            return  # obligation de la plateforme : ni réservation ni registre (T-71)
         if message.campagne_id and message.date_soumission is None:
             return
 

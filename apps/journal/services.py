@@ -7,6 +7,7 @@ from datetime import datetime
 from django.db import connection, connections, transaction
 from django.utils import timezone
 
+from apps.comptes.models import Client
 from apps.core import controles
 from apps.core.encodage import analyser
 from apps.core.etats import ETATS_TERMINAUX, Etat, transition_permise
@@ -14,7 +15,8 @@ from apps.core.evenements import publier
 from apps.core.numeros import NumeroInvalide, normaliser
 from apps.core.redis import client_redis
 from apps.telecom import correlation, sante
-from apps.telecom.models import Connecteur
+from apps.telecom.models import Connecteur, MotCle
+from apps.telecom.numero_court import numero_court
 from apps.telecom.passerelles import SortSoumission, Soumission
 from apps.telecom.services import marquer_rapproche
 
@@ -589,9 +591,26 @@ CLE_DESINSCRIPTIONS_SANS_EMETTEUR = "sms:metriques:desinscriptions_sans_emetteur
 DESINSCRIPTION_RAPPROCHEE = "journal.desinscription.rapprochee"
 
 
+def texte_de_confirmation(mot_cle: str, expediteur: str) -> str:
+    """Réponse automatique du mot-clé, rendue pour un expéditeur. Vide si le
+    mot-clé n'en porte pas."""
+    modele = (
+        MotCle.objects.filter(client__isnull=True, mot_cle=mot_cle)
+        .values_list("reponse_automatique", flat=True)
+        .first()
+    )
+    return (modele or "").replace("{expediteur}", expediteur)
+
+
 @transaction.atomic
 def rapprocher_desinscription(
-    *, entrant_id, numero_expediteur: str, texte: str, recu_le: datetime
+    *,
+    entrant_id,
+    numero_expediteur: str,
+    texte: str,
+    recu_le: datetime,
+    mot_cle: str = "",
+    operateur: str = "",
 ) -> list:
     """Rapproche un STOP des clients qui ont écrit à ce numéro dans les
     soixante-douze heures qui précèdent sa réception (T-70).
@@ -599,15 +618,16 @@ def rapprocher_desinscription(
     Un seul client : le STOP s'applique à lui. Plusieurs : il s'applique à
     chacun, une désinscription par client, car dans le doute la désinscription
     l'emporte. Aucun : le message reçu est gardé et signalé, jamais jeté. Les
-    contacts, au-dessus du journal, l'apprennent par le bus. Renvoie les
-    clients retenus."""
+    contacts, au-dessus du journal, l'apprennent par le bus, avec la
+    confirmation à renvoyer, qui nomme l'expéditeur que le client a employé.
+    Renvoie les clients retenus."""
     try:
         numero = normaliser(numero_expediteur)
     except NumeroInvalide:
-        numero, clients = "", []
+        numero, touches = "", {}
     else:
-        clients = clients_touches(numero, recu_le)
-    for client_id in clients:
+        touches = clients_touches(numero, recu_le)
+    for client_id, expediteur in touches.items():
         publier(
             DESINSCRIPTION_RAPPROCHEE,
             client_id=client_id,
@@ -616,9 +636,12 @@ def rapprocher_desinscription(
                 "numero_normalise": numero,
                 "texte": texte,
                 "recu_le": recu_le.isoformat(),
+                "operateur": operateur,
+                "confirmation": texte_de_confirmation(mot_cle, expediteur),
             },
             cle_idempotence=f"desinscription:{entrant_id}:{client_id}",
         )
+    clients = sorted(touches, key=str)
     marquer_rapproche(entrant_id, clients)
     if not clients:
         journal.warning(
@@ -627,3 +650,30 @@ def rapprocher_desinscription(
         )
         transaction.on_commit(lambda: client_redis().incr(CLE_DESINSCRIPTIONS_SANS_EMETTEUR))
     return clients
+
+
+def confirmer_desinscription(
+    *, client_id, numero_normalise: str, operateur: str, texte: str
+) -> Message | None:
+    """Envoie au numéro la confirmation de sa désinscription (T-71), une fois
+    l'inscription en liste noire faite. Message système : sous le numéro court,
+    à coût nul, sans réservation ni écriture au registre de crédits, et soumis
+    malgré la liste noire, parce que c'est une obligation et non un service
+    facturé. Il part donc même si le client n'a plus de crédit. Passe par la
+    file prioritaire, jamais retenu par la fenêtre légale."""
+    if not texte:
+        journal.warning("Aucune confirmation de désinscription à envoyer vers %s.", operateur)
+        return None
+    with transaction.atomic():
+        message = enregistrer_message(
+            client=Client.objects.get(id=client_id),
+            numero_normalise=numero_normalise,
+            operateur=operateur,
+            expediteur_libelle=numero_court(),
+            texte=texte,
+            cout_unitaire=0,
+            nature=Message.Nature.SYSTEME,
+            source=Evenement.Source.WORKER,
+        )
+        mettre_en_file(message, prioritaire=True)
+    return message

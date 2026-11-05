@@ -36,6 +36,7 @@ ABONNEMENTS = {
     "contacts.operateurs": "journal.accuse.livre",
     "journal.desinscriptions": "telecom.desinscription.recue",
     "contacts.desinscriptions": "journal.desinscription.rapprochee",
+    "journal.confirmations": "contacts.desinscription.inscrite",
 }
 
 # Une minute, cinq, trente, deux heures, six heures, en millisecondes.

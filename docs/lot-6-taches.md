@@ -29,6 +29,17 @@ Tranchées le 5 novembre 2026 par l'utilisateur.
   l'interdit des compteurs calculés à la volée, limitée à cet écran d'agent,
   comme le bilan de T-64.
 
+Tranchées le même jour, en entrant dans T-71 :
+
+- **Une confirmation par client.** Un STOP qui vaut pour plusieurs clients
+  reçoit une confirmation de chacun, qui nomme l'expéditeur du dernier message
+  que ce client a soumis au numéro.
+- **Texte de la confirmation** : « Vous ne recevrez plus de SMS de
+  {expediteur}. Votre désinscription est enregistrée. », tenu en base sur le
+  mot-clé (`reponse_automatique`), un seul segment GSM.
+- **Pas de réponse à un STOP sans émetteur** : rien n'a été inscrit, rien
+  n'est confirmé ; l'exploitation traite le cas.
+
 Déjà tranché par l'architecture : un STOP touché par plusieurs clients dans
 les soixante-douze heures s'applique à tous, une ligne par client, la
 désinscription l'emportant sur le chiffre d'affaires. Le webhook du client
@@ -74,6 +85,23 @@ sortants arrivent au lot 9 (T-111).
   `sms_desinscriptions_sans_emetteur_total` augmente. Un expéditeur qui ne se
   normalise pas (numéro court, pays non servi) prend le même chemin, sans
   bloquer la file.
+
+- **Message système (T-71).** `journal_message` porte une nature, CLIENT ou
+  SYSTEME. La confirmation est un message SYSTEME du client concerné, sous le
+  numéro court, à coût nul, déposé en file prioritaire après l'inscription en
+  liste noire. Le worker d'envoi ne la règle pas (ni réservation, ni registre,
+  ni verrou du compte) et le contrôle de liste noire la laisse passer : c'est
+  sa seule exemption, tous les autres contrôles s'appliquent. Un message
+  système n'explique pas un STOP au rapprochement.
+- **Webhook du client (T-71).** L'inscription publie
+  `contacts.desinscription.inscrite` (numéro, message d'origine, date
+  d'inscription) ; le journal y répond par la confirmation, et les webhooks du
+  lot 9 s'y abonneront.
+- **Texte semé avec les mots-clés (T-71).** `telecom_mot_cle` est cloisonnée
+  avec `FORCE ROW LEVEL SECURITY` : après sa migration de cloisonnement, même
+  le propriétaire ne peut plus écrire une ligne de la plateforme. Le texte de
+  confirmation est donc semé par la migration qui crée la table, avant le
+  cloisonnement ; il se modifie ensuite par le rôle des workers.
 
 ## T-69 · Détection du STOP entrant
 

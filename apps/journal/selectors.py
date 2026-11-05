@@ -14,24 +14,27 @@ FENETRE_DESINSCRIPTION = timedelta(hours=72)
 RECULE_RECEPTION = timedelta(days=30)
 
 
-def clients_touches(numero_normalise: str, jusqu_a: datetime) -> list:
+def clients_touches(numero_normalise: str, jusqu_a: datetime) -> dict:
     """Clients qui ont soumis au moins un message vers ce numéro dans les
-    soixante-douze heures qui précèdent `jusqu_a`.
+    soixante-douze heures qui précèdent `jusqu_a`, avec l'expéditeur de leur
+    dernier message soumis : celui que la personne a lu.
 
     La date qui compte est celle de la soumission : un message d'une campagne
     reprise après une longue pause est parti récemment, même reçu longtemps
     avant. Un message jamais soumis (refusé avant le réseau, annulé, encore en
-    attente) n'a touché personne."""
-    return sorted(
+    attente) n'a touché personne. Un message système n'est pas un envoi du
+    client."""
+    messages = (
         Message.objects.filter(
             numero_normalise=numero_normalise,
+            nature=Message.Nature.CLIENT,
             date_reception__gte=jusqu_a - FENETRE_DESINSCRIPTION - RECULE_RECEPTION,
             date_reception__lte=jusqu_a,
             date_soumission__gte=jusqu_a - FENETRE_DESINSCRIPTION,
             date_soumission__lte=jusqu_a,
         )
-        .order_by()
-        .values_list("client_id", flat=True)
-        .distinct(),
-        key=str,
+        .order_by("client_id", "-date_soumission")
+        .distinct("client_id")
+        .values_list("client_id", "expediteur_libelle")
     )
+    return dict(messages)

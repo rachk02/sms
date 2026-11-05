@@ -11,6 +11,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 
 from apps.comptes.models import Client
+from apps.core.evenements import publier
 from apps.core.numeros import normaliser
 
 from .models import ListeNoire
@@ -35,16 +36,46 @@ def bloquer(*, client, numero: str, origine: str, message_origine: str = "", mot
         return ListeNoire.objects.get(client=client, numero_normalise=numero)
 
 
-def desinscrire(*, client_id, numero_normalise: str, texte: str):
+# Annonce d'une désinscription inscrite : le journal envoie la confirmation, et
+# le webhook du client la recevra (lot 9, T-111).
+DESINSCRIPTION_INSCRITE = "contacts.desinscription.inscrite"
+
+
+@transaction.atomic
+def desinscrire(
+    *,
+    client_id,
+    entrant_id,
+    numero_normalise: str,
+    texte: str,
+    operateur: str = "",
+    confirmation: str = "",
+):
     """Inscrit sur la liste noire du client un STOP rapproché de lui (T-70),
-    avec le message reçu mot pour mot. Un numéro déjà sur sa liste y reste
-    avec sa première preuve ; le STOP reçu demeure dans les messages entrants."""
-    return bloquer(
+    avec le message reçu mot pour mot, puis annonce l'inscription (T-71). Un
+    numéro déjà sur sa liste y reste avec sa première preuve ; le STOP reçu
+    demeure dans les messages entrants, et la confirmation part quand même."""
+    entree = bloquer(
         client=Client.objects.get(id=client_id),
         numero=numero_normalise,
         origine=ListeNoire.Origine.STOP_SMS,
         message_origine=texte,
     )
+    publier(
+        DESINSCRIPTION_INSCRITE,
+        client_id=client_id,
+        objet_id=entree.id,
+        donnees={
+            "numero_normalise": entree.numero_normalise,
+            "message_origine": texte,
+            "entrant_id": str(entrant_id),
+            "inscrit_le": entree.ajoute_le.isoformat(),
+            "operateur": operateur,
+            "confirmation": confirmation,
+        },
+        cle_idempotence=f"inscrite:{entrant_id}:{client_id}",
+    )
+    return entree
 
 
 def bloquer_partout(*, numero: str, origine: str, motif: str, agent, adresse_ip=None):
@@ -86,7 +117,11 @@ def numeros_bloques(client_id):
 
 
 def controle_liste_noire(message) -> str | None:
-    """Contrôle avant soumission, enregistré au démarrage."""
+    """Contrôle avant soumission, enregistré au démarrage. La confirmation d'une
+    désinscription, message système, part vers un numéro qui vient justement
+    d'entrer sur la liste : c'est la seule exemption."""
+    if message.nature == "SYSTEME":
+        return None
     if bloque(message.client_id, message.numero_normalise):
         return MOTIF_LISTE_NOIRE
     return None

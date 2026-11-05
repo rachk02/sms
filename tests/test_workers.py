@@ -144,6 +144,7 @@ def test_chaque_point_d_entree_ecoute_ses_files():
         "contacts.operateurs",
         "journal.desinscriptions",
         "contacts.desinscriptions",
+        "journal.confirmations",
     )
     connues = set(FILES) | set(ABONNEMENTS)
     assert not {f for w in (WorkerEnvoi, WorkerAccuses) for f in w.files} - connues

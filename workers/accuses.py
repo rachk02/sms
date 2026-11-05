@@ -61,6 +61,8 @@ def _rapprocher_desinscription(message) -> None:
             numero_expediteur=donnees["numero_expediteur"],
             texte=donnees["texte"],
             recu_le=datetime.fromisoformat(donnees["recu_le"]),
+            mot_cle=donnees.get("mot_cle", ""),
+            operateur=donnees.get("operateur", ""),
         ),
     )
 
@@ -77,8 +79,30 @@ def _desinscrire(message) -> None:
         message.message_id or evenement["cle_idempotence"],
         lambda: desinscrire(
             client_id=evenement["client_id"],
+            entrant_id=evenement["objet_id"],
             numero_normalise=donnees["numero_normalise"],
             texte=donnees["texte"],
+            operateur=donnees.get("operateur", ""),
+            confirmation=donnees.get("confirmation", ""),
+        ),
+    )
+
+
+def _confirmer_desinscription(message) -> None:
+    """Une désinscription inscrite reçoit sa confirmation par SMS, gratuite."""
+    from apps.core.evenements import traiter_une_fois
+    from apps.journal.services import confirmer_desinscription
+
+    evenement = json.loads(message.body)
+    donnees = evenement["donnees"]
+    traiter_une_fois(
+        "journal.confirmations",
+        message.message_id or evenement["cle_idempotence"],
+        lambda: confirmer_desinscription(
+            client_id=evenement["client_id"],
+            numero_normalise=donnees["numero_normalise"],
+            operateur=donnees["operateur"],
+            texte=donnees["confirmation"],
         ),
     )
 
@@ -91,6 +115,7 @@ class WorkerAccuses(Worker):
         "contacts.operateurs",
         "journal.desinscriptions",
         "contacts.desinscriptions",
+        "journal.confirmations",
     )
     prefetch = 20
 
@@ -110,6 +135,8 @@ class WorkerAccuses(Worker):
                 await sync_to_async(_rapprocher_desinscription)(message)
             elif file_origine == self.topologie.nom("contacts.desinscriptions"):
                 await sync_to_async(_desinscrire)(message)
+            elif file_origine == self.topologie.nom("journal.confirmations"):
+                await sync_to_async(_confirmer_desinscription)(message)
             else:
                 await sync_to_async(_enregistrer_entrant)(message.body)
         except Exception as erreur:
