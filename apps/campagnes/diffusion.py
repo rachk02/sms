@@ -231,18 +231,26 @@ def clore(campagne: Campagne) -> bool:
     return True
 
 
-@transaction.atomic
-def cloturer(campagne_id, taille: int = TAILLE_LOT) -> bool:
-    """Un pas de clôture : pour une campagne annulée, annule d'abord un lot de
-    messages non soumis ; puis clôt la campagne si plus rien n'attend. Renvoie
-    vrai si la campagne a été close."""
-    campagne = (
+def _verrouillee(campagne_id) -> Campagne:
+    return (
         Campagne.objects.select_for_update(of=("self",))
         .select_related("client")
         .get(id=campagne_id)
     )
-    if campagne.etat == Campagne.Etat.ANNULEE and campagne.demarree_le:
-        annules = changer_etats_campagne(
+
+
+@transaction.atomic
+def annuler_lot(campagne_id, taille: int = TAILLE_LOT) -> int:
+    """Annule un lot de messages non soumis d'une campagne annulée. Renvoie le
+    nombre de messages annulés : zéro quand il n'en reste plus, ou quand ceux
+    qui restent sont en cours de soumission."""
+    campagne = _verrouillee(campagne_id)
+    if campagne.etat != Campagne.Etat.ANNULEE or not campagne.demarree_le:
+        return 0
+    if campagne.terminee_le:
+        return 0
+    return len(
+        changer_etats_campagne(
             campagne.id,
             depuis=NON_SOUMIS,
             vers=Etat.ANNULE,
@@ -251,9 +259,14 @@ def cloturer(campagne_id, taille: int = TAILLE_LOT) -> bool:
             motif=MOTIF_ANNULE,
             limite=taille,
         )
-        if annules:
-            return False
-    return clore(campagne)
+    )
+
+
+@transaction.atomic
+def cloturer(campagne_id) -> bool:
+    """Clôt la campagne si plus rien n'est à publier ni à soumettre. Renvoie
+    vrai si elle a été close."""
+    return clore(_verrouillee(campagne_id))
 
 
 def campagnes_a_publier() -> list:
@@ -285,13 +298,11 @@ def publier(lots_max: int = 20) -> int:
             if nombre == 0:
                 break
     for campagne_id in campagnes_a_clore():
+        # Quelques lots d'annulation tant qu'il y en a, puis une seule tentative
+        # de clôture : une campagne qui attend un message en cours de
+        # soumission ne fait pas tourner l'ordonnanceur à vide.
         for _ in range(lots_max):
-            if cloturer(campagne_id) or not _annulation_en_cours(campagne_id):
+            if annuler_lot(campagne_id) == 0:
                 break
+        cloturer(campagne_id)
     return publies
-
-
-def _annulation_en_cours(campagne_id) -> bool:
-    return Campagne.objects.filter(
-        id=campagne_id, etat=Campagne.Etat.ANNULEE, terminee_le__isnull=True
-    ).exists()

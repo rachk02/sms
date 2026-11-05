@@ -5,9 +5,11 @@ connecteur simulé par réseau. Le worker d'envoi est appelé message par messag
 sur ce que la boîte d'envoi a publié, comme le ferait la file.
 """
 
+import threading
 import uuid
 
 import pytest
+from django.db import connection, transaction
 from django.db.models import Count
 from django.test import override_settings
 from django.utils import timezone
@@ -286,3 +288,49 @@ def test_une_campagne_terminee_ne_s_annule_plus(client, worker):
     assert Campagne.objects.get(id=campagne.id).etat == Campagne.Etat.TERMINEE
     with pytest.raises(services.CampagneRefusee):
         services.annuler(campagne, auteur=None)
+
+
+def test_l_annulation_saute_un_message_verrouille_par_un_worker_et_attend_son_sort(client, worker):
+    """Deux connexions réelles : un worker tient le verrou du message et pose son
+    marqueur de soumission pendant que l'ordonnanceur annule et tente de clore."""
+    campagne = _confirmee(client, 4)
+    diffusion.publier()
+    file = _en_file(campagne)
+    tenu = file[0]["message_id"]
+    verrou_pris, relacher, erreurs = threading.Event(), threading.Event(), []
+
+    def worker_en_vol():
+        try:
+            with transaction.atomic():
+                Message.objects.select_for_update().get(id=tenu)
+                verrou_pris.set()
+                relacher.wait(10)
+                Message.objects.filter(id=tenu).update(soumission_debutee_le=timezone.now())
+        except Exception as erreur:  # remonté au fil principal
+            erreurs.append(erreur)
+        finally:
+            connection.close()
+
+    fil = threading.Thread(target=worker_en_vol)
+    fil.start()
+    assert verrou_pris.wait(10)
+    services.annuler(campagne, auteur=None)
+    diffusion.publier()  # annule ce qui est libre, saute le message verrouillé
+    relacher.set()
+    fil.join(10)
+    assert not erreurs
+    campagne.refresh_from_db()
+    assert _etats(campagne) == {Etat.ANNULE: 3, Etat.RECU: 1}
+    assert campagne.terminee_le is None
+    diffusion.publier()  # la soumission a commencé : rien n'est annulé, rien ne se clôt
+    assert Message.objects.get(id=tenu).etat == Etat.RECU
+    assert Campagne.objects.get(id=campagne.id).terminee_le is None
+    worker._soumettre(file[0])  # le worker achève la soumission et la règle
+    diffusion.publier()
+    campagne.refresh_from_db()
+    assert _etats(campagne) == {Etat.ANNULE: 3, Etat.SOUMIS: 1}
+    assert campagne.terminee_le and campagne.cout_reel == PRIX == _consomme(client)
+    reservation = Reservation.objects.get(campagne_id=campagne.id)
+    assert reservation.etat == Reservation.Etat.LIBEREE
+    assert credits.solde(client.id) == credits.solde_recalcule(client.id)
+    assert credits.solde(client.id).disponible == ACHAT - PRIX

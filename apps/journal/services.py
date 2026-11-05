@@ -244,16 +244,26 @@ def _appliquer_retenue(courant: Message, source: str) -> bool:
     return False
 
 
-@transaction.atomic
 def retenir(message: Message, source: str = Evenement.Source.WORKER) -> Message:
     """Applique les retenues à un message tiré de la file, avant qu'un worker
     lui réserve un créneau de débit : un message retenu ou annulé ne prend
-    jamais la place d'un autre. Renvoie le message dans son état courant."""
+    jamais la place d'un autre. Renvoie le message dans son état courant.
+
+    Le cas courant ne coûte ni verrou ni transaction : le verrou n'est pris
+    que si une retenue s'applique, et `soumettre` la revérifie de toute façon
+    sous son propre verrou."""
+    if (
+        message.etat not in (Etat.RECU, Etat.EN_FILE)
+        or message.soumission_debutee_le is not None
+        or not controles.retenue(message)
+    ):
+        return message
     cle = {"id": message.id, "date_reception": message.date_reception}
-    courant = Message.objects.select_for_update().get(**cle)
-    if courant.etat in (Etat.RECU, Etat.EN_FILE) and _appliquer_retenue(courant, source):
-        return Message.objects.get(**cle)
-    return courant
+    with transaction.atomic():
+        courant = Message.objects.select_for_update().get(**cle)
+        if courant.etat in (Etat.RECU, Etat.EN_FILE) and _appliquer_retenue(courant, source):
+            return Message.objects.get(**cle)
+        return courant
 
 
 # Les états d'un message de campagne qui n'a pas encore été soumis.
