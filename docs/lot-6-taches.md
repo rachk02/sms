@@ -49,6 +49,32 @@ sortants arrivent au lot 9 (T-111).
   avec le message entrant, dans la même instruction ; le texte reçu est gardé
   mot pour mot. Un rappel rejoué ne refait rien.
 
+- **Rapprochement par le bus (T-70).** `telecom` annonce le STOP
+  (`telecom.desinscription.recue`) dans la transaction qui écrit le message
+  entrant ; le journal cherche les clients qui ont écrit au numéro et publie une
+  désinscription par client (`journal.desinscription.rapprochee`) ; `contacts`
+  l'inscrit sur la liste noire du client avec le message reçu mot pour mot.
+  Aucun import ne remonte : c'est le chemin de `contacts.operateurs`. Chaque
+  étape passe par `traiter_une_fois`.
+- **Soixante-douze heures comptées sur la soumission (T-70).** Un client a
+  touché le numéro s'il y a soumis un message dans les soixante-douze heures
+  qui précèdent la réception du STOP, et non l'heure de son traitement, qui
+  peut être retardé par les paliers de réessai. Un message jamais soumis
+  (refusé avant le réseau, annulé, en attente) ne compte pas. La date de
+  soumission sert parce qu'une campagne reprise après une longue pause envoie
+  des messages reçus bien avant ; une borne basse de trente jours sur la date
+  de réception écarte les partitions anciennes.
+- **Message entrant rapproché (T-70).** Il reçoit son client s'il n'y en a
+  qu'un ; pour plusieurs clients, il reste sans client, rapproché quand même
+  (`traite_le` posé), et chaque client le retrouve dans sa liste noire. Un
+  numéro déjà sur la liste d'un client y garde sa première preuve ; le STOP
+  reçu demeure dans les messages entrants.
+- **STOP sans émetteur signalé à l'exploitation (T-70).** Gardé en base, sans
+  client, `traite_le` posé ; un avertissement est journalisé et la métrique
+  `sms_desinscriptions_sans_emetteur_total` augmente. Un expéditeur qui ne se
+  normalise pas (numéro court, pays non servi) prend le même chemin, sans
+  bloquer la file.
+
 ## T-69 · Détection du STOP entrant
 
 **Produit** La normalisation du message reçu, sans accents ni casse, et sa comparaison à la table des mots-clés : STOP, ARRET, ARRETER, et les variantes avec espaces ou ponctuation.

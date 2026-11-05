@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from django.conf import settings
 
 from apps.core.redis import client_redis
-from apps.journal.services import CLE_SOUMIS
+from apps.journal.services import CLE_DESINSCRIPTIONS_SANS_EMETTEUR, CLE_SOUMIS
 from apps.telecom.supervision import etat_publie
 
 journal = logging.getLogger(__name__)
@@ -62,3 +62,8 @@ def messages_soumis(connecteurs: list[str]) -> dict[str, int]:
         identifiant: int(valeur or 0)
         for identifiant, valeur in zip(connecteurs, valeurs, strict=True)
     }
+
+
+def desinscriptions_sans_emetteur() -> int:
+    """STOP reçus qu'aucun envoi des soixante-douze heures n'explique."""
+    return int(client_redis().get(CLE_DESINSCRIPTIONS_SANS_EMETTEUR) or 0)

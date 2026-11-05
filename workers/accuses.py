@@ -46,9 +46,52 @@ def _confirmer_operateur(message) -> None:
     )
 
 
+def _rapprocher_desinscription(message) -> None:
+    """Un STOP reçu est rapproché des clients qui ont écrit à ce numéro."""
+    from apps.core.evenements import traiter_une_fois
+    from apps.journal.services import rapprocher_desinscription
+
+    evenement = json.loads(message.body)
+    donnees = evenement["donnees"]
+    traiter_une_fois(
+        "journal.desinscriptions",
+        message.message_id or evenement["cle_idempotence"],
+        lambda: rapprocher_desinscription(
+            entrant_id=evenement["objet_id"],
+            numero_expediteur=donnees["numero_expediteur"],
+            texte=donnees["texte"],
+            recu_le=datetime.fromisoformat(donnees["recu_le"]),
+        ),
+    )
+
+
+def _desinscrire(message) -> None:
+    """Un STOP rapproché d'un client l'inscrit sur sa liste noire."""
+    from apps.contacts.liste_noire import desinscrire
+    from apps.core.evenements import traiter_une_fois
+
+    evenement = json.loads(message.body)
+    donnees = evenement["donnees"]
+    traiter_une_fois(
+        "contacts.desinscriptions",
+        message.message_id or evenement["cle_idempotence"],
+        lambda: desinscrire(
+            client_id=evenement["client_id"],
+            numero_normalise=donnees["numero_normalise"],
+            texte=donnees["texte"],
+        ),
+    )
+
+
 class WorkerAccuses(Worker):
     nom = "accuses"
-    files = ("accuses.entrants", "messages.entrants", "contacts.operateurs")
+    files = (
+        "accuses.entrants",
+        "messages.entrants",
+        "contacts.operateurs",
+        "journal.desinscriptions",
+        "contacts.desinscriptions",
+    )
     prefetch = 20
 
     async def traiter(self, message, canal, file_origine: str) -> None:
@@ -63,6 +106,10 @@ class WorkerAccuses(Worker):
                 await sync_to_async(appliquer_accuse)(depuis_json(message.body))
             elif file_origine == self.topologie.nom("contacts.operateurs"):
                 await sync_to_async(_confirmer_operateur)(message)
+            elif file_origine == self.topologie.nom("journal.desinscriptions"):
+                await sync_to_async(_rapprocher_desinscription)(message)
+            elif file_origine == self.topologie.nom("contacts.desinscriptions"):
+                await sync_to_async(_desinscrire)(message)
             else:
                 await sync_to_async(_enregistrer_entrant)(message.body)
         except Exception as erreur:

@@ -508,7 +508,8 @@ cette transaction validée.
 `connecteur_id`, `reference` rendue par la passerelle, `numero_expediteur`,
 `numero_destination`, `texte`, `mot_cle_reconnu`, `traite_le`, `recu_le`.
 Unicité sur `(connecteur_id, reference)` : un rappel rejoué ne crée pas de
-doublon. Cloisonnée par `client_id` : un message non rapproché n'est visible
+doublon. Un STOP rapproché de plusieurs clients garde un `client_id` nul,
+`traite_le` posé : chaque client le retrouve dans sa liste noire. Cloisonnée par `client_id` : un message non rapproché n'est visible
 d'aucun client.
 
 **`telecom_mot_cle`** : `id`, `client_id` nul pour les mots-clés globaux,

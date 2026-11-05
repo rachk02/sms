@@ -71,6 +71,12 @@ def _lignes() -> list[str]:
         lignes.append(
             f'sms_messages_soumis_total{{connecteur="{_etiquette(liaison.nom)}"}} {total}'
         )
+    lignes += [
+        "# HELP sms_desinscriptions_sans_emetteur_total STOP reçus sans envoi"
+        " correspondant dans les 72 heures, gardés en base.",
+        "# TYPE sms_desinscriptions_sans_emetteur_total counter",
+        f"sms_desinscriptions_sans_emetteur_total {selectors.desinscriptions_sans_emetteur()}",
+    ]
     return lignes
 
 

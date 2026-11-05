@@ -10,6 +10,7 @@ diffusion qui dure des heures. Le second contrôle est enregistré auprès de
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 
+from apps.comptes.models import Client
 from apps.core.numeros import normaliser
 
 from .models import ListeNoire
@@ -32,6 +33,18 @@ def bloquer(*, client, numero: str, origine: str, message_origine: str = "", mot
             )
     except IntegrityError:
         return ListeNoire.objects.get(client=client, numero_normalise=numero)
+
+
+def desinscrire(*, client_id, numero_normalise: str, texte: str):
+    """Inscrit sur la liste noire du client un STOP rapproché de lui (T-70),
+    avec le message reçu mot pour mot. Un numéro déjà sur sa liste y reste
+    avec sa première preuve ; le STOP reçu demeure dans les messages entrants."""
+    return bloquer(
+        client=Client.objects.get(id=client_id),
+        numero=numero_normalise,
+        origine=ListeNoire.Origine.STOP_SMS,
+        message_origine=texte,
+    )
 
 
 def bloquer_partout(*, numero: str, origine: str, motif: str, agent, adresse_ip=None):

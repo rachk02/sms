@@ -11,13 +11,15 @@ from apps.core import controles
 from apps.core.encodage import analyser
 from apps.core.etats import ETATS_TERMINAUX, Etat, transition_permise
 from apps.core.evenements import publier
-from apps.core.numeros import normaliser
+from apps.core.numeros import NumeroInvalide, normaliser
 from apps.core.redis import client_redis
 from apps.telecom import correlation, sante
 from apps.telecom.models import Connecteur
 from apps.telecom.passerelles import SortSoumission, Soumission
+from apps.telecom.services import marquer_rapproche
 
 from .models import Destinataire, Evenement, Message
+from .selectors import clients_touches
 
 journal = logging.getLogger(__name__)
 
@@ -579,3 +581,49 @@ def mettre_en_file(message: Message, *, prioritaire: bool, reprise: str = "") ->
         },
         cle_idempotence=f"envoi:{message.id}:{reprise}" if reprise else f"envoi:{message.id}",
     )
+
+
+# Désinscriptions reçues sans aucun envoi correspondant : signalées à
+# l'exploitation par les métriques, gardées en base avec le message reçu.
+CLE_DESINSCRIPTIONS_SANS_EMETTEUR = "sms:metriques:desinscriptions_sans_emetteur"
+DESINSCRIPTION_RAPPROCHEE = "journal.desinscription.rapprochee"
+
+
+@transaction.atomic
+def rapprocher_desinscription(
+    *, entrant_id, numero_expediteur: str, texte: str, recu_le: datetime
+) -> list:
+    """Rapproche un STOP des clients qui ont écrit à ce numéro dans les
+    soixante-douze heures qui précèdent sa réception (T-70).
+
+    Un seul client : le STOP s'applique à lui. Plusieurs : il s'applique à
+    chacun, une désinscription par client, car dans le doute la désinscription
+    l'emporte. Aucun : le message reçu est gardé et signalé, jamais jeté. Les
+    contacts, au-dessus du journal, l'apprennent par le bus. Renvoie les
+    clients retenus."""
+    try:
+        numero = normaliser(numero_expediteur)
+    except NumeroInvalide:
+        numero, clients = "", []
+    else:
+        clients = clients_touches(numero, recu_le)
+    for client_id in clients:
+        publier(
+            DESINSCRIPTION_RAPPROCHEE,
+            client_id=client_id,
+            objet_id=entrant_id,
+            donnees={
+                "numero_normalise": numero,
+                "texte": texte,
+                "recu_le": recu_le.isoformat(),
+            },
+            cle_idempotence=f"desinscription:{entrant_id}:{client_id}",
+        )
+    marquer_rapproche(entrant_id, clients)
+    if not clients:
+        journal.warning(
+            "Désinscription sans envoi correspondant dans les 72 heures : entrant %s.",
+            entrant_id,
+        )
+        transaction.on_commit(lambda: client_redis().incr(CLE_DESINSCRIPTIONS_SANS_EMETTEUR))
+    return clients

@@ -39,6 +39,7 @@ CLOISONNEES = (
     "contacts_liste",
     "contacts_liste_contact",
     "contacts_liste_noire",
+    "telecom_mot_cle",
     "contacts_segment",
     "expediteurs_expediteur",
     # Lecture et création seules pour le client, lecture seule pour tous.

@@ -34,6 +34,8 @@ FILES = (
 # file et motif de clé de routage.
 ABONNEMENTS = {
     "contacts.operateurs": "journal.accuse.livre",
+    "journal.desinscriptions": "telecom.desinscription.recue",
+    "contacts.desinscriptions": "journal.desinscription.rapprochee",
 }
 
 # Une minute, cinq, trente, deux heures, six heures, en millisecondes.
