@@ -109,9 +109,11 @@ def test_la_connexion_exige_le_code_apres_le_mot_de_passe(client):
 def test_un_code_d_application_ne_sert_pas_deux_fois(client):
     utilisateur = _utilisateur()
     secret = second_facteur.nouveau_secret()
-    second_facteur.activer(utilisateur, secret, pyotp.TOTP(secret).now())
+    # Un seul code lu : deux lectures peuvent tomber de part et d'autre d'une fenêtre de 30 s.
+    code = pyotp.TOTP(secret).now()
+    second_facteur.activer(utilisateur, secret, code)
     # Le code d'activation lui-même ne rouvre pas une session.
-    assert second_facteur.verifier(utilisateur, pyotp.TOTP(secret).now()) is False
+    assert second_facteur.verifier(utilisateur, code) is False
 
 
 def test_un_code_de_secours_consomme_ne_fonctionne_plus(client):
