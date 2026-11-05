@@ -145,6 +145,26 @@ d'eux ne convient pas.
   plan d'exécution, par la capture des requêtes, et par un test qui ajoute
   quarante mille messages au journal sans changer ni le nombre de requêtes ni
   le temps de réponse. Une campagne close ne s'interroge plus.
+- **Point de contrôle à taille réglable (T-68).** Le test
+  `tests/test_point_de_controle_lot5.py` mène une campagne complète : écrans du
+  portail pour la composition, l'aperçu, le test, la confirmation, la pause et
+  la reprise ; fonctions de l'ordonnanceur et du worker d'envoi pour la
+  publication, la soumission et les accusés, contre trois connecteurs simulés.
+  Sur le poste de développement, un message coûte de l'ordre de cent
+  millisecondes de requêtes (9 ms de publication, 70 à 85 ms de soumission,
+  14 ms d'accusé) : quarante mille prennent environ une heure, hors des parties
+  de suite de moins de dix minutes. Décision de l'utilisateur du 5 novembre
+  2026 : la suite courante le lance à mille destinataires, et le passage à
+  quarante mille (`SMS_TAILLE_POINT_DE_CONTROLE=40000`) se lance seul, à la
+  demande.
+- **Point d'attention : le verrou de crédit par client.** Chaque soumission
+  règle son coût sous le verrou de la ligne `credits_compte` du client : les
+  soumissions d'une même campagne se suivent, quel que soit le nombre de
+  workers. Estimation tirée du relevé des requêtes, pas une mesure : de 40 à
+  60 soumissions par seconde sur le poste de développement, davantage sur un
+  serveur où la base répond en moins d'une milliseconde. À revoir avec le
+  règlement à la livraison (lot 7), sans y toucher d'ici là : le registre de
+  crédits est une zone délicate de la charte.
 
 ## T-55 · Modèles de message et variables
 
@@ -229,3 +249,38 @@ d'eux ne convient pas.
 **Produit** Une campagne complète de quarante mille destinataires contre le simulateur : composition avec personnalisation, aperçu, test, lancement, suivi en direct, pause, reprise, rapport final.
 
 **Critères** Le coût réel ne dépasse pas le coût annoncé. Aucun doublon. Le rapport final réconcilie envoyés, livrés, échecs et coût. La pause et la reprise n'ont produit ni perte ni doublon.
+
+## Bilan du lot, 5 novembre 2026
+
+Les quatorze tâches sont faites. Le point de contrôle (T-68) est un test
+automatique, `tests/test_point_de_controle_lot5.py` : une campagne
+personnalisée passe par les écrans du portail (composition, aperçu, test,
+confirmation, suivi, pause, reprise, rapport) et par les fonctions de
+l'ordonnanceur et du worker d'envoi (publication, soumission, accusés), contre
+trois connecteurs simulés. Il vérifie que le coût réel ne dépasse pas le coût
+annoncé, qu'aucun destinataire ne reçoit deux messages, que le rapport final
+réconcilie partis, livrés, non livrés, refusés et coût, et que la pause puis la
+reprise ne perdent ni ne doublent aucun message.
+
+Écart par rapport au découpage d'origine : le critère porte sur quarante mille
+destinataires ; la suite courante le vérifie à mille (1 min 50 sur le poste de
+développement), sur décision de l'utilisateur du 5 novembre 2026. Le seul
+passage à quarante mille a été arrêté faute de mémoire sur le poste (2,3 Go
+libres sur 16), après la pause : contacts et aperçu en 3 secondes,
+confirmation en 9 secondes, publication des quarante mille messages en
+354 secondes, premier tiers soumis (13 333 messages) en 954 secondes, soit
+environ 71 millisecondes par message, pause en 98 secondes, assertions de la
+pause passées. La reprise, la fin des soumissions, les accusés et le rapport
+final n'ont été vérifiés qu'à mille destinataires. Un nouveau passage à
+quarante mille se lance seul, à la demande, sur une machine qui a la mémoire
+nécessaire.
+
+Ce qui reste ouvert pour les lots suivants :
+
+- Le verrou de crédit par client sérialise les soumissions d'une même campagne
+  (voir les choix faits en cours de lot) : à revoir avec le règlement à la
+  livraison du lot 7.
+- Le prix par segment reste provisoire, lu dans les réglages, jusqu'aux
+  grilles tarifaires datées du lot 7.
+- L'événement `campagne.occurrence.a_confirmer` n'a pas encore de
+  consommateur : le client sera averti avec les notifications du lot 6.
