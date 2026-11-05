@@ -25,6 +25,7 @@ et se règle avant la clôture.
 """
 
 import logging
+from datetime import datetime, timedelta
 
 from django.db import connection, transaction
 from django.db.models import Exists, OuterRef
@@ -56,6 +57,8 @@ from .personnalisation import compiler
 journal = logging.getLogger(__name__)
 
 TAILLE_LOT = 500
+# Un palier de lissage : la quantité d'une minute, publiée d'un coup (T-66).
+PALIER = timedelta(minutes=1)
 A_PUBLIER = (Destinataire.Action.ENVOYER, Destinataire.Action.REPLI)
 
 
@@ -80,10 +83,23 @@ def _reevaluer(campagne: Campagne) -> None:
         )
 
 
+def _palier_suivant(campagne: Campagne, publies: int, maintenant: datetime) -> datetime:
+    """L'heure du palier suivant d'une campagne lissée : chaque message publié
+    vaut une fraction de minute. Les paliers s'enchaînent à intervalles
+    réguliers ; après une pause ou un arrêt de l'ordonnanceur, le calendrier
+    repart de maintenant, sans rafale de rattrapage."""
+    repere = campagne.prochain_palier
+    if repere is None or maintenant - repere >= PALIER:
+        repere = maintenant
+    return repere + PALIER * publies / campagne.lissage_par_minute
+
+
 @transaction.atomic
-def publier_lot(campagne_id, taille: int = TAILLE_LOT) -> int:
+def publier_lot(campagne_id, taille: int = TAILLE_LOT, maintenant: datetime | None = None) -> int:
     """Publie le lot suivant d'une campagne. Renvoie le nombre de messages
-    publiés, zéro quand il ne reste rien à publier pour l'instant."""
+    publiés, zéro quand il ne reste rien à publier pour l'instant. Une campagne
+    lissée publie un palier, puis attend le suivant."""
+    maintenant = maintenant or timezone.now()
     campagne = (
         Campagne.objects.select_for_update(of=("self",))
         .select_related("client", "expediteur")
@@ -92,12 +108,16 @@ def publier_lot(campagne_id, taille: int = TAILLE_LOT) -> int:
     if campagne.etat not in (Campagne.Etat.EN_ATTENTE, Campagne.Etat.EN_COURS):
         return 0
     if campagne.etat == Campagne.Etat.EN_ATTENTE:
-        campagne.etat, campagne.demarree_le = Campagne.Etat.EN_COURS, timezone.now()
+        campagne.etat, campagne.demarree_le = Campagne.Etat.EN_COURS, maintenant
         campagne.save(update_fields=["etat", "demarree_le", "modifie_le"])
     if campagne.demarree_le:
         repris = _remettre_en_file(campagne, taille)
         if repris:
             return repris
+    if campagne.lissage_par_minute:
+        if campagne.prochain_palier and maintenant < campagne.prochain_palier:
+            return 0
+        taille = min(taille, campagne.lissage_par_minute)
     _reevaluer(campagne)
     lot = list(
         Destinataire.objects.filter(campagne=campagne, action__in=A_PUBLIER)
@@ -130,6 +150,9 @@ def publier_lot(campagne_id, taille: int = TAILLE_LOT) -> int:
             cle_idempotence=f"campagne:{campagne.id}:{destinataire.contact_id}",
         )
         mettre_en_file(message, prioritaire=prioritaire)
+    if campagne.lissage_par_minute:
+        campagne.prochain_palier = _palier_suivant(campagne, len(lot), maintenant)
+        campagne.save(update_fields=["prochain_palier", "modifie_le"])
     return len(lot)
 
 
@@ -290,7 +313,7 @@ def campagnes_a_clore() -> list:
     )
 
 
-def publier(lots_max: int = 20) -> int:
+def publier(lots_max: int = 20, maintenant: datetime | None = None) -> int:
     """Un tour d'ordonnanceur : quelques lots par campagne, pour que le relais
     des événements et les autres campagnes avancent aussi ; puis quelques pas
     de clôture pour les campagnes qui n'ont plus rien à publier."""
@@ -298,7 +321,7 @@ def publier(lots_max: int = 20) -> int:
     for campagne_id in campagnes_a_publier():
         try:
             for _ in range(lots_max):
-                nombre = publier_lot(campagne_id)
+                nombre = publier_lot(campagne_id, maintenant=maintenant)
                 publies += nombre
                 if nombre == 0:
                     break

@@ -82,7 +82,12 @@ class Campagne(BaseClient):
         "self", on_delete=models.PROTECT, null=True, blank=True, related_name="occurrences"
     )
     occurrence_le = models.DateTimeField(null=True, blank=True)
+    # Lissage (T-66) : la durée choisie par le client ; le nombre de messages
+    # par minute qui en découle, fixé à la confirmation ; l'heure du prochain
+    # palier de publication, tenue par l'ordonnanceur.
+    lissage_duree_minutes = models.IntegerField(null=True, blank=True)
     lissage_par_minute = models.IntegerField(null=True, blank=True)
+    prochain_palier = models.DateTimeField(null=True, blank=True)
     confirmee_le = models.DateTimeField(null=True, blank=True)
     demarree_le = models.DateTimeField(null=True, blank=True)
     terminee_le = models.DateTimeField(null=True, blank=True)

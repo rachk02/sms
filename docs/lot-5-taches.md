@@ -109,6 +109,14 @@ d'eux ne convient pas.
 - **Chaque campagne isolée dans le tour de l'ordonnanceur (T-65).** Une
   campagne en échec (publication, clôture, occurrence) est journalisée et
   n'arrête ni les autres ni le relais des événements.
+- **Lissage par paliers d'une minute à la publication (T-66).** Le client
+  choisit une durée (une à douze heures) ; la confirmation en tire un nombre de
+  messages par minute, arrondi au-dessus pour finir dans la durée. L'ordonnanceur
+  publie un palier d'une minute, puis attend le suivant ; après une pause ou un
+  arrêt, le calendrier repart de l'instant présent, sans rafale de rattrapage.
+  Le débit de l'opérateur règle ensuite la soumission : le plus contraignant
+  des deux s'applique de lui-même. Le test des trois heures tourne sur une
+  horloge simulée, dans `tests/` à cause de sa durée.
 - **Bilan lu à l'affichage, exception temporaire autorisée (T-64).** L'écran
   d'une campagne confirmée compte ses messages par état au journal, borné à ses
   partitions et porté par l'index (campagne_id, etat), sans rafraîchissement.

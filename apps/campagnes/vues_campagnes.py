@@ -79,6 +79,7 @@ def nouvelle(request):
         "recurrence_jours": "7",
         "recurrence_fin": "",
         "plafond": "",
+        "lissage": "",
     }
     erreur = ""
     if request.method == "POST":
@@ -95,10 +96,12 @@ def nouvelle(request):
             "recurrence_jours": request.POST.get("recurrence_jours", ""),
             "recurrence_fin": request.POST.get("recurrence_fin", ""),
             "plafond": request.POST.get("plafond", ""),
+            "lissage": request.POST.get("lissage", ""),
         }
         try:
             campagne = services.creer(
                 **_programmation(saisie),
+                lissage_heures=_entier(saisie["lissage"], "Durée d'étalement"),
                 client=client,
                 auteur=request.user,
                 nom=saisie["nom"],
@@ -127,6 +130,7 @@ def nouvelle(request):
         "politiques": Campagne.Politique.choices,
         "types": Campagne.Type.choices,
         "recurrences": services.RECURRENCES.items(),
+        "lissages": services.LISSAGES,
     }
     return render(request, "campagnes/nouvelle.html", contexte)
 

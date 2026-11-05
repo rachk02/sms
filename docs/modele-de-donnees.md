@@ -296,6 +296,12 @@ ses destinataires et la fige et la réserve si son coût reste sous le plafond,
 sinon elle reste BROUILLON en attendant le client. Après la date de fin, la
 campagne récurrente passe TERMINEE ; annulée, elle ne crée plus d'occurrence.
 
+Lissage : `lissage_duree_minutes` (durée choisie par le client),
+`lissage_par_minute` (fixé à la confirmation : destinataires divisés par la
+durée, arrondi au-dessus) et `prochain_palier` (heure à laquelle l'ordonnanceur
+peut publier le palier suivant). Une occurrence hérite de la durée de sa
+campagne récurrente.
+
 L'aperçu recalcule tout à chaque affichage. La confirmation refait le calcul et
 refuse si les chiffres diffèrent de ceux que le client a lus ; sinon elle fige
 les destinataires, réserve le coût annoncé en une fois et passe EN_ATTENTE.

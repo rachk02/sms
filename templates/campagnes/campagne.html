@@ -30,6 +30,9 @@
 {% elif campagne.planifiee_pour %}
   <p class="mb-6 text-sm">Envoi programmé le {{ campagne.planifiee_pour|date:"d/m/Y à H:i" }} (heure de Ouagadougou).</p>
 {% endif %}
+{% if campagne.lissage_duree_minutes %}
+  <p class="mb-6 text-sm">Envoi étalé sur {{ campagne.lissage_duree_minutes }} minutes{% if campagne.lissage_par_minute %}, au plus {{ campagne.lissage_par_minute }} message(s) par minute{% endif %}.</p>
+{% endif %}
 
 <section class="mb-6 rounded-lg border border-slate-200 bg-white p-4">
   <h2 class="mb-2 text-lg font-semibold">Message</h2>
@@ -93,7 +96,8 @@
           {% else %}
             <p class="mb-4 text-sm">Ce message va partir vers <strong>{{ destinataires_lettres }} destinataires ({{ apercu.destinataires }})</strong>{% if campagne.planifiee_pour %}
               le <strong>{{ campagne.planifiee_pour|date:"d/m/Y à H:i" }}</strong>{% endif %},
-              pour un coût de <strong>{{ cout_lettres }} ({{ apercu.cout }} FCFA)</strong>, réservé dès maintenant sur votre solde.
+              pour un coût de <strong>{{ cout_lettres }} ({{ apercu.cout }} FCFA)</strong>, réservé dès maintenant sur votre solde{% if campagne.lissage_duree_minutes %},
+              <strong>étalé sur {{ campagne.lissage_duree_minutes }} minutes</strong>{% endif %}.
               Un message parti ne se rattrape pas.</p>
           {% endif %}
           <form method="post" action="{% url 'campagne-confirmer' campagne.id %}" class="flex flex-wrap justify-end gap-2">

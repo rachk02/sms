@@ -198,3 +198,15 @@ def test_une_campagne_recurrente_par_l_ecran(client, membre):
     assert "Programmer l'envoi récurrent, plafond 100 FCFA" in page
     sans_plafond = _creer_programmee(client, envoi="recurrent", recurrence_jours="7")
     assert "plafond de coût par envoi" in sans_plafond
+
+
+def test_une_campagne_etalee_par_l_ecran(client, membre):
+    client.force_login(membre)
+    page = _creer_programmee(client, envoi="immediat", lissage="3")
+    assert "Envoi étalé sur 180 minutes" in page
+    assert "étalé sur 180 minutes</strong>" in page  # dans le texte de la modale
+    campagne = Campagne.objects.using("worker").get()
+    page = client.post(
+        f"/campagnes/{campagne.id}/confirmer", {"destinataires": "3", "cout": "75"}, follow=True
+    ).content.decode()
+    assert "au plus 1 message(s) par minute" in page

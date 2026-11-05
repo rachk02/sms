@@ -105,6 +105,13 @@
       </label>
     </div>
     <p x-show="envoi === 'recurrent'" x-cloak class="text-xs text-slate-500">À chaque envoi, les destinataires sont recalculés. L'envoi part seul si son coût reste sous le plafond ; au-delà, il attend votre confirmation.</p>
+    <label class="flex flex-col sm:w-1/2">Étaler l'envoi
+      <select name="lissage" class="rounded border border-slate-300 px-2 py-1">
+        <option value="">Non, tout d'un coup</option>
+        {% for heures in lissages %}<option value="{{ heures }}"{% if saisie.lissage == heures|stringformat:"s" %} selected{% endif %}>Sur {{ heures }} heure{{ heures|pluralize }}</option>{% endfor %}
+      </select>
+    </label>
+    <p class="text-xs text-slate-500">Étalé, l'envoi part par paliers réguliers chaque minute, pour ne pas saturer votre standard de rappels.</p>
   </fieldset>
 
   <button type="submit" class="rounded bg-slate-900 px-4 py-2 text-white">Enregistrer et voir l'aperçu</button>

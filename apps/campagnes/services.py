@@ -17,6 +17,7 @@ fille, figée et réservée à son heure par la même fonction que la confirmati
 d'un client.
 """
 
+import math
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -54,6 +55,9 @@ class ConfirmationPerimee(CampagneRefusee):
 
 # Fréquences proposées, en jours : un intervalle fixe, sans calendrier.
 RECURRENCES = {1: "Chaque jour", 7: "Chaque semaine", 14: "Toutes les deux semaines"}
+
+# Durées d'étalement proposées, en heures (T-66).
+LISSAGES = (1, 2, 3, 4, 6, 8, 12)
 
 
 def _programmation(
@@ -119,8 +123,11 @@ def creer(
     recurrence_jours: int | None = None,
     recurrence_fin: datetime | None = None,
     plafond: int | None = None,
+    lissage_heures: int | None = None,
 ) -> Campagne:
     nom = nom.strip()
+    if lissage_heures is not None and lissage_heures not in LISSAGES:
+        raise CampagneRefusee("Durée d'étalement inconnue.")
     if not nom:
         raise CampagneRefusee("Une campagne porte un nom.")
     try:
@@ -137,6 +144,7 @@ def creer(
     programmation = _programmation(planifiee_pour, recurrence_jours, recurrence_fin, plafond)
     return Campagne.objects.create(
         **programmation,
+        lissage_duree_minutes=lissage_heures * 60 if lissage_heures else None,
         client=client,
         nom=nom,
         type=type_,
@@ -333,6 +341,9 @@ def _figer(campagne: Campagne, vu: Apercu, *, auteur) -> Campagne:
     if figes != vu.destinataires:
         raise RuntimeError(f"{figes} destinataires figés pour {vu.destinataires} annoncés.")
     campagne.etat = Campagne.Etat.PLANIFIEE if campagne.planifiee_pour else Campagne.Etat.EN_ATTENTE
+    if campagne.lissage_duree_minutes:
+        # Arrondi au-dessus : la campagne finit au plus tard à la fin de la durée.
+        campagne.lissage_par_minute = math.ceil(vu.destinataires / campagne.lissage_duree_minutes)
     campagne.destinataires_prevus = vu.destinataires
     campagne.cout_estime = vu.cout
     campagne.segments_prevus = vu.estimation.segments
@@ -419,6 +430,7 @@ def creer_occurrence(patron: Campagne, creneau: datetime) -> tuple[Campagne, boo
             "modele_texte": patron.modele_texte,
             "cible": patron.cible,
             "politique_expediteur": patron.politique_expediteur,
+            "lissage_duree_minutes": patron.lissage_duree_minutes,
             "creee_par": patron.creee_par,
         },
     )
