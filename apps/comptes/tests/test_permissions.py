@@ -45,6 +45,7 @@ ATTENDUS = {
     "campagne-pause": ("post", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
     "campagne-reprendre": ("post", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
     "campagne-annuler": ("post", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
+    "campagne-suivi": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
     "campagnes-modeles": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "campagnes-modele": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
     "contacts-repertoire": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
@@ -106,6 +107,7 @@ def _adresse(nom, membres):
         "campagne-pause",
         "campagne-reprendre",
         "campagne-annuler",
+        "campagne-suivi",
         "contacts-liste-supprimer",
         "contacts-champ-supprimer",
     ) or (nom.startswith("import-") and nom != "import-deposer"):

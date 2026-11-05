@@ -128,22 +128,7 @@
 {% else %}
   <section class="mb-6 rounded-lg border border-slate-200 bg-white p-4 text-sm">
     <p class="mb-3">Confirmée le {{ campagne.confirmee_le|date:"d/m/Y à H:i" }} : {{ campagne.destinataires_prevus }} destinataires, {{ campagne.cout_estime }} FCFA réservés.</p>
-    {% if bilan %}
-      <dl class="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <div><dt class="text-slate-500">Partis vers le réseau</dt><dd class="text-lg">{{ bilan.partis }}</dd></div>
-        {% if bilan.en_soumission %}<div><dt class="text-slate-500">En cours de soumission</dt><dd class="text-lg">{{ bilan.en_soumission }}</dd></div>{% endif %}
-        {% if campagne.etat != "ANNULEE" %}<div><dt class="text-slate-500">Non soumis</dt><dd class="text-lg">{{ bilan.non_soumis }}</dd></div>{% endif %}
-        {% if bilan.annules %}<div><dt class="text-slate-500">Annulés, non facturés</dt><dd class="text-lg">{{ bilan.annules }}</dd></div>{% endif %}
-        {% if bilan.refuses %}<div><dt class="text-slate-500">Refusés avant le réseau</dt><dd class="text-lg">{{ bilan.refuses }}</dd></div>{% endif %}
-      </dl>
-    {% endif %}
-    {% if campagne.terminee_le %}
-      <p>Close le {{ campagne.terminee_le|date:"d/m/Y à H:i" }} : coût réel {{ campagne.cout_reel }} FCFA ; le reste de la réservation est rendu à votre solde.</p>
-    {% elif campagne.etat == "ANNULEE" %}
-      <p>Annulation en cours : les messages non partis sont annulés, puis le reste de la réservation est rendu à votre solde.</p>
-    {% elif campagne.etat == "EN_PAUSE" %}
-      <p>En pause : aucun message ne part. Ceux dont la soumission avait commencé finissent leur chemin.</p>
-    {% endif %}
+    {% include "campagnes/_suivi.html" %}
   </section>
 
   {% if peut_piloter and annulable %}
@@ -164,7 +149,7 @@
         <div role="dialog" aria-modal="true" aria-labelledby="titre-annulation" class="max-w-lg rounded-lg bg-white p-6 shadow-lg">
           <h2 id="titre-annulation" class="mb-3 text-lg font-semibold">Annuler « {{ campagne.nom }} »</h2>
           <p class="mb-2 text-sm">Les messages qui ne sont pas encore partis seront annulés et leurs crédits rendus à votre solde.</p>
-          <p class="mb-4 text-sm"><strong>{{ bilan.partis|default:0 }} message(s) déjà soumis au réseau ne peuvent pas être rattrapés</strong> : ils restent partis et facturés{% if bilan.en_soumission %}, comme les {{ bilan.en_soumission }} dont la soumission a commencé{% endif %}.</p>
+          <p class="mb-4 text-sm"><strong>{{ suivi.partis|default:0 }} message(s) déjà soumis au réseau ne peuvent pas être rattrapés</strong> : ils restent partis et facturés, comme ceux dont la soumission a déjà commencé, qui partiront quand même.</p>
           <form method="post" action="{% url 'campagne-annuler' campagne.id %}" class="flex flex-wrap justify-end gap-2">
             {% csrf_token %}
             <button type="button" @click="ouverte = false" class="rounded border border-slate-300 px-3 py-1">Garder la campagne</button>

@@ -117,12 +117,34 @@ d'eux ne convient pas.
   Le débit de l'opérateur règle ensuite la soumission : le plus contraignant
   des deux s'applique de lui-même. Le test des trois heures tourne sur une
   horloge simulée, dans `tests/` à cause de sa durée.
-- **Bilan lu à l'affichage, exception temporaire autorisée (T-64).** L'écran
-  d'une campagne confirmée compte ses messages par état au journal, borné à ses
-  partitions et porté par l'index (campagne_id, etat), sans rafraîchissement.
-  C'est une exception à l'interdit des compteurs calculés à la volée sur le
-  journal, autorisée par l'utilisateur le 5 novembre 2026 jusqu'au suivi en
-  direct (T-67), qui la remplacera par les compteurs pré-agrégés.
+- **Bilan lu à l'affichage, exception temporaire autorisée (T-64), levée au
+  T-67.** L'écran d'une campagne confirmée comptait ses messages par état au
+  journal, exception à l'interdit des compteurs calculés à la volée, autorisée
+  par l'utilisateur le 5 novembre 2026 jusqu'au suivi en direct. Depuis le
+  T-67, il ne lit plus que les compteurs pré-agrégés.
+- **Compteurs écrits avec l'état (T-67).** `journal_compteur` s'incrémente dans
+  la transaction de chaque changement d'état d'un message de campagne : les
+  compteurs rendent exactement les chiffres du journal, rejeux d'accusés et
+  relivraisons de file compris, puisqu'un rejeu est refusé par la table des
+  transitions avant de compter. L'expéditeur entre dans la clé : le compte par
+  expéditeur, reporté depuis le T-60, en sort directement. Les non soumis se
+  déduisent des destinataires prévus ; pour une campagne annulée, tout ce qui
+  n'est ni parti ni refusé est annulé ou en passe de l'être.
+- **Coût consommé lu sur la réservation (T-67).** Le suivi affiche le montant
+  consommé sur la réservation de la campagne (initial moins restant), puis le
+  coût réel à la clôture : c'est le chiffre facturé, plafonné au coût annoncé,
+  alors que la colonne `cout` des compteurs suit le prix de chaque message.
+- **Rafraîchissement sans saut (T-67).** Une sonde invisible interroge le
+  fragment toutes les deux secondes, seulement quand l'onglet est visible et
+  tant que la campagne peut bouger ; la réponse remplace la sonde à sa place et
+  chaque zone (état, progression, compteurs, expéditeurs) par échange hors
+  bande. Aucun échange ne demande de défilement, et les zones gardent leur
+  hauteur d'un rafraîchissement à l'autre (seule une ligne nouvelle du tableau
+  par réseau l'allonge) : la position de défilement reste en place. Le fragment ne
+  touche ni `journal_message` ni les tables de destinataires : vérifié par le
+  plan d'exécution, par la capture des requêtes, et par un test qui ajoute
+  quarante mille messages au journal sans changer ni le nombre de requêtes ni
+  le temps de réponse. Une campagne close ne s'interroge plus.
 
 ## T-55 · Modèles de message et variables
 

@@ -151,8 +151,8 @@ def test_une_pause_arrete_la_soumission_sans_prendre_de_creneau(client, worker):
     assert _etats(campagne) == {Etat.SOUMIS: 2, Etat.EN_ATTENTE: 4}
     assert len(worker.creneaux) == 2  # les messages retenus n'ont pris aucun créneau
     assert diffusion.publier() == 0  # en pause, rien ne se publie ni ne se remet en file
-    bilan = selectors.bilan(Campagne.objects.get(id=campagne.id))
-    assert (bilan.partis, bilan.non_soumis, bilan.en_soumission) == (2, 4, 0)
+    suivi = selectors.suivi(Campagne.objects.get(id=campagne.id))
+    assert (suivi.partis, suivi.non_soumis) == (2, 4)
     assert _consomme(client) == 2 * PRIX
 
 
@@ -161,8 +161,8 @@ def test_une_pause_avant_toute_publication_compte_les_destinataires_non_publies(
     diffusion.publier_lot(campagne.id, taille=2)
     services.mettre_en_pause(campagne, auteur=None)
     assert diffusion.publier() == 0
-    bilan = selectors.bilan(Campagne.objects.get(id=campagne.id))
-    assert (bilan.partis, bilan.non_soumis) == (0, 5)
+    suivi = selectors.suivi(Campagne.objects.get(id=campagne.id))
+    assert (suivi.partis, suivi.non_soumis) == (0, 5)
 
 
 def test_pause_puis_reprise_sans_perte_ni_doublon(client, worker):
@@ -215,8 +215,9 @@ def test_une_annulation_libere_exactement_les_credits_des_messages_non_partis(cl
     # La dernière copie en file, relivrée après la clôture, s'acquitte sans rien toucher.
     worker._soumettre(file[4])
     assert _consomme(client) == 3 * PRIX
-    bilan = selectors.bilan(campagne)
-    assert (bilan.partis, bilan.annules, bilan.non_soumis) == (3, 5, 0)
+    suivi = selectors.suivi(campagne)
+    assert (suivi.partis, suivi.annules, suivi.non_soumis) == (3, 5, 0)
+    assert suivi.cout_consomme == 3 * PRIX
 
 
 def test_une_annulation_n_annule_jamais_un_message_dont_la_soumission_a_commence(client, worker):

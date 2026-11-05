@@ -1,0 +1,45 @@
+{# Suivi en direct d'une campagne (T-67). La sonde, invisible, interroge le fragment toutes les deux secondes tant que la campagne peut bouger et que l'onglet est visible ; la réponse met à jour chaque zone par échange hors bande, à taille fixe, sans toucher au reste de la page. #}
+<div id="suivi-sonde" hidden{% if en_direct %} hx-get="{% url 'campagne-suivi' campagne.id %}" hx-trigger="every 2s [document.visibilityState === 'visible']" hx-swap="outerHTML"{% endif %}></div>
+
+<p id="suivi-etat"{% if hors_bande %} hx-swap-oob="true"{% endif %} class="mb-3 min-h-[1.5rem]">
+  {% if campagne.terminee_le %}
+    Close le {{ campagne.terminee_le|date:"d/m/Y à H:i" }} : coût réel {{ campagne.cout_reel }} FCFA ; le reste de la réservation est rendu à votre solde.
+  {% elif campagne.etat == "ANNULEE" %}
+    Annulation en cours : les messages non partis sont annulés, puis le reste de la réservation est rendu à votre solde.
+  {% elif campagne.etat == "EN_PAUSE" %}
+    En pause : aucun message ne part. Ceux dont la soumission avait commencé finissent leur chemin.
+  {% elif campagne.etat == "EN_COURS" %}
+    Diffusion en cours.
+  {% else %}
+    En attente de diffusion.
+  {% endif %}
+</p>
+
+{% if suivi %}
+  <div id="suivi-progression"{% if hors_bande %} hx-swap-oob="true"{% endif %} class="mb-3">
+    <div class="h-2 w-full rounded bg-slate-100" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ suivi.progression }}" aria-label="Progression de la campagne">
+      <div class="h-2 rounded bg-slate-900" style="width: {{ suivi.progression }}%"></div>
+    </div>
+  </div>
+
+  <dl id="suivi-compteurs"{% if hors_bande %} hx-swap-oob="true"{% endif %} class="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <div><dt class="text-slate-500">Partis vers le réseau</dt><dd class="text-lg">{{ suivi.partis }}</dd></div>
+    <div><dt class="text-slate-500">Livrés</dt><dd class="text-lg">{{ suivi.livres }}</dd></div>
+    <div><dt class="text-slate-500">Non livrés</dt><dd class="text-lg">{{ suivi.echecs }}</dd></div>
+    <div><dt class="text-slate-500">{% if campagne.etat == "ANNULEE" %}Annulés, non facturés{% else %}Non soumis{% endif %}</dt><dd class="text-lg">{% if campagne.etat == "ANNULEE" %}{{ suivi.annules }}{% else %}{{ suivi.non_soumis }}{% endif %}</dd></div>
+    <div><dt class="text-slate-500">Refusés avant le réseau</dt><dd class="text-lg">{{ suivi.refuses }}</dd></div>
+    {% if campagne.etat != "ANNULEE" %}<div><dt class="text-slate-500">Annulés</dt><dd class="text-lg">{{ suivi.annules }}</dd></div>{% endif %}
+    <div><dt class="text-slate-500">Coût consommé</dt><dd class="text-lg">{{ suivi.cout_consomme }} FCFA</dd></div>
+  </dl>
+
+  <table id="suivi-expediteurs"{% if hors_bande %} hx-swap-oob="true"{% endif %} class="w-full text-left">
+    <thead class="text-slate-600"><tr><th class="py-1">Réseau</th><th class="py-1">Expéditeur</th><th class="py-1">Partis</th></tr></thead>
+    <tbody>
+      {% for operateur, expediteur, nombre in suivi.par_expediteur %}
+        <tr class="border-t border-slate-200"><td class="py-1">{{ operateur }}</td><td class="py-1">{{ expediteur }}</td><td class="py-1">{{ nombre }}</td></tr>
+      {% empty %}
+        <tr class="border-t border-slate-200"><td class="py-1 text-slate-500" colspan="3">Aucun message parti pour l'instant.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endif %}

@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views, vues_campagnes
+from . import fragments, views, vues_campagnes
 
 urlpatterns = [
     path("campagnes", vues_campagnes.liste, name="campagnes"),
@@ -13,4 +13,5 @@ urlpatterns = [
     path("campagnes/<uuid:pk>/pause", vues_campagnes.mettre_en_pause, name="campagne-pause"),
     path("campagnes/<uuid:pk>/reprendre", vues_campagnes.reprendre, name="campagne-reprendre"),
     path("campagnes/<uuid:pk>/annuler", vues_campagnes.annuler, name="campagne-annuler"),
+    path("campagnes/<uuid:pk>/fragments/suivi", fragments.suivi, name="campagne-suivi"),
 ]

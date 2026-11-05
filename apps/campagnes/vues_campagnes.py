@@ -14,7 +14,7 @@ from apps.core.encodage import table_pour_le_navigateur
 from apps.core.montants import en_lettres, francs_cfa
 from apps.expediteurs.models import Expediteur
 
-from . import modeles, selectors, services
+from . import fragments, modeles, services
 from .models import Campagne, Modele
 
 
@@ -157,8 +157,7 @@ def detail(request, pk):
             "peut_lancer": autorise(request.user, "campagnes.lancer"),
         }
     else:
-        contexte |= {
-            "bilan": selectors.bilan(campagne),
+        contexte |= fragments.contexte_suivi(campagne) | {
             "peut_piloter": autorise(request.user, "campagnes.lancer"),
             "pausable": campagne.etat in services.PAUSABLES,
             "annulable": campagne.etat in services.ANNULABLES,

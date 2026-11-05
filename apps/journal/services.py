@@ -1,6 +1,7 @@
 """Porte d'écriture du module journal."""
 
 import logging
+from collections import Counter
 from datetime import datetime
 
 from django.db import connection, connections, transaction
@@ -103,6 +104,54 @@ def creer_partitions_a_venir(mois_d_avance: int = 2) -> list[str]:
     return creees
 
 
+# Compteurs du suivi (T-67) : la colonne qu'une transition incrémente.
+COMPTER = """
+INSERT INTO journal_compteur (
+    client_id, campagne_id, operateur, expediteur_libelle, heure,
+    emis, livres, echecs, sans_accuse, refuses, annules, cout
+)
+VALUES (%s, %s, %s, %s, date_trunc('hour', %s::timestamptz), %s, %s, %s, %s, %s, %s, %s)
+ON CONFLICT (client_id, campagne_id, operateur, expediteur_libelle, heure) DO UPDATE SET
+    emis = journal_compteur.emis + EXCLUDED.emis,
+    livres = journal_compteur.livres + EXCLUDED.livres,
+    echecs = journal_compteur.echecs + EXCLUDED.echecs,
+    sans_accuse = journal_compteur.sans_accuse + EXCLUDED.sans_accuse,
+    refuses = journal_compteur.refuses + EXCLUDED.refuses,
+    annules = journal_compteur.annules + EXCLUDED.annules,
+    cout = journal_compteur.cout + EXCLUDED.cout
+"""
+COLONNES = ("emis", "livres", "echecs", "sans_accuse", "refuses", "annules")
+
+
+def _colonne(depuis: str, vers: str) -> str | None:
+    """La colonne du compteur qu'incrémente une transition, ou None."""
+    if vers == Etat.SOUMIS:
+        return "emis"
+    if vers == Etat.LIVRE:
+        return "livres"
+    if vers in (Etat.NON_LIVRE, Etat.EXPIRE):
+        return "echecs"
+    if vers == Etat.REJETE:
+        # Refusé par l'opérateur après acceptation : un échec ; avant, un refus.
+        return "echecs" if depuis == Etat.SOUMIS else "refuses"
+    if vers == Etat.SANS_ACCUSE:
+        return "sans_accuse"
+    if vers == Etat.ANNULE:
+        return "annules"
+    return None
+
+
+def _compter(
+    *, client_id, campagne_id, operateur, expediteur, horodatage, colonne, nombre=1, cout=0
+):
+    valeurs = [nombre if c == colonne else 0 for c in COLONNES]
+    with connection.cursor() as curseur:
+        curseur.execute(
+            COMPTER,
+            [client_id, campagne_id, operateur, expediteur, horodatage, *valeurs, cout],
+        )
+
+
 class TransitionInterdite(Exception):
     def __init__(self, message_id, depuis: str, vers: str):
         self.message_id, self.depuis, self.vers = message_id, depuis, vers
@@ -120,7 +169,8 @@ def changer_etat(
 ) -> None:
     """Seule porte de changement d'état d'un message. Vérifie la transition
     contre la table de `core.etats`, écrit le nouvel état et ses champs, puis
-    un événement daté. Une transition interdite est journalisée et refusée.
+    un événement daté, et pour un message de campagne son compteur du suivi.
+    Une transition interdite est journalisée et refusée.
 
     `message` doit porter l'état courant, lu sous verrou par l'appelant.
     """
@@ -145,6 +195,17 @@ def changer_etat(
         source=source,
         details=details or {},
     )
+    colonne = _colonne(message.etat, vers)
+    if colonne and message.campagne_id:
+        _compter(
+            client_id=message.client_id,
+            campagne_id=message.campagne_id,
+            operateur=message.operateur,
+            expediteur=message.expediteur_libelle,
+            horodatage=horodatage,
+            colonne=colonne,
+            cout=message.cout_total if colonne == "emis" else 0,
+        )
     message.etat = vers
 
 
@@ -281,7 +342,8 @@ FROM (
     FOR UPDATE SKIP LOCKED
 ) AS choix
 WHERE m.id = choix.id AND m.date_reception = choix.date_reception
-RETURNING m.id, m.date_reception, m.client_id, m.operateur, m.campagne_id
+RETURNING m.id, m.date_reception, m.client_id, m.operateur, m.campagne_id,
+    m.expediteur_libelle
 """
 
 
@@ -323,8 +385,21 @@ def changer_etats_campagne(
             source=source,
             details=details,
         )
-        for id_, _, client_id, _, _ in lignes
+        for id_, _, client_id, *_ in lignes
     )
+    colonne = _colonne("", vers)
+    if colonne:
+        groupes = Counter((client_id, op, exp) for _, _, client_id, op, _, exp in lignes)
+        for (client_id, operateur, expediteur), nombre in groupes.items():
+            _compter(
+                client_id=client_id,
+                campagne_id=campagne_id,
+                operateur=operateur,
+                expediteur=expediteur,
+                horodatage=maintenant,
+                colonne=colonne,
+                nombre=nombre,
+            )
     return [
         Message(
             id=id_,
@@ -332,9 +407,10 @@ def changer_etats_campagne(
             client_id=client_id,
             operateur=operateur,
             campagne_id=campagne,
+            expediteur_libelle=expediteur,
             etat=vers,
         )
-        for id_, reception, client_id, operateur, campagne in lignes
+        for id_, reception, client_id, operateur, campagne, expediteur in lignes
     ]
 
 

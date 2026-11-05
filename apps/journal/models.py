@@ -121,3 +121,38 @@ class Destinataire(models.Model):
 
     def __str__(self):
         return f"{self.campagne_id} {self.contact_id}"
+
+
+class Compteur(models.Model):
+    """Agrégats d'une campagne par réseau, expéditeur et heure, écrits dans la
+    transaction de chaque changement d'état d'un message (`changer_etat`).
+    C'est ce que lisent le suivi en direct et les tableaux de bord, jamais
+    `journal_message`. Chaque transition n'arrive qu'une fois par message : les
+    compteurs sont exacts, rejeux compris."""
+
+    pk = models.CompositePrimaryKey(
+        "client", "campagne_id", "operateur", "expediteur_libelle", "heure"
+    )
+    client = models.ForeignKey(
+        "comptes.Client", on_delete=models.PROTECT, related_name="+", db_index=False
+    )
+    campagne_id = models.UUIDField()
+    operateur = models.CharField(max_length=20)
+    expediteur_libelle = models.CharField(max_length=11)
+    heure = models.DateTimeField()
+    emis = models.IntegerField(default=0)
+    livres = models.IntegerField(default=0)
+    echecs = models.IntegerField(default=0)
+    sans_accuse = models.IntegerField(default=0)
+    # Refusés avant le réseau (liste noire, expéditeur, passerelle), sans frais.
+    refuses = models.IntegerField(default=0)
+    annules = models.IntegerField(default=0)
+    # Somme des coûts des messages émis. Le coût facturé, plafonné à la
+    # réservation, se lit sur la réservation de la campagne.
+    cout = models.BigIntegerField(default=0)
+
+    class Meta:
+        db_table = "journal_compteur"
+
+    def __str__(self):
+        return f"{self.campagne_id} {self.operateur} {self.heure}"

@@ -2,56 +2,90 @@
 
 from dataclasses import dataclass
 
-from django.db.models import Count, Q
+from django.db.models import Sum
 
-from apps.core.etats import Etat
-from apps.journal.models import Destinataire as Servi
-from apps.journal.models import Message
-from apps.journal.services import NON_SOUMIS
+from apps.credits.models import Reservation
+from apps.journal.models import Compteur
 
-from .models import Campagne, Destinataire
+from .models import Campagne
+
+COLONNES = ("emis", "livres", "echecs", "sans_accuse", "refuses", "annules")
 
 
 @dataclass(frozen=True)
-class Bilan:
+class Suivi:
     # Partis vers le réseau : ils ne se rattrapent pas.
     partis: int
-    # Soumission commencée, sort pas encore écrit.
-    en_soumission: int
-    # Pas encore soumis : retenus, en file, ou pas encore publiés.
-    non_soumis: int
-    annules: int
-    # Refusés avant le réseau (liste noire, expéditeur), sans frais.
+    livres: int
+    echecs: int
+    sans_accuse: int
+    # Refusés avant le réseau (liste noire, expéditeur, passerelle), sans frais.
     refuses: int
+    annules: int
+    # Pas encore partis : en file, retenus, en cours de soumission ou pas encore publiés.
+    non_soumis: int
+    # Coût consommé sur la réservation, plafonné au coût annoncé.
+    cout_consomme: int
+    # [(réseau, expéditeur, partis)], les plus nombreux d'abord.
+    par_expediteur: list
+
+    @property
+    def progression(self) -> int:
+        """Part des destinataires dont le sort est réglé, en pourcentage."""
+        total = self.partis + self.refuses + self.annules + self.non_soumis
+        return round(100 * (total - self.non_soumis) / total) if total else 0
 
 
-def bilan(campagne: Campagne) -> Bilan | None:
-    """Où en sont les messages d'une campagne confirmée. Lu à l'affichage d'une
-    campagne, jamais rafraîchi en boucle : le suivi en direct lira les
-    compteurs pré-agrégés (T-67). Borné aux partitions de la campagne et porté
-    par l'index (campagne_id, etat)."""
-    if not campagne.confirmee_le:
+def suivi(campagne: Campagne) -> Suivi | None:
+    """Où en est une campagne confirmée, lu sur les compteurs pré-agrégés et sur
+    sa réservation : une poignée de lignes, quel que soit le nombre de messages.
+    Jamais de lecture de `journal_message`."""
+    if not campagne.confirmee_le or campagne.recurrente:
         return None
-    comptes = Message.objects.filter(
-        campagne_id=campagne.id, date_reception__gte=campagne.confirmee_le
-    ).aggregate(
-        partis=Count("id", filter=Q(date_soumission__isnull=False)),
-        en_soumission=Count(
-            "id", filter=Q(etat__in=NON_SOUMIS, soumission_debutee_le__isnull=False)
-        ),
-        en_attente=Count("id", filter=Q(etat__in=NON_SOUMIS, soumission_debutee_le__isnull=True)),
-        annules=Count("id", filter=Q(etat=Etat.ANNULE)),
-        refuses=Count("id", filter=Q(etat=Etat.REJETE, date_soumission__isnull=True)),
+    lignes = (
+        Compteur.objects.filter(client_id=campagne.client_id, campagne_id=campagne.id)
+        .values("operateur", "expediteur_libelle")
+        .annotate(**{c: Sum(c) for c in COLONNES})
     )
-    non_publies = (
-        Destinataire.objects.filter(campagne=campagne).count()
-        - Servi.objects.filter(campagne_id=campagne.id).count()
+    totaux = dict.fromkeys(COLONNES, 0)
+    par_expediteur = []
+    for ligne in lignes:
+        for colonne in COLONNES:
+            totaux[colonne] += ligne[colonne]
+        if ligne["emis"]:
+            par_expediteur.append((ligne["operateur"], ligne["expediteur_libelle"], ligne["emis"]))
+    reste = campagne.destinataires_prevus - totaux["emis"] - totaux["refuses"]
+    if campagne.etat == Campagne.Etat.ANNULEE:
+        # Tout ce qui n'est pas parti ni refusé est annulé, ou en passe de l'être.
+        annules, non_soumis = max(reste, 0), 0
+    else:
+        annules, non_soumis = totaux["annules"], max(reste - totaux["annules"], 0)
+    if campagne.terminee_le:
+        cout = campagne.cout_reel
+    else:
+        reservation = (
+            Reservation.objects.filter(campagne_id=campagne.id)
+            .values_list("montant_initial", "montant_restant")
+            .first()
+        )
+        cout = reservation[0] - reservation[1] if reservation else 0
+    return Suivi(
+        partis=totaux["emis"],
+        livres=totaux["livres"],
+        echecs=totaux["echecs"],
+        sans_accuse=totaux["sans_accuse"],
+        refuses=totaux["refuses"],
+        annules=annules,
+        non_soumis=non_soumis,
+        cout_consomme=cout,
+        par_expediteur=sorted(par_expediteur, key=lambda ligne: -ligne[2]),
     )
-    annulee = campagne.etat == Campagne.Etat.ANNULEE
-    return Bilan(
-        partis=comptes["partis"],
-        en_soumission=comptes["en_soumission"],
-        non_soumis=comptes["en_attente"] + (0 if annulee else non_publies),
-        annules=comptes["annules"] + (non_publies if annulee else 0),
-        refuses=comptes["refuses"],
-    )
+
+
+def en_direct(campagne: Campagne) -> bool:
+    """Vrai tant que la campagne peut encore bouger : le suivi se rafraîchit."""
+    return campagne.etat in (
+        Campagne.Etat.EN_ATTENTE,
+        Campagne.Etat.EN_COURS,
+        Campagne.Etat.EN_PAUSE,
+    ) or (campagne.etat == Campagne.Etat.ANNULEE and not campagne.terminee_le)

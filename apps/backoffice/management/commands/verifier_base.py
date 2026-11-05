@@ -18,6 +18,7 @@ CLOISONNEES = (
     "journal_message",
     "journal_evenement",
     "journal_destinataire",
+    "journal_compteur",
     "credits_registre",
     "credits_compte",
     "credits_reservation",
