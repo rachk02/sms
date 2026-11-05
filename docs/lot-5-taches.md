@@ -104,8 +104,9 @@ d'eux ne convient pas.
 - **Occurrence en attente, client prévenu plus tard (T-65).** Une occurrence
   au-dessus du plafond, ou que le solde ne couvre pas, reste en brouillon et
   publie l'événement `campagne.occurrence.a_confirmer`. Aucun module ne le
-  consomme encore : jusqu'aux notifications (lot 6), le client le voit sur
-  l'écran de sa campagne récurrente, il n'en est pas averti.
+  consomme encore : jusqu'au module notifications, que le découpage ne place
+  encore dans aucun lot, le client le voit sur l'écran de sa campagne
+  récurrente, il n'en est pas averti.
 - **Chaque campagne isolée dans le tour de l'ordonnanceur (T-65).** Une
   campagne en échec (publication, clôture, occurrence) est journalisée et
   n'arrête ni les autres ni le relais des événements.
@@ -283,4 +284,5 @@ Ce qui reste ouvert pour les lots suivants :
 - Le prix par segment reste provisoire, lu dans les réglages, jusqu'aux
   grilles tarifaires datées du lot 7.
 - L'événement `campagne.occurrence.a_confirmer` n'a pas encore de
-  consommateur : le client sera averti avec les notifications du lot 6.
+  consommateur : le client sera averti par le module notifications, que le
+  découpage des lots ne place encore nulle part.

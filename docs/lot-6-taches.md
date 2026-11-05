@@ -6,6 +6,35 @@ Découpage provisoire, à revoir en entrant dans le lot.
 
 Ce lot est court mais il est celui qui protège l'entreprise. Une plateforme d'envoi de masse sans désinscription fiable et sans preuve de consentement est un risque juridique permanent.
 
+## Décisions prises avant d'entrer dans le lot
+
+Tranchées le 5 novembre 2026 par l'utilisateur.
+
+- **Fenêtre légale initiale (T-72).** Du lundi au samedi, de 8 h à 20 h, heure
+  de Ouagadougou (sans heure d'été). La fenêtre vit en base et se modifie sans
+  redéploiement.
+- **Campagne en cours à la fermeture de la fenêtre (T-74).** La règle légale
+  l'emporte : les messages marketing pas encore soumis sont retenus comme pour
+  une pause et repartent seuls à l'ouverture suivante ; l'écran annonce l'heure
+  de reprise. Les messages transactionnels et les codes à usage unique ne sont
+  jamais retenus.
+- **SMS de confirmation du STOP gratuit, hors registre (T-71).** Message
+  système envoyé sous le numéro court, inscrit au journal des messages avec un
+  coût nul ; aucune réservation, aucune écriture au registre de crédits, aucun
+  verrou sur le compte du client. Il part donc même si le client n'a plus de
+  crédit.
+- **Nombre de messages reçus, lu au dossier de preuve (T-75).** L'écran du
+  back-office lit les messages du numéro sur la durée de rétention, par
+  l'index numéro et date, et les compte en les affichant. Exception à
+  l'interdit des compteurs calculés à la volée, limitée à cet écran d'agent,
+  comme le bilan de T-64.
+
+Déjà tranché par l'architecture : un STOP touché par plusieurs clients dans
+les soixante-douze heures s'applique à tous, une ligne par client, la
+désinscription l'emportant sur le chiffre d'affaires. Le webhook du client
+(T-71) se limite pour l'instant à la publication d'un événement : les webhooks
+sortants arrivent au lot 9 (T-111).
+
 ## T-69 · Détection du STOP entrant
 
 **Produit** La normalisation du message reçu, sans accents ni casse, et sa comparaison à la table des mots-clés : STOP, ARRET, ARRETER, et les variantes avec espaces ou ponctuation.
