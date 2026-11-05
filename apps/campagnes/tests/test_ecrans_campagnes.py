@@ -161,3 +161,40 @@ def test_une_campagne_d_un_autre_compte_ne_se_pilote_pas(client, membre):
     client.force_login(autre)
     assert client.post(f"/campagnes/{campagne.id}/annuler").status_code == 404
     assert Campagne.objects.using("worker").get().etat == Campagne.Etat.EN_ATTENTE
+
+
+def _creer_programmee(client, **envoi):
+    liste = Liste.objects.using("worker").get()
+    return client.post(
+        "/campagnes/nouvelle",
+        {
+            "nom": "Rappel",
+            "type": "MARKETING",
+            "texte": "Rappel de livraison.",
+            "listes": [str(liste.id)],
+            "politique": "REPLI",
+            **envoi,
+        },
+        follow=True,
+    ).content.decode()
+
+
+def test_une_campagne_programmee_par_l_ecran(client, membre):
+    client.force_login(membre)
+    heure = timezone.localtime() + timezone.timedelta(days=2)
+    page = _creer_programmee(
+        client, envoi="programme", planifiee_pour=heure.strftime("%Y-%m-%dT%H:%M")
+    )
+    assert f"Envoi programmé le {heure:%d/%m/%Y à %H:%M}" in page
+    assert "Programmer l'envoi à 3 destinataires pour 75 FCFA" in page
+    passee = _creer_programmee(client, envoi="programme", planifiee_pour="2020-01-01T08:00")
+    assert "programmée est déjà passée" in passee
+
+
+def test_une_campagne_recurrente_par_l_ecran(client, membre):
+    client.force_login(membre)
+    page = _creer_programmee(client, envoi="recurrent", recurrence_jours="7", plafond="100")
+    assert "Tous les 7 jour(s), plafond de 100 FCFA par envoi" in page
+    assert "Programmer l'envoi récurrent, plafond 100 FCFA" in page
+    sans_plafond = _creer_programmee(client, envoi="recurrent", recurrence_jours="7")
+    assert "plafond de coût par envoi" in sans_plafond

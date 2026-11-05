@@ -282,6 +282,20 @@ ATTENDRE, `planifiee_pour`, `lissage_par_minute`, `destinataires_prevus`,
 nul : la campagne part sous le numéro court. `politique_expediteur` vaut REPLI
 par défaut.
 
+Récurrence : `recurrence_jours` (intervalle fixe en jours, 1, 7 ou 14),
+`recurrence_fin`, `plafond_occurrence` (FCFA entiers), `prochaine_occurrence`,
+et pour une occurrence `parent_id` (la campagne récurrente, même table) et
+`occurrence_le` (son créneau). Unicité sur `(parent_id, occurrence_le)` : une
+occurrence par créneau, même sous deux ordonnanceurs.
+
+Une campagne programmée (`planifiee_pour`) est figée et réservée à sa
+confirmation, passe PLANIFIEE, puis EN_ATTENTE à son heure. Une campagne
+récurrente est un patron : sa confirmation la passe PLANIFIEE sans rien figer
+ni réserver ; à chaque créneau, l'ordonnanceur crée une occurrence, recalcule
+ses destinataires et la fige et la réserve si son coût reste sous le plafond,
+sinon elle reste BROUILLON en attendant le client. Après la date de fin, la
+campagne récurrente passe TERMINEE ; annulée, elle ne crée plus d'occurrence.
+
 L'aperçu recalcule tout à chaque affichage. La confirmation refait le calcul et
 refuse si les chiffres diffèrent de ceux que le client a lus ; sinon elle fige
 les destinataires, réserve le coût annoncé en une fois et passe EN_ATTENTE.

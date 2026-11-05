@@ -71,6 +71,17 @@ class Campagne(BaseClient):
     cout_estime = models.IntegerField(default=0)
     cout_reel = models.IntegerField(default=0)
     planifiee_pour = models.DateTimeField(null=True, blank=True)
+    # Récurrence (T-65). Une campagne récurrente est un patron : elle ne fige
+    # ni ne réserve rien ; chaque occurrence est une campagne fille, figée et
+    # réservée à son heure si son coût reste sous le plafond confirmé.
+    recurrence_jours = models.SmallIntegerField(null=True, blank=True)
+    recurrence_fin = models.DateTimeField(null=True, blank=True)
+    plafond_occurrence = models.IntegerField(null=True, blank=True)
+    prochaine_occurrence = models.DateTimeField(null=True, blank=True)
+    parent = models.ForeignKey(
+        "self", on_delete=models.PROTECT, null=True, blank=True, related_name="occurrences"
+    )
+    occurrence_le = models.DateTimeField(null=True, blank=True)
     lissage_par_minute = models.IntegerField(null=True, blank=True)
     confirmee_le = models.DateTimeField(null=True, blank=True)
     demarree_le = models.DateTimeField(null=True, blank=True)
@@ -82,6 +93,17 @@ class Campagne(BaseClient):
     class Meta:
         db_table = "campagnes_campagne"
         indexes = [models.Index(fields=["client", "etat"], name="campagne_client_etat")]
+        constraints = [
+            # Une occurrence par créneau : deux ordonnanceurs, ou un rejeu, ne
+            # créent jamais deux fois la même.
+            models.UniqueConstraint(
+                fields=["parent", "occurrence_le"], name="campagne_occurrence_unique"
+            ),
+        ]
+
+    @property
+    def recurrente(self) -> bool:
+        return self.recurrence_jours is not None and self.parent_id is None
 
     def __str__(self):
         return self.nom

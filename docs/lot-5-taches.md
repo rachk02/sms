@@ -91,6 +91,24 @@ d'eux ne convient pas.
   inconnu retient la clôture jusqu'à sa vérification. Des destinataires en
   attente d'approbation retiennent aussi une campagne en cours ; le client peut
   l'annuler.
+- **Programmation et récurrence (T-65).** Une campagne programmée est figée et
+  réservée à sa confirmation, avec les chiffres que le client a lus, puis
+  attend son heure. Une heure passée est refusée à l'enregistrement et de
+  nouveau à la confirmation. Une campagne récurrente est un patron dans la même
+  table ; chaque occurrence est une campagne fille, confirmée par la même
+  fonction que la confirmation d'un client (`services._figer`). Fréquences
+  proposées : chaque jour, chaque semaine, toutes les deux semaines, sans
+  calendrier mensuel ; à revoir si un client le demande. Après un arrêt de
+  l'ordonnanceur, une seule occurrence part, pour le dernier créneau échu, et
+  les créneaux sautés sont journalisés : jamais de rafale de rattrapage.
+- **Occurrence en attente, client prévenu plus tard (T-65).** Une occurrence
+  au-dessus du plafond, ou que le solde ne couvre pas, reste en brouillon et
+  publie l'événement `campagne.occurrence.a_confirmer`. Aucun module ne le
+  consomme encore : jusqu'aux notifications (lot 6), le client le voit sur
+  l'écran de sa campagne récurrente, il n'en est pas averti.
+- **Chaque campagne isolée dans le tour de l'ordonnanceur (T-65).** Une
+  campagne en échec (publication, clôture, occurrence) est journalisée et
+  n'arrête ni les autres ni le relais des événements.
 - **Bilan lu à l'affichage, exception temporaire autorisée (T-64).** L'écran
   d'une campagne confirmée compte ses messages par état au journal, borné à ses
   partitions et porté par l'index (campagne_id, etat), sans rafraîchissement.

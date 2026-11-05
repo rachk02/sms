@@ -1,8 +1,11 @@
 """Écrans des campagnes : composition, aperçu, envoi de test, confirmation (T-61) ;
-pause, reprise et annulation (T-64)."""
+pause, reprise et annulation (T-64) ; programmation et récurrence (T-65)."""
+
+from datetime import datetime
 
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.comptes.permissions import autorise, permission_requise
@@ -26,10 +29,57 @@ def liste(request):
     return render(request, "campagnes/campagnes.html", {"campagnes": campagnes})
 
 
+def _heure(saisie: str, libelle: str) -> datetime | None:
+    """Une heure saisie dans la page, lue dans le fuseau de Ouagadougou."""
+    if not saisie:
+        return None
+    try:
+        return timezone.make_aware(datetime.fromisoformat(saisie))
+    except ValueError:
+        raise services.CampagneRefusee(f"{libelle} illisible.") from None
+
+
+def _entier(saisie: str, libelle: str) -> int | None:
+    if not saisie:
+        return None
+    try:
+        return int(saisie)
+    except ValueError:
+        raise services.CampagneRefusee(f"{libelle} : un nombre entier est attendu.") from None
+
+
+def _programmation(saisie: dict) -> dict:
+    envoi = saisie["envoi"]
+    if envoi == "immediat":
+        return {}
+    programmation = {"planifiee_pour": _heure(saisie["planifiee_pour"], "Heure d'envoi")}
+    if envoi == "programme":
+        if programmation["planifiee_pour"] is None:
+            raise services.CampagneRefusee("Indiquez l'heure d'envoi programmée.")
+        return programmation
+    return programmation | {
+        "recurrence_jours": _entier(saisie["recurrence_jours"], "Fréquence") or 0,
+        "recurrence_fin": _heure(saisie["recurrence_fin"], "Fin de la récurrence"),
+        "plafond": _entier(saisie["plafond"], "Plafond"),
+    }
+
+
 @permission_requise("campagnes.composer")
 def nouvelle(request):
     client = request.user.client
-    saisie = {"nom": "", "texte": "", "listes": [], "segment": "", "expediteur": "", "type": ""}
+    saisie = {
+        "nom": "",
+        "texte": "",
+        "listes": [],
+        "segment": "",
+        "expediteur": "",
+        "type": "",
+        "envoi": "immediat",
+        "planifiee_pour": "",
+        "recurrence_jours": "7",
+        "recurrence_fin": "",
+        "plafond": "",
+    }
     erreur = ""
     if request.method == "POST":
         saisie = {
@@ -40,9 +90,15 @@ def nouvelle(request):
             "expediteur": request.POST.get("expediteur", ""),
             "politique": request.POST.get("politique", Campagne.Politique.REPLI),
             "type": request.POST.get("type", Campagne.Type.MARKETING),
+            "envoi": request.POST.get("envoi", "immediat"),
+            "planifiee_pour": request.POST.get("planifiee_pour", ""),
+            "recurrence_jours": request.POST.get("recurrence_jours", ""),
+            "recurrence_fin": request.POST.get("recurrence_fin", ""),
+            "plafond": request.POST.get("plafond", ""),
         }
         try:
             campagne = services.creer(
+                **_programmation(saisie),
                 client=client,
                 auteur=request.user,
                 nom=saisie["nom"],
@@ -70,6 +126,7 @@ def nouvelle(request):
         .order_by("libelle"),
         "politiques": Campagne.Politique.choices,
         "types": Campagne.Type.choices,
+        "recurrences": services.RECURRENCES.items(),
     }
     return render(request, "campagnes/nouvelle.html", contexte)
 
@@ -78,6 +135,8 @@ def nouvelle(request):
 def detail(request, pk):
     campagne = _campagne(pk)
     contexte = {"campagne": campagne}
+    if campagne.recurrente:
+        contexte["occurrences"] = campagne.occurrences.order_by("-occurrence_le")[:50]
     if campagne.etat == Campagne.Etat.BROUILLON:
         vu = services.apercu(campagne)
         contexte |= {
@@ -172,10 +231,11 @@ def reprendre(request, pk):
 @require_POST
 @permission_requise("campagnes.lancer")
 def annuler(request, pk):
-    return _piloter(
-        request,
-        pk,
-        services.annuler,
-        "Campagne « {nom} » annulée : les messages non partis sont annulés et leurs "
-        "crédits libérés ; les messages déjà soumis au réseau restent partis.",
-    )
+    if _campagne(pk).recurrente:
+        succes = "Récurrence de « {nom} » arrêtée : aucun nouvel envoi ne sera créé."
+    else:
+        succes = (
+            "Campagne « {nom} » annulée : les messages non partis sont annulés et leurs "
+            "crédits libérés ; les messages déjà soumis au réseau restent partis."
+        )
+    return _piloter(request, pk, services.annuler, succes)

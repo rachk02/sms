@@ -8,10 +8,18 @@ chiffres que le client a lus : s'ils ont changé entretemps (un import, une
 désinscription), elle refuse, pour que le client ne confirme jamais d'autres
 chiffres que ceux qu'il a vus. Confirmée, la campagne fige ses destinataires
 et réserve son coût en une fois (décision F-15).
+
+Planification et récurrence (T-65). Une campagne programmée est figée et
+réservée à sa confirmation, puis attend son heure (PLANIFIEE). Une campagne
+récurrente est un patron : sa confirmation enregistre la fréquence et le
+plafond, sans rien figer ni réserver ; chaque occurrence est une campagne
+fille, figée et réservée à son heure par la même fonction que la confirmation
+d'un client.
 """
 
 from collections import Counter
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 
 from django.db import connection, transaction
 from django.db.models import Q, Value
@@ -44,6 +52,39 @@ class ConfirmationPerimee(CampagneRefusee):
     """Les chiffres ont changé depuis l'aperçu que le client a lu."""
 
 
+# Fréquences proposées, en jours : un intervalle fixe, sans calendrier.
+RECURRENCES = {1: "Chaque jour", 7: "Chaque semaine", 14: "Toutes les deux semaines"}
+
+
+def _programmation(
+    planifiee_pour: datetime | None,
+    recurrence_jours: int | None,
+    recurrence_fin: datetime | None,
+    plafond: int | None,
+) -> dict:
+    """Valide l'heure d'envoi et la récurrence d'une campagne."""
+    maintenant = timezone.now()
+    if planifiee_pour is not None and planifiee_pour <= maintenant:
+        raise CampagneRefusee("L'heure d'envoi programmée est déjà passée.")
+    if recurrence_jours is None:
+        return {"planifiee_pour": planifiee_pour}
+    if recurrence_jours not in RECURRENCES:
+        raise CampagneRefusee("Fréquence de récurrence inconnue.")
+    if not isinstance(plafond, int) or isinstance(plafond, bool) or plafond <= 0:
+        raise CampagneRefusee(
+            "Une campagne récurrente porte un plafond de coût par envoi, en FCFA entiers."
+        )
+    debut = planifiee_pour or maintenant
+    if recurrence_fin is not None and recurrence_fin <= debut:
+        raise CampagneRefusee("La fin de la récurrence précède son premier envoi.")
+    return {
+        "planifiee_pour": planifiee_pour,
+        "recurrence_jours": recurrence_jours,
+        "recurrence_fin": recurrence_fin,
+        "plafond_occurrence": plafond,
+    }
+
+
 # Composition
 
 
@@ -74,6 +115,10 @@ def creer(
     expediteur_id=None,
     politique: str = Campagne.Politique.REPLI,
     type_: str = Campagne.Type.MARKETING,
+    planifiee_pour: datetime | None = None,
+    recurrence_jours: int | None = None,
+    recurrence_fin: datetime | None = None,
+    plafond: int | None = None,
 ) -> Campagne:
     nom = nom.strip()
     if not nom:
@@ -89,7 +134,9 @@ def creer(
             raise CampagneRefusee("Identifiant d'expéditeur introuvable pour ce compte.")
     if politique not in Campagne.Politique.values or type_ not in Campagne.Type.values:
         raise CampagneRefusee("Politique ou type de campagne inconnu.")
+    programmation = _programmation(planifiee_pour, recurrence_jours, recurrence_fin, plafond)
     return Campagne.objects.create(
+        **programmation,
         client=client,
         nom=nom,
         type=type_,
@@ -256,18 +303,11 @@ ON CONFLICT DO NOTHING
 """
 
 
-@transaction.atomic
-def confirmer(campagne: Campagne, *, auteur, destinataires_lus: int, cout_lu: int) -> Campagne:
-    """Fige les destinataires et réserve le coût annoncé, en une transaction."""
-    campagne = Campagne.objects.select_for_update().get(id=campagne.id)
-    if campagne.etat != Campagne.Etat.BROUILLON:
-        raise CampagneRefusee("Cette campagne est déjà confirmée.")
-    vu = apercu(campagne)
-    if (vu.destinataires, vu.cout) != (destinataires_lus, cout_lu):
-        raise ConfirmationPerimee(
-            f"Les chiffres ont changé depuis votre lecture : {vu.destinataires} destinataires "
-            f"pour {vu.cout} FCFA. Vérifiez l'aperçu et confirmez de nouveau."
-        )
+def _figer(campagne: Campagne, vu: Apercu, *, auteur) -> Campagne:
+    """Fige les destinataires et réserve le coût de l'aperçu `vu`, pour une
+    campagne verrouillée par l'appelant. Seule porte, que la confirmation
+    vienne d'un client ou d'une occurrence sous son plafond. Une campagne
+    programmée attend ensuite son heure ; les autres partent aussitôt."""
     if vu.destinataires == 0:
         raise CampagneRefusee("Aucun destinataire à servir.")
     try:
@@ -292,7 +332,7 @@ def confirmer(campagne: Campagne, *, auteur, destinataires_lus: int, cout_lu: in
     figes = Destinataire.objects.filter(campagne=campagne).count()
     if figes != vu.destinataires:
         raise RuntimeError(f"{figes} destinataires figés pour {vu.destinataires} annoncés.")
-    campagne.etat = Campagne.Etat.EN_ATTENTE
+    campagne.etat = Campagne.Etat.PLANIFIEE if campagne.planifiee_pour else Campagne.Etat.EN_ATTENTE
     campagne.destinataires_prevus = vu.destinataires
     campagne.cout_estime = vu.cout
     campagne.segments_prevus = vu.estimation.segments
@@ -308,6 +348,114 @@ def confirmer(campagne: Campagne, *, auteur, destinataires_lus: int, cout_lu: in
         apres={"destinataires": vu.destinataires, "cout": vu.cout},
     )
     return campagne
+
+
+def _armer(campagne: Campagne, vu: Apercu, *, auteur) -> Campagne:
+    """Confirme une campagne récurrente : fréquence et plafond enregistrés,
+    première occurrence à l'heure choisie ou au prochain tour de
+    l'ordonnanceur. Rien n'est figé ni réservé ici."""
+    campagne.etat = Campagne.Etat.PLANIFIEE
+    campagne.prochaine_occurrence = campagne.planifiee_pour or timezone.now()
+    campagne.confirmee_le = timezone.now()
+    campagne.save()
+    auditer(
+        "campagnes.recurrence",
+        campagne,
+        auteur=auteur,
+        client=campagne.client,
+        apres={
+            "tous_les_jours": campagne.recurrence_jours,
+            "plafond": campagne.plafond_occurrence,
+            "premiere": campagne.prochaine_occurrence.isoformat(),
+            "cout_lu": vu.cout,
+        },
+    )
+    return campagne
+
+
+@transaction.atomic
+def confirmer(campagne: Campagne, *, auteur, destinataires_lus: int, cout_lu: int) -> Campagne:
+    """Confirmation par le client des chiffres qu'il a lus : fige et réserve,
+    ou, pour une campagne récurrente, arme sa récurrence."""
+    campagne = Campagne.objects.select_for_update().get(id=campagne.id)
+    if campagne.etat != Campagne.Etat.BROUILLON:
+        raise CampagneRefusee("Cette campagne est déjà confirmée.")
+    if campagne.planifiee_pour and campagne.planifiee_pour <= timezone.now():
+        raise CampagneRefusee(
+            "L'heure d'envoi programmée est passée depuis l'enregistrement : "
+            "créez la campagne de nouveau avec une autre heure."
+        )
+    vu = apercu(campagne)
+    if (vu.destinataires, vu.cout) != (destinataires_lus, cout_lu):
+        raise ConfirmationPerimee(
+            f"Les chiffres ont changé depuis votre lecture : {vu.destinataires} destinataires "
+            f"pour {vu.cout} FCFA. Vérifiez l'aperçu et confirmez de nouveau."
+        )
+    if campagne.recurrente:
+        return _armer(campagne, vu, auteur=auteur)
+    return _figer(campagne, vu, auteur=auteur)
+
+
+# Occurrences d'une campagne récurrente
+
+
+def _nom_occurrence(patron: Campagne, creneau: datetime) -> str:
+    date = timezone.localtime(creneau).strftime("%d/%m/%Y %H:%M")
+    return f"{patron.nom[: 150 - len(date) - 2]}, {date}"
+
+
+def creer_occurrence(patron: Campagne, creneau: datetime) -> tuple[Campagne, bool]:
+    """L'occurrence d'un créneau, créée une seule fois : la contrainte d'unicité
+    (parent, créneau) arrête un second ordonnanceur ou un rejeu. À appeler
+    dans une transaction, patron verrouillé."""
+    return Campagne.objects.get_or_create(
+        parent=patron,
+        occurrence_le=creneau,
+        defaults={
+            "client": patron.client,
+            "nom": _nom_occurrence(patron, creneau),
+            "type": patron.type,
+            "expediteur": patron.expediteur,
+            "modele_texte": patron.modele_texte,
+            "cible": patron.cible,
+            "politique_expediteur": patron.politique_expediteur,
+            "creee_par": patron.creee_par,
+        },
+    )
+
+
+def confirmer_occurrence(occurrence: Campagne, plafond: int) -> str | None:
+    """Fige et réserve une occurrence si son coût reste sous le plafond confirmé
+    pour sa campagne récurrente (décision F-22). Sinon elle reste en brouillon,
+    à confirmer par le client, et la raison est rendue. Le segment est recalculé
+    ici, à l'heure de l'occurrence."""
+    occurrence = Campagne.objects.select_for_update().get(id=occurrence.id)
+    if occurrence.etat != Campagne.Etat.BROUILLON:
+        return None
+    try:
+        vu = apercu(occurrence)
+    except (Segment.DoesNotExist, CampagneRefusee) as refus:
+        return f"Cible introuvable : {refus}"
+    if vu.cout > plafond:
+        return f"Coût de {vu.cout} FCFA au-dessus du plafond de {plafond} FCFA."
+    try:
+        with transaction.atomic():
+            _figer(occurrence, vu, auteur=None)
+    except CampagneRefusee as refus:
+        return str(refus)
+    return None
+
+
+def prochain_creneau(patron: Campagne, maintenant: datetime) -> tuple[datetime, int]:
+    """Le dernier créneau échu d'une campagne récurrente et le nombre de
+    créneaux sautés : après un arrêt de l'ordonnanceur, une seule occurrence
+    part, jamais une rafale de rattrapage."""
+    pas = timedelta(days=patron.recurrence_jours)
+    creneau, sautes = patron.prochaine_occurrence, 0
+    while creneau + pas <= maintenant:
+        creneau += pas
+        sautes += 1
+    return creneau, sautes
 
 
 # Pause, reprise et annulation (T-64)

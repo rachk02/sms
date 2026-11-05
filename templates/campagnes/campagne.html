@@ -4,6 +4,33 @@
 <h1 class="mb-1 text-2xl font-semibold">{{ campagne.nom }}</h1>
 <p class="mb-6 text-sm text-slate-600">{{ campagne.get_type_display }} ; {{ campagne.get_etat_display|lower }}.</p>
 
+{% if campagne.parent_id %}
+  <p class="mb-6 text-sm">Envoi du {{ campagne.occurrence_le|date:"d/m/Y à H:i" }} de la campagne récurrente <a class="underline" href="{% url 'campagne' campagne.parent_id %}">{{ campagne.parent.nom }}</a>.{% if campagne.etat == "BROUILLON" %} Il attend votre confirmation : son coût dépasse le plafond, ou il n'a pas pu être réservé.{% endif %}</p>
+{% endif %}
+{% if campagne.recurrente %}
+  <section class="mb-6 rounded-lg border border-slate-200 bg-white p-4 text-sm">
+    <h2 class="mb-2 text-lg font-semibold">Récurrence</h2>
+    <p>Tous les {{ campagne.recurrence_jours }} jour(s), plafond de {{ campagne.plafond_occurrence }} FCFA par envoi{% if campagne.recurrence_fin %}, jusqu'au {{ campagne.recurrence_fin|date:"d/m/Y à H:i" }}{% endif %}.
+      {% if campagne.etat == "PLANIFIEE" %}Prochain envoi le {{ campagne.prochaine_occurrence|date:"d/m/Y à H:i" }}.{% endif %}</p>
+    {% if occurrences %}
+      <table class="mt-3 w-full text-left">
+        <thead class="text-slate-600"><tr><th class="py-1">Envoi</th><th class="py-1">État</th><th class="py-1">Destinataires</th></tr></thead>
+        <tbody>
+          {% for occurrence in occurrences %}
+            <tr class="border-t border-slate-200">
+              <td class="py-1"><a class="underline" href="{% url 'campagne' occurrence.id %}">{{ occurrence.occurrence_le|date:"d/m/Y H:i" }}</a></td>
+              <td class="py-1">{{ occurrence.get_etat_display }}</td>
+              <td class="py-1">{% if occurrence.destinataires_prevus %}{{ occurrence.destinataires_prevus }}{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </section>
+{% elif campagne.planifiee_pour %}
+  <p class="mb-6 text-sm">Envoi programmé le {{ campagne.planifiee_pour|date:"d/m/Y à H:i" }} (heure de Ouagadougou).</p>
+{% endif %}
+
 <section class="mb-6 rounded-lg border border-slate-200 bg-white p-4">
   <h2 class="mb-2 text-lg font-semibold">Message</h2>
   <p class="whitespace-pre-wrap break-words font-mono text-sm">{{ campagne.modele_texte }}</p>
@@ -51,25 +78,48 @@
     </form>
   </section>
 
-  {% if peut_lancer and apercu.destinataires and apercu.suffisant %}
+  {% if peut_lancer and apercu.destinataires %}{% if apercu.suffisant or campagne.recurrente %}
     <div x-data="{ ouverte: false }">
       <button type="button" @click="ouverte = true" class="rounded bg-slate-900 px-4 py-2 text-white">Confirmer l'envoi</button>
       <div x-show="ouverte" x-cloak class="fixed inset-0 z-10 flex items-center justify-center bg-slate-900/50 p-4" @keydown.escape.window="ouverte = false">
         <div role="dialog" aria-modal="true" aria-labelledby="titre-confirmation" class="max-w-lg rounded-lg bg-white p-6 shadow-lg">
           <h2 id="titre-confirmation" class="mb-3 text-lg font-semibold">Confirmer l'envoi de « {{ campagne.nom }} »</h2>
-          <p class="mb-4 text-sm">Ce message va partir vers <strong>{{ destinataires_lettres }} destinataires ({{ apercu.destinataires }})</strong>,
-            pour un coût de <strong>{{ cout_lettres }} ({{ apercu.cout }} FCFA)</strong>, réservé dès maintenant sur votre solde.
-            Un message parti ne se rattrape pas.</p>
+          {% if campagne.recurrente %}
+            <p class="mb-4 text-sm">Ce message partira <strong>tous les {{ campagne.recurrence_jours }} jour(s)</strong>, à partir du
+              <strong>{% if campagne.planifiee_pour %}{{ campagne.planifiee_pour|date:"d/m/Y à H:i" }}{% else %}moment de votre confirmation{% endif %}</strong>.
+              Aujourd'hui, il viserait <strong>{{ destinataires_lettres }} destinataires ({{ apercu.destinataires }})</strong> pour
+              <strong>{{ cout_lettres }} ({{ apercu.cout }} FCFA)</strong>. À chaque envoi, les destinataires sont recalculés et le coût réservé sur votre solde :
+              l'envoi part seul s'il ne dépasse pas <strong>{{ campagne.plafond_occurrence }} FCFA</strong>, sinon il attend votre confirmation.</p>
+          {% else %}
+            <p class="mb-4 text-sm">Ce message va partir vers <strong>{{ destinataires_lettres }} destinataires ({{ apercu.destinataires }})</strong>{% if campagne.planifiee_pour %}
+              le <strong>{{ campagne.planifiee_pour|date:"d/m/Y à H:i" }}</strong>{% endif %},
+              pour un coût de <strong>{{ cout_lettres }} ({{ apercu.cout }} FCFA)</strong>, réservé dès maintenant sur votre solde.
+              Un message parti ne se rattrape pas.</p>
+          {% endif %}
           <form method="post" action="{% url 'campagne-confirmer' campagne.id %}" class="flex flex-wrap justify-end gap-2">
             {% csrf_token %}
             <input type="hidden" name="destinataires" value="{{ apercu.destinataires }}">
             <input type="hidden" name="cout" value="{{ apercu.cout }}">
             <button type="button" @click="ouverte = false" class="rounded border border-slate-300 px-3 py-1">Revenir à l'aperçu</button>
-            <button type="submit" class="rounded bg-slate-900 px-4 py-2 text-white">Envoyer à {{ apercu.destinataires }} destinataires pour {{ apercu.cout }} FCFA</button>
+            {% if campagne.recurrente %}
+              <button type="submit" class="rounded bg-slate-900 px-4 py-2 text-white">Programmer l'envoi récurrent, plafond {{ campagne.plafond_occurrence }} FCFA</button>
+            {% elif campagne.planifiee_pour %}
+              <button type="submit" class="rounded bg-slate-900 px-4 py-2 text-white">Programmer l'envoi à {{ apercu.destinataires }} destinataires pour {{ apercu.cout }} FCFA</button>
+            {% else %}
+              <button type="submit" class="rounded bg-slate-900 px-4 py-2 text-white">Envoyer à {{ apercu.destinataires }} destinataires pour {{ apercu.cout }} FCFA</button>
+            {% endif %}
           </form>
         </div>
       </div>
     </div>
+  {% endif %}{% endif %}
+{% elif campagne.recurrente %}
+  {% if peut_piloter and campagne.etat == "PLANIFIEE" %}
+    <form method="post" action="{% url 'campagne-annuler' campagne.id %}">
+      {% csrf_token %}
+      <button type="submit" class="rounded border border-red-300 px-3 py-1 text-red-800">Arrêter les prochains envois</button>
+    </form>
+    <p class="mt-2 text-xs text-slate-500">Les envois déjà créés gardent leur propre suivi ; chacun s'annule depuis sa page.</p>
   {% endif %}
 {% else %}
   <section class="mb-6 rounded-lg border border-slate-200 bg-white p-4 text-sm">

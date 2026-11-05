@@ -79,6 +79,34 @@
     </label>
   </fieldset>
 
+  <fieldset x-data="{ envoi: '{{ saisie.envoi }}' }" class="space-y-2 text-sm">
+    <legend class="mb-1 text-lg font-semibold">Envoi</legend>
+    <div class="flex flex-wrap gap-4">
+      <label class="flex items-center gap-2"><input type="radio" name="envoi" value="immediat" x-model="envoi"> Dès la confirmation</label>
+      <label class="flex items-center gap-2"><input type="radio" name="envoi" value="programme" x-model="envoi"> À une heure choisie</label>
+      <label class="flex items-center gap-2"><input type="radio" name="envoi" value="recurrent" x-model="envoi"> De façon récurrente</label>
+    </div>
+    <div x-show="envoi !== 'immediat'" x-cloak class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <label class="flex flex-col"><span x-text="envoi === 'recurrent' ? 'Premier envoi (heure de Ouagadougou)' : 'Heure d\'envoi (heure de Ouagadougou)'"></span>
+        <input type="datetime-local" name="planifiee_pour" value="{{ saisie.planifiee_pour }}" class="rounded border border-slate-300 px-2 py-1">
+      </label>
+    </div>
+    <div x-show="envoi === 'recurrent'" x-cloak class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <label class="flex flex-col">Fréquence
+        <select name="recurrence_jours" class="rounded border border-slate-300 px-2 py-1">
+          {% for jours, libelle in recurrences %}<option value="{{ jours }}"{% if saisie.recurrence_jours == jours|stringformat:"s" %} selected{% endif %}>{{ libelle }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="flex flex-col">Dernier envoi au plus tard (facultatif)
+        <input type="datetime-local" name="recurrence_fin" value="{{ saisie.recurrence_fin }}" class="rounded border border-slate-300 px-2 py-1">
+      </label>
+      <label class="flex flex-col">Plafond par envoi, en FCFA
+        <input type="number" name="plafond" min="1" step="1" value="{{ saisie.plafond }}" class="rounded border border-slate-300 px-2 py-1">
+      </label>
+    </div>
+    <p x-show="envoi === 'recurrent'" x-cloak class="text-xs text-slate-500">À chaque envoi, les destinataires sont recalculés. L'envoi part seul si son coût reste sous le plafond ; au-delà, il attend votre confirmation.</p>
+  </fieldset>
+
   <button type="submit" class="rounded bg-slate-900 px-4 py-2 text-white">Enregistrer et voir l'aperçu</button>
 </form>
 {% endblock %}

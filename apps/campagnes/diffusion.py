@@ -24,6 +24,8 @@ n'est jamais annulé : il est peut-être chez l'opérateur, il finit son chemin
 et se règle avant la clôture.
 """
 
+import logging
+
 from django.db import connection, transaction
 from django.db.models import Exists, OuterRef
 from django.utils import timezone
@@ -50,6 +52,8 @@ from apps.telecom.numero_court import numero_court
 
 from .models import Campagne, Destinataire
 from .personnalisation import compiler
+
+journal = logging.getLogger(__name__)
 
 TAILLE_LOT = 500
 A_PUBLIER = (Destinataire.Action.ENVOYER, Destinataire.Action.REPLI)
@@ -292,17 +296,24 @@ def publier(lots_max: int = 20) -> int:
     de clôture pour les campagnes qui n'ont plus rien à publier."""
     publies = 0
     for campagne_id in campagnes_a_publier():
-        for _ in range(lots_max):
-            nombre = publier_lot(campagne_id)
-            publies += nombre
-            if nombre == 0:
-                break
+        try:
+            for _ in range(lots_max):
+                nombre = publier_lot(campagne_id)
+                publies += nombre
+                if nombre == 0:
+                    break
+        except Exception:
+            # Une campagne en échec n'arrête ni les autres ni l'ordonnanceur.
+            journal.exception("Publication de la campagne %s en échec.", campagne_id)
     for campagne_id in campagnes_a_clore():
-        # Quelques lots d'annulation tant qu'il y en a, puis une seule tentative
-        # de clôture : une campagne qui attend un message en cours de
-        # soumission ne fait pas tourner l'ordonnanceur à vide.
-        for _ in range(lots_max):
-            if annuler_lot(campagne_id) == 0:
-                break
-        cloturer(campagne_id)
+        try:
+            # Quelques lots d'annulation tant qu'il y en a, puis une seule
+            # tentative de clôture : une campagne qui attend un message en cours
+            # de soumission ne fait pas tourner l'ordonnanceur à vide.
+            for _ in range(lots_max):
+                if annuler_lot(campagne_id) == 0:
+                    break
+            cloturer(campagne_id)
+        except Exception:
+            journal.exception("Clôture de la campagne %s en échec.", campagne_id)
     return publies
