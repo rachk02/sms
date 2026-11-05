@@ -127,3 +127,37 @@ def test_une_campagne_sans_cible_est_expliquee(client, membre):
     ).content.decode()
     assert "Choisissez au moins une liste ou un segment" in page
     assert not Campagne.objects.using("worker").exists()
+
+
+def test_pause_reprise_et_annulation_par_l_ecran(client, membre):
+    client.force_login(membre)
+    campagne, _ = _creer(client, membre)
+    client.post(f"/campagnes/{campagne.id}/confirmer", {"destinataires": "3", "cout": "75"})
+    page = client.post(f"/campagnes/{campagne.id}/pause", follow=True).content.decode()
+    assert "en pause : plus aucun message ne part" in page
+    assert "Reprendre la diffusion" in page and "Non soumis" in page
+    # La modale d'annulation dit ce qui ne se rattrape pas, dans son propre texte.
+    assert "0 message(s) déjà soumis au réseau ne peuvent pas être rattrapés" in page
+    client.post(f"/campagnes/{campagne.id}/reprendre")
+    assert Campagne.objects.using("worker").get().etat == Campagne.Etat.EN_ATTENTE
+    page = client.post(f"/campagnes/{campagne.id}/annuler", follow=True).content.decode()
+    assert "annulée : les messages non partis sont annulés" in page
+    assert "coût réel 0 FCFA" in page
+    assert CompteCredit.objects.using("worker").get().montant_reserve == 0
+
+
+def test_une_campagne_d_un_autre_compte_ne_se_pilote_pas(client, membre):
+    client.force_login(membre)
+    campagne, _ = _creer(client, membre)
+    client.post(f"/campagnes/{campagne.id}/confirmer", {"destinataires": "3", "cout": "75"})
+    autre = creer_utilisateur(
+        courriel="v@autre.bf",
+        mot_de_passe="x-1234-abcd",
+        nom="V",
+        client=creer_client(raison_sociale="Autre SA", forme=Client.Forme.SOCIETE),
+        role=Utilisateur.Role.ADMIN,
+        courriel_verifie_le=timezone.now(),
+    )
+    client.force_login(autre)
+    assert client.post(f"/campagnes/{campagne.id}/annuler").status_code == 404
+    assert Campagne.objects.using("worker").get().etat == Campagne.Etat.EN_ATTENTE

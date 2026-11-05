@@ -286,6 +286,15 @@ L'aperçu recalcule tout à chaque affichage. La confirmation refait le calcul e
 refuse si les chiffres diffèrent de ceux que le client a lus ; sinon elle fige
 les destinataires, réserve le coût annoncé en une fois et passe EN_ATTENTE.
 
+L'ordonnanceur la passe EN_COURS au premier lot publié. EN_PAUSE arrête la
+publication et la soumission : les messages déjà en file passent EN_ATTENTE au
+journal, sans être soumis, et sont remis en file à la reprise. ANNULEE annule
+les messages non soumis (état ANNULE) ; un message dont la soumission a
+commencé n'est jamais annulé. Une campagne se clôt quand plus rien n'est à
+publier ni à soumettre : `cout_reel` reçoit ce qui a été consommé sur sa
+réservation, le reliquat est libéré, `terminee_le` est posé, et une campagne
+EN_COURS passe TERMINEE (une campagne annulée reste ANNULEE).
+
 **`campagnes_destinataire`** : les destinataires figés à la confirmation. Clé
 primaire composée `(campagne_id, contact_id)`, `client_id`, `numero_normalise`,
 `operateur` (confirmé, sinon présumé), `expediteur` retenu pour son réseau,

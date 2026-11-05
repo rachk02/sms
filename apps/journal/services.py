@@ -179,8 +179,12 @@ def soumettre(message: Message, passerelle, source: str = Evenement.Source.WORKE
 
     with transaction.atomic():
         courant = Message.objects.select_for_update().get(**cle)
-        if courant.etat == Etat.SOUMIS or courant.etat in ETATS_TERMINAUX:
-            return courant  # déjà fait : relivraison d'un message traité
+        if courant.etat in (Etat.SOUMIS, Etat.EN_ATTENTE) or courant.etat in ETATS_TERMINAUX:
+            # Déjà fait (relivraison d'un message traité), ou retenu : un message
+            # en attente ne repart que remis en file par celui qui l'a retenu.
+            return courant
+        if _appliquer_retenue(courant, source):
+            return Message.objects.get(**cle)
         motif = controles.refus(courant)
         if motif:
             # Bac à sable, liste noire... : refusé ici, après la file et avant la
@@ -211,6 +215,125 @@ def soumettre(message: Message, passerelle, source: str = Evenement.Source.WORKE
 
     reference = passerelle.soumettre(soumission)
     return _enregistrer_soumission(message, passerelle, reference, source, debut)
+
+
+MOTIF_RETENU = "RETENU_PAR_LE_CLIENT"
+MOTIF_ANNULE = "ANNULE_PAR_LE_CLIENT"
+
+
+def _appliquer_retenue(courant: Message, source: str) -> bool:
+    """Retient ou annule un message que son client a suspendu (campagne en
+    pause ou annulée). `courant` est lu sous verrou. Jamais un message dont la
+    soumission a commencé : il est peut-être déjà chez l'opérateur, il doit
+    finir son chemin et être réglé."""
+    if courant.soumission_debutee_le is not None:
+        return False
+    verdict = controles.retenue(courant)
+    if verdict == controles.RETENIR:
+        changer_etat(courant, Etat.EN_ATTENTE, source=source, details={"motif": MOTIF_RETENU})
+        return True
+    if verdict == controles.ANNULER:
+        changer_etat(
+            courant,
+            Etat.ANNULE,
+            source=source,
+            details={"motif": MOTIF_ANNULE},
+            motif_echec=MOTIF_ANNULE,
+        )
+        return True
+    return False
+
+
+@transaction.atomic
+def retenir(message: Message, source: str = Evenement.Source.WORKER) -> Message:
+    """Applique les retenues à un message tiré de la file, avant qu'un worker
+    lui réserve un créneau de débit : un message retenu ou annulé ne prend
+    jamais la place d'un autre. Renvoie le message dans son état courant."""
+    cle = {"id": message.id, "date_reception": message.date_reception}
+    courant = Message.objects.select_for_update().get(**cle)
+    if courant.etat in (Etat.RECU, Etat.EN_FILE) and _appliquer_retenue(courant, source):
+        return Message.objects.get(**cle)
+    return courant
+
+
+# Les états d'un message de campagne qui n'a pas encore été soumis.
+NON_SOUMIS = (Etat.RECU, Etat.EN_FILE, Etat.EN_ATTENTE)
+
+CHANGER_LOT = """
+UPDATE journal_message AS m
+SET etat = %s, motif_echec = %s, modifie_le = now()
+FROM (
+    SELECT id, date_reception FROM journal_message
+    WHERE campagne_id = %s AND date_reception >= %s AND etat = ANY(%s)
+      AND soumission_debutee_le IS NULL
+    ORDER BY date_reception, id
+    LIMIT %s
+    FOR UPDATE SKIP LOCKED
+) AS choix
+WHERE m.id = choix.id AND m.date_reception = choix.date_reception
+RETURNING m.id, m.date_reception, m.client_id, m.operateur, m.campagne_id
+"""
+
+
+@transaction.atomic
+def changer_etats_campagne(
+    campagne_id,
+    *,
+    depuis: tuple,
+    vers: str,
+    depuis_le: datetime,
+    source: str,
+    motif: str = "",
+    limite: int = 500,
+) -> list[Message]:
+    """Change d'état un lot de messages non soumis d'une campagne : remise en
+    file à la reprise, annulation. Mêmes garanties que `changer_etat` : la
+    transition est vérifiée et chaque message reçoit son événement. Un message
+    dont la soumission a commencé n'est jamais touché, et un message verrouillé
+    par un worker est laissé pour le lot suivant ; le worker applique lui-même
+    la retenue sous ce verrou.
+
+    `depuis_le` borne la recherche aux partitions de la campagne (sa date de
+    confirmation). Renvoie les messages changés, au plus `limite`.
+    """
+    for etat in depuis:
+        if not transition_permise(etat, vers):
+            raise TransitionInterdite(campagne_id, etat, vers)
+    with connection.cursor() as curseur:
+        curseur.execute(CHANGER_LOT, [vers, motif, campagne_id, depuis_le, list(depuis), limite])
+        lignes = curseur.fetchall()
+    maintenant = timezone.now()
+    details = {"motif": motif} if motif else {}
+    Evenement.objects.bulk_create(
+        Evenement(
+            client_id=client_id,
+            message_id=id_,
+            etat=vers,
+            horodatage=maintenant,
+            source=source,
+            details=details,
+        )
+        for id_, _, client_id, _, _ in lignes
+    )
+    return [
+        Message(
+            id=id_,
+            date_reception=reception,
+            client_id=client_id,
+            operateur=operateur,
+            campagne_id=campagne,
+            etat=vers,
+        )
+        for id_, reception, client_id, operateur, campagne in lignes
+    ]
+
+
+def reste_a_soumettre(campagne_id, depuis_le: datetime) -> bool:
+    """Vrai si un message de la campagne n'a pas encore été soumis, retenu ou
+    en cours de soumission compris. Borné aux partitions de la campagne."""
+    return Message.objects.filter(
+        campagne_id=campagne_id, date_reception__gte=depuis_le, etat__in=NON_SOUMIS
+    ).exists()
 
 
 @transaction.atomic
@@ -348,11 +471,14 @@ def envoyer_unitaire(
     return soumettre(message, passerelle)
 
 
-def mettre_en_file(message: Message, *, prioritaire: bool) -> str:
+def mettre_en_file(message: Message, *, prioritaire: bool, reprise: str = "") -> str:
     """Dépose le message dans la file d'envoi de son réseau, prioritaire (code,
     transactionnel, envoi de test) ou de masse (campagne). À appeler dans la
     transaction qui a enregistré le message : la boîte d'envoi ne le publie
-    qu'une fois cette transaction validée."""
+    qu'une fois cette transaction validée.
+
+    `reprise` distingue une remise en file après une retenue : sans lui, la
+    boîte d'envoi reconnaîtrait la première publication et ignorerait celle-ci."""
     from apps.core.files import TOPOLOGIE
 
     nature = "prioritaire" if prioritaire else "masse"
@@ -365,5 +491,5 @@ def mettre_en_file(message: Message, *, prioritaire: bool) -> str:
             "message_id": str(message.id),
             "date_reception": message.date_reception.isoformat(),
         },
-        cle_idempotence=f"envoi:{message.id}",
+        cle_idempotence=f"envoi:{message.id}:{reprise}" if reprise else f"envoi:{message.id}",
     )

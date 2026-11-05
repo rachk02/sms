@@ -31,3 +31,26 @@ def refus(message) -> str | None:
 
 def enregistres() -> list[str]:
     return [nom for nom, _ in _CONTROLES]
+
+
+# Retenues : une décision du client qui suspend ses messages sans les refuser
+# (campagne en pause ou annulée). Une retenue rend RETENIR (le message attend
+# sans être soumis, il repartira) ou ANNULER (il ne partira jamais), ou None.
+RETENIR = "RETENIR"
+ANNULER = "ANNULER"
+
+_RETENUES: list[tuple[str, Callable]] = []
+
+
+def enregistrer_retenue(nom: str, retenue: Callable) -> None:
+    if any(existant == nom for existant, _ in _RETENUES):
+        return
+    _RETENUES.append((nom, retenue))
+
+
+def retenue(message) -> str | None:
+    for _, verdict in _RETENUES:
+        decision = verdict(message)
+        if decision:
+            return decision
+    return None

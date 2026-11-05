@@ -310,5 +310,99 @@ def confirmer(campagne: Campagne, *, auteur, destinataires_lus: int, cout_lu: in
     return campagne
 
 
+# Pause, reprise et annulation (T-64)
+
+PAUSABLES = (Campagne.Etat.EN_ATTENTE, Campagne.Etat.EN_COURS)
+ANNULABLES = (
+    Campagne.Etat.PLANIFIEE,
+    Campagne.Etat.EN_ATTENTE,
+    Campagne.Etat.EN_COURS,
+    Campagne.Etat.EN_PAUSE,
+)
+
+
+def _verrouillee(campagne: Campagne) -> Campagne:
+    # Le même verrou que la publication d'un lot : un lot en cours s'achève
+    # avant que l'état change.
+    return (
+        Campagne.objects.select_for_update(of=("self",))
+        .select_related("client")
+        .get(id=campagne.id)
+    )
+
+
+@transaction.atomic
+def mettre_en_pause(campagne: Campagne, *, auteur) -> Campagne:
+    """Arrête la publication et la soumission. Les messages déjà en file sont
+    retenus par le worker avant tout créneau ; ceux dont la soumission a
+    commencé finissent leur chemin."""
+    campagne = _verrouillee(campagne)
+    if campagne.etat not in PAUSABLES:
+        raise CampagneRefusee(
+            f"Une campagne {campagne.get_etat_display().lower()} ne se met pas en pause."
+        )
+    avant = campagne.etat
+    campagne.etat = Campagne.Etat.EN_PAUSE
+    campagne.save(update_fields=["etat", "modifie_le"])
+    auditer(
+        "campagnes.pause",
+        campagne,
+        auteur=auteur,
+        client=campagne.client,
+        avant={"etat": avant},
+        apres={"etat": campagne.etat},
+    )
+    return campagne
+
+
+@transaction.atomic
+def reprendre(campagne: Campagne, *, auteur) -> Campagne:
+    """Reprend une campagne en pause : l'ordonnanceur remet en file les
+    messages retenus, puis publie la suite."""
+    campagne = _verrouillee(campagne)
+    if campagne.etat != Campagne.Etat.EN_PAUSE:
+        raise CampagneRefusee("Seule une campagne en pause se reprend.")
+    campagne.etat = Campagne.Etat.EN_COURS if campagne.demarree_le else Campagne.Etat.EN_ATTENTE
+    campagne.save(update_fields=["etat", "modifie_le"])
+    auditer(
+        "campagnes.reprise",
+        campagne,
+        auteur=auteur,
+        client=campagne.client,
+        avant={"etat": Campagne.Etat.EN_PAUSE},
+        apres={"etat": campagne.etat},
+    )
+    return campagne
+
+
+@transaction.atomic
+def annuler(campagne: Campagne, *, auteur) -> Campagne:
+    """Annule ce qui n'est pas encore parti. Les messages déjà soumis au réseau
+    ne se rattrapent pas et restent facturés ; les autres sont annulés par
+    lots par l'ordonnanceur, puis le reliquat de la réservation est libéré.
+    Une campagne qui n'a encore rien publié est close sur-le-champ."""
+    from .diffusion import clore
+
+    campagne = _verrouillee(campagne)
+    if campagne.etat not in ANNULABLES:
+        raise CampagneRefusee(
+            f"Une campagne {campagne.get_etat_display().lower()} ne s'annule plus."
+        )
+    avant = campagne.etat
+    campagne.etat = Campagne.Etat.ANNULEE
+    campagne.save(update_fields=["etat", "modifie_le"])
+    auditer(
+        "campagnes.annulation",
+        campagne,
+        auteur=auteur,
+        client=campagne.client,
+        avant={"etat": avant},
+        apres={"etat": campagne.etat},
+    )
+    if not campagne.demarree_le:
+        clore(campagne)
+    return campagne
+
+
 # Pour l'affichage : les réseaux dans l'ordre habituel.
 RESEAUX = OPERATEURS

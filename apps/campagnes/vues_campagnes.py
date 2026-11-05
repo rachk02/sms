@@ -1,4 +1,5 @@
-"""Écrans des campagnes : composition, aperçu, envoi de test, confirmation (T-61)."""
+"""Écrans des campagnes : composition, aperçu, envoi de test, confirmation (T-61) ;
+pause, reprise et annulation (T-64)."""
 
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
@@ -10,7 +11,7 @@ from apps.core.encodage import table_pour_le_navigateur
 from apps.core.montants import en_lettres, francs_cfa
 from apps.expediteurs.models import Expediteur
 
-from . import modeles, services
+from . import modeles, selectors, services
 from .models import Campagne, Modele
 
 
@@ -92,6 +93,13 @@ def detail(request, pk):
             "cout_lettres": francs_cfa(vu.cout),
             "peut_lancer": autorise(request.user, "campagnes.lancer"),
         }
+    else:
+        contexte |= {
+            "bilan": selectors.bilan(campagne),
+            "peut_piloter": autorise(request.user, "campagnes.lancer"),
+            "pausable": campagne.etat in services.PAUSABLES,
+            "annulable": campagne.etat in services.ANNULABLES,
+        }
     return render(request, "campagnes/campagne.html", contexte)
 
 
@@ -130,3 +138,44 @@ def confirmer(request, pk):
     else:
         messages.success(request, f"Campagne « {campagne.nom} » confirmée.")
     return redirect("campagne", campagne.id)
+
+
+def _piloter(request, pk, action, succes: str):
+    campagne = _campagne(pk)
+    try:
+        action(campagne, auteur=request.user)
+    except services.CampagneRefusee as refus:
+        messages.error(request, str(refus))
+    else:
+        messages.success(request, succes.format(nom=campagne.nom))
+    return redirect("campagne", campagne.id)
+
+
+@require_POST
+@permission_requise("campagnes.lancer")
+def mettre_en_pause(request, pk):
+    return _piloter(
+        request,
+        pk,
+        services.mettre_en_pause,
+        "Campagne « {nom} » en pause : plus aucun message ne part. "
+        "Ceux dont la soumission avait commencé finissent leur chemin.",
+    )
+
+
+@require_POST
+@permission_requise("campagnes.lancer")
+def reprendre(request, pk):
+    return _piloter(request, pk, services.reprendre, "Campagne « {nom} » reprise.")
+
+
+@require_POST
+@permission_requise("campagnes.lancer")
+def annuler(request, pk):
+    return _piloter(
+        request,
+        pk,
+        services.annuler,
+        "Campagne « {nom} » annulée : les messages non partis sont annulés et leurs "
+        "crédits libérés ; les messages déjà soumis au réseau restent partis.",
+    )

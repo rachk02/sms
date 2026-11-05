@@ -69,6 +69,32 @@ d'eux ne convient pas.
 - **Le coût réel ne dépasse jamais le coût annoncé.** Un message plus long que
   prévu (contact modifié depuis la confirmation) consomme au plus ce qui reste
   de la réservation de sa campagne ; la plateforme absorbe l'écart.
+- **Pause par retenue au worker (T-64).** Une campagne en pause ne publie plus,
+  et ses messages déjà en file sont retenus par le worker avant tout créneau de
+  débit : ils passent EN_ATTENTE au journal, sans soumission, et ne prennent la
+  place d'aucun autre envoi. La retenue est enregistrée dans `core.controles`
+  par le module des campagnes, comme les contrôles d'avant soumission, et
+  revérifiée sous le verrou du message dans `journal.services.soumettre`. À la
+  reprise, l'ordonnanceur remet les messages retenus en file, par lots, chaque
+  remise sous sa propre clé dans la boîte d'envoi.
+- **Annulation et crédits d'une campagne annulée (T-64).** Le plan laissait ce
+  point à trancher avec le lot 7 ; jusque-là, la règle du règlement à la
+  soumission suffit : les messages déjà soumis restent consommés, les autres
+  sont annulés sans frais, puis le reliquat de la réservation est libéré. Un
+  message dont la soumission a commencé n'est jamais annulé : il finit son
+  chemin et se règle avant la libération. À revoir avec le règlement à la
+  livraison (T-78).
+- **Clôture de toute campagne (T-64).** Une campagne qui n'a plus rien à
+  publier ni à soumettre se clôt à l'ordonnanceur : les messages soumis dont le
+  worker n'aurait pas encore écrit la consommation sont réglés d'abord, puis le
+  coût réel est inscrit et le reliquat libéré. Un message au sort de soumission
+  inconnu retient la clôture jusqu'à sa vérification. Des destinataires en
+  attente d'approbation retiennent aussi une campagne en cours ; le client peut
+  l'annuler.
+- **Bilan lu à l'affichage, en attendant les compteurs (T-64).** L'écran d'une
+  campagne confirmée compte ses messages par état au journal, borné à ses
+  partitions et porté par l'index (campagne_id, etat), sans rafraîchissement.
+  Le suivi en direct (T-67) le remplacera par les compteurs pré-agrégés.
 
 ## T-55 · Modèles de message et variables
 

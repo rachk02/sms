@@ -53,18 +53,25 @@ class WorkerEnvoi(Worker):
         aucun créneau."""
         from django.utils.dateparse import parse_datetime
 
+        from apps.core.etats import Etat
         from apps.journal.models import Evenement, Message
-        from apps.journal.services import soumettre
+        from apps.journal.services import retenir, soumettre
         from apps.telecom import debit
         from apps.telecom.services import connecteur_pour
 
-        message = Message.objects.get(
-            id=donnees["message_id"], date_reception=parse_datetime(donnees["date_reception"])
+        message = retenir(
+            Message.objects.get(
+                id=donnees["message_id"], date_reception=parse_datetime(donnees["date_reception"])
+            )
         )
+        if message.etat in (Etat.EN_ATTENTE, Etat.ANNULE):
+            # Retenu (campagne en pause) ou annulé : ni créneau ni soumission.
+            return
         connecteur = connecteur_pour(message.operateur)
         if connecteur is None:
             raise LookupError(f"aucune liaison active pour {message.operateur}")
-        if avec_creneau and message.soumission_debutee_le is None:
+        a_soumettre = message.etat in (Etat.RECU, Etat.EN_FILE)
+        if avec_creneau and a_soumettre and message.soumission_debutee_le is None:
             time.sleep(debit.creneau(connecteur))
         self._solder(
             soumettre(message, self._passerelle(connecteur), source=Evenement.Source.WORKER)
@@ -73,8 +80,13 @@ class WorkerEnvoi(Worker):
     @staticmethod
     def _solder(message) -> None:
         """Consommation à la soumission, ou libération d'un refus. Idempotent :
-        une relivraison après une soumission déjà faite ne consomme pas deux fois."""
+        une relivraison après une soumission déjà faite ne consomme pas deux fois.
+        Un message de campagne non soumis ne coûte rien et ne touche pas à la
+        réservation de sa campagne, qui peut déjà être close (T-64)."""
         from apps.credits.services import SansReservation, solder_message
+
+        if message.campagne_id and message.date_soumission is None:
+            return
 
         try:
             solder_message(
