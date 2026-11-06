@@ -2,16 +2,17 @@
 l'interface. Toute décision passe par services.py et selectors.py."""
 
 from django.contrib import messages
-from django.http import Http404
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from apps.comptes.permissions import permission_requise
 from apps.core.evenements import publier
 from apps.core.files import TOPOLOGIE
+from apps.fichiers.services import ouvrir
 
-from . import fournisseurs, selectors, services
-from .models import Transaction
+from . import fournisseurs, rendu, selectors, services
+from .models import Facture, Transaction
 from .rappels import FILE
 
 
@@ -93,3 +94,28 @@ def simuler(request, reference: str):
             donnees={"fournisseur": "SIMULE", "reference": reference, "source": "simulateur"},
         )
     return redirect(simulation.get("retour") or "/")
+
+
+# Factures (T-88)
+
+
+@permission_requise("credits.consulter")
+def factures(request):
+    # paiements_facture est cloisonnée : seules celles du compte remontent.
+    contexte = {"factures": selectors.factures(request.user.client)}
+    return render(request, "paiements/factures.html", contexte)
+
+
+@permission_requise("credits.consulter")
+def facture(request, pk):
+    """Le PDF archivé de la facture, ou, tant qu'il ne l'est pas encore, le même
+    PDF rendu à partir des mentions figées à l'émission."""
+    facture_ = get_object_or_404(Facture, pk=pk)
+    if facture_.fichier_id:
+        with ouvrir(facture_.fichier) as flux:
+            contenu = flux.read()
+    else:
+        contenu = rendu.facture_pdf(facture_.mentions)
+    reponse = HttpResponse(contenu, content_type="application/pdf")
+    reponse["Content-Disposition"] = f'attachment; filename="{facture_.numero}.pdf"'
+    return reponse

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block contenu %}
+<h1 class="mb-1 text-2xl font-semibold">Factures</h1>
+<p class="mb-6 text-sm text-slate-600">Une facture par achat de crédits, acquittée ; un avoir quand une facture est corrigée.</p>
+{% if factures %}
+  <table class="w-full max-w-3xl text-left text-sm">
+    <thead class="text-slate-600"><tr><th class="py-1">Numéro</th><th class="py-1">Émise le</th><th class="py-1">Hors taxes</th><th class="py-1">TTC</th><th class="py-1"></th></tr></thead>
+    <tbody>
+      {% for facture in factures %}
+        <tr class="border-t border-slate-200">
+          <td class="py-1">{{ facture.get_type_display }} {{ facture.numero }}</td>
+          <td class="py-1">{{ facture.emise_le|date:"d/m/Y" }}</td>
+          <td class="py-1">{{ facture.montant_ht }} FCFA</td>
+          <td class="py-1">{{ facture.montant_ttc }} FCFA</td>
+          <td class="py-1"><a class="underline" href="{% url 'facture' facture.id %}">Télécharger</a></td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p class="text-sm">Aucune facture pour l'instant. Elle est émise après chaque achat de crédits confirmé.</p>
+{% endif %}
+{% endblock %}

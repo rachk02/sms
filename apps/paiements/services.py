@@ -23,7 +23,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.utils import timezone
 
 from apps.core.audit import auditer
@@ -33,8 +33,8 @@ from apps.credits import services as credits
 from apps.fichiers.models import Fichier
 from apps.fichiers.services import FichierRefuse, deposer
 
-from . import fournisseurs
-from .models import Reglage, Transaction
+from . import fournisseurs, rendu
+from .models import Facture, Numerotation, Reglage, Transaction
 
 journal = logging.getLogger(__name__)
 
@@ -379,3 +379,243 @@ def saisir_manuel(
         cle_idempotence=f"paiement-confirme:{transaction_.id}",
     )
     return transaction_
+
+
+# Facturation (T-88)
+
+MENTIONS_EMETTEUR = ("raison_sociale", "rccm", "ifu", "regime_fiscal", "adresse")
+SERIES = {Facture.Type.FACTURE: "F", Facture.Type.AVOIR: "AV"}
+A_FACTURER = 100
+
+
+class FacturationImpossible(RuntimeError):
+    pass
+
+
+def emetteur() -> dict | None:
+    """L'identité d'EL-IMMEKA à porter sur la facture, ou None tant qu'une
+    mention manque : aucune ne s'invente."""
+    config = settings.FACTURATION_EMETTEUR
+    valeurs = {cle: (config.get(cle) or "").strip() for cle in MENTIONS_EMETTEUR}
+    return valeurs if all(valeurs.values()) else None
+
+
+def _attribuer(serie: str, annee: int) -> int:
+    """Le numéro suivant de la série, sous le verrou de son compteur, dans la
+    transaction qui écrit la facture : un échec rend le numéro avec elle."""
+    Numerotation.objects.bulk_create(
+        [Numerotation(serie=serie, annee=annee)], ignore_conflicts=True
+    )
+    compteur = Numerotation.objects.select_for_update().get(serie=serie, annee=annee)
+    compteur.dernier += 1
+    compteur.save(update_fields=["dernier"])
+    return compteur.dernier
+
+
+def _date(moment) -> str:
+    return timezone.localtime(moment).strftime("%d/%m/%Y")
+
+
+def _identite_client(client) -> dict:
+    return {
+        "raison_sociale": client.raison_sociale,
+        "rccm": client.rccm or "",
+        "ifu": client.ifu or "",
+    }
+
+
+def _ecrire_facture(*, type_, client, maintenant, ht, tva, taux, mentions, **champs) -> Facture:
+    identite = emetteur()
+    if identite is None:
+        raise FacturationImpossible(
+            "Identité de l'émetteur incomplète : renseigner FACTURATION_RAISON_SOCIALE, "
+            "FACTURATION_RCCM, FACTURATION_IFU, FACTURATION_REGIME_FISCAL et FACTURATION_ADRESSE."
+        )
+    annee = timezone.localtime(maintenant).year
+    serie = SERIES[type_]
+    sequence = _attribuer(serie, annee)
+    numero = f"{serie}-{annee}-{sequence:06d}"
+    mentions = {
+        "titre": Facture.Type(type_).label,
+        "numero": numero,
+        "emise_le": _date(maintenant),
+        "emetteur": identite,
+        "client": _identite_client(client),
+        "lignes": [
+            {
+                "designation": "Crédits SMS prépayés",
+                "quantite": ht,
+                "prix_unitaire_ht": 1,
+                "montant_ht": ht,
+            }
+        ],
+        "montant_ht": ht,
+        "tva_active": bool(taux),
+        "taux_tva": taux,
+        "tva": tva,
+        "montant_ttc": ht + tva,
+        **mentions,
+    }
+    return Facture.objects.create(
+        client=client,
+        type=type_,
+        serie=serie,
+        annee=annee,
+        sequence=sequence,
+        numero=numero,
+        emise_le=maintenant,
+        montant_ht=ht,
+        taux_tva=taux,
+        tva=tva,
+        montant_ttc=ht + tva,
+        mentions=mentions,
+        **champs,
+    )
+
+
+@transaction.atomic
+def emettre_facture(transaction_id, maintenant=None) -> Facture:
+    """La facture d'un achat confirmé, une seule : rappelée pour le même achat,
+    elle rend celle qui existe. Les montants sont ceux que le client a payés,
+    jamais les réglages du jour."""
+    transaction_ = (
+        Transaction.objects.select_for_update().select_related("client").get(id=transaction_id)
+    )
+    if transaction_.etat != Etat.CONFIRME:
+        raise FacturationImpossible(f"Paiement {transaction_.etat} : rien à facturer.")
+    existante = Facture.objects.filter(transaction=transaction_, type=Facture.Type.FACTURE).first()
+    if existante:
+        return existante
+    ht, ttc = transaction_.credits, transaction_.montant
+    tva = ttc - ht
+    return _ecrire_facture(
+        type_=Facture.Type.FACTURE,
+        client=transaction_.client,
+        maintenant=maintenant or timezone.now(),
+        ht=ht,
+        tva=tva,
+        taux=tva * 100 // ht,
+        mentions={
+            "paiement": {
+                "moyen": transaction_.get_fournisseur_display(),
+                "reference": transaction_.reference_transaction,
+                "le": _date(transaction_.confirme_le or transaction_.initie_le),
+            }
+        },
+        transaction=transaction_,
+    )
+
+
+@transaction.atomic
+def emettre_avoir(
+    facture_id, *, montant_ht: int, motif: str, agent, adresse_ip=None, maintenant=None
+) -> Facture:
+    """Un avoir sur une facture émise, partiel ou total : c'est la seule façon
+    de la corriger. La somme des avoirs ne dépasse jamais la facture."""
+    motif = (motif or "").strip()
+    if not motif:
+        raise FacturationImpossible("Un avoir exige un motif.")
+    if agent is None:
+        raise FacturationImpossible("Un avoir porte l'agent qui l'émet.")
+    if not isinstance(montant_ht, int) or isinstance(montant_ht, bool) or montant_ht <= 0:
+        raise FacturationImpossible("Le montant d'un avoir est un nombre entier positif de FCFA.")
+    origine = (
+        Facture.objects.select_for_update()
+        .select_related("client")
+        .get(id=facture_id, type=Facture.Type.FACTURE)
+    )
+    deja = origine.avoirs.aggregate(ht=Sum("montant_ht"), tva=Sum("tva"))
+    deja_ht, deja_tva = deja["ht"] or 0, deja["tva"] or 0
+    if deja_ht + montant_ht > origine.montant_ht:
+        raise FacturationImpossible(
+            f"Avoir trop élevé : il reste {origine.montant_ht - deja_ht} FCFA HT à corriger "
+            f"sur la facture {origine.numero}."
+        )
+    taux = origine.taux_tva
+    if deja_ht + montant_ht == origine.montant_ht:
+        tva = origine.tva - deja_tva  # le solde exact, sans reste d'arrondi
+    else:
+        pas = 100 // math.gcd(100, taux) if taux else 1
+        if montant_ht % pas:
+            raise FacturationImpossible(f"Un avoir partiel se fait par multiples de {pas} FCFA HT.")
+        tva = montant_ht * taux // 100
+    avoir = _ecrire_facture(
+        type_=Facture.Type.AVOIR,
+        client=origine.client,
+        maintenant=maintenant or timezone.now(),
+        ht=montant_ht,
+        tva=tva,
+        taux=taux,
+        mentions={
+            "origine": {"numero": origine.numero, "emise_le": _date(origine.emise_le)},
+            "motif": motif,
+        },
+        origine=origine,
+        motif=motif,
+        emise_par=agent,
+    )
+    auditer(
+        "paiements.avoir.emis",
+        avoir,
+        auteur=agent,
+        client=origine.client,
+        apres={"numero": avoir.numero, "origine": origine.numero, "montant_ht": montant_ht},
+        motif=motif,
+        adresse_ip=adresse_ip,
+    )
+    return avoir
+
+
+def archiver(facture: Facture) -> Facture:
+    """Rend le PDF de la facture à partir de ses mentions figées et le dépose,
+    hors de tout verrou. Rattaché une fois ; une facture déjà archivée ne
+    change pas."""
+    if facture.fichier_id:
+        return facture
+    fichier = deposer(
+        client=facture.client,
+        famille=Fichier.Famille.FACTURE,
+        contenu=rendu.facture_pdf(facture.mentions),
+        nom_origine=f"{facture.numero}.pdf",
+    )
+    Facture.objects.filter(id=facture.id, fichier__isnull=True).update(fichier=fichier)
+    facture.refresh_from_db()
+    return facture
+
+
+_emetteur_signale = False
+
+
+def facturer_en_attente(limite: int = A_FACTURER) -> int:
+    """Balayage de l'ordonnanceur : facture les achats confirmés qui n'en ont
+    pas, dans l'ordre de leur confirmation, puis archive les PDF manquants.
+    L'émission ne retarde jamais un crédit : tant que l'identité de l'émetteur
+    est incomplète, les achats attendent leur facture. Sous le rôle worker."""
+    global _emetteur_signale
+    if emetteur() is None:
+        if not _emetteur_signale:
+            journal.warning("Aucune facture émise : identité de l'émetteur incomplète.")
+            _emetteur_signale = True
+        return 0
+    _emetteur_signale = False
+    facturees = Facture.objects.filter(type=Facture.Type.FACTURE).values("transaction_id")
+    a_facturer = list(
+        Transaction.objects.filter(etat=Etat.CONFIRME)
+        .exclude(id__in=facturees)
+        .order_by("confirme_le", "id")
+        .values_list("id", flat=True)[:limite]
+    )
+    emises = 0
+    for transaction_id in a_facturer:
+        try:
+            emettre_facture(transaction_id)
+            emises += 1
+        except Exception:
+            journal.exception("Facture du paiement %s impossible à émettre.", transaction_id)
+    sans_pdf = Facture.objects.filter(fichier__isnull=True).select_related("client")
+    for facture in sans_pdf.order_by("emise_le")[:limite]:
+        try:
+            archiver(facture)
+        except Exception:
+            journal.exception("PDF de la facture %s impossible à archiver.", facture.numero)
+    return emises

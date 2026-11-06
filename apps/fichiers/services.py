@@ -81,6 +81,7 @@ REGLES = {
     Fichier.Famille.EXPORT: ((CSV,), 200 * MO, False),
     # Bordereau de virement ou reçu d'espèces : pièce comptable, chiffrée.
     Fichier.Famille.PAIEMENT: ((PDF, JPEG, PNG), 5 * MO, True),
+    Fichier.Famille.FACTURE: ((PDF,), 5 * MO, False),
 }
 
 

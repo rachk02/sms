@@ -97,6 +97,7 @@ class Ordonnanceur(Worker):
         from apps.core import bus
         from apps.credits.rapprochement import rapprocher
         from apps.journal.services import creer_partitions_a_venir
+        from apps.paiements.services import facturer_en_attente
         from apps.paiements.services import relancer as relancer_paiements
         from apps.telecom.sante import surveiller
         from apps.telecom.supervision import publier_etat_liaisons
@@ -145,6 +146,8 @@ class Ordonnanceur(Worker):
                             time.monotonic() - derniere_reprise >= self.periode_reprise_paiements_s
                         )
                         await sync_to_async(relancer_paiements)(reprendre_expires=reprise)
+                        # Puis les factures des achats confirmés, hors du chemin du crédit.
+                        await sync_to_async(facturer_en_attente)()
                         derniere_relance = time.monotonic()
                         if reprise:
                             derniere_reprise = derniere_relance

@@ -23,10 +23,10 @@ from apps.expediteurs.models import Expediteur, ExpediteurReseau, Reserve
 from apps.fichiers.models import Fichier
 from apps.fichiers.services import lien
 from apps.paiements import services as paiements
-from apps.paiements.models import Reglage, Transaction
+from apps.paiements.models import Facture, Reglage, Transaction
 
 from . import selectors
-from .forms import EnregistrementClientForm, PaiementManuelForm
+from .forms import AvoirForm, EnregistrementClientForm, PaiementManuelForm
 from .models import DossierPreuve
 from .services import (
     CONTROLES_DE_REVUE,
@@ -397,6 +397,66 @@ class TransactionAdmin(admin.ModelAdmin):
             "opts": self.model._meta,
         }
         return TemplateResponse(request, "admin/backoffice/paiement_manuel.html", contexte)
+
+
+@admin.register(Facture)
+class FactureAdmin(admin.ModelAdmin):
+    """Factures et avoirs, en lecture seule : une facture émise ne se modifie
+    pas. Une correction passe par un avoir, saisi depuis la facture."""
+
+    list_display = ("numero", "type", "emise_le", "client", "montant_ht", "tva", "montant_ttc")
+    list_filter = ("type", "annee")
+    search_fields = ("numero", "client__raison_sociale")
+    date_hierarchy = "emise_le"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_urls(self):
+        propres = [
+            path(
+                "<uuid:pk>/avoir/",
+                self.admin_site.admin_view(self.avoir),
+                name="paiements_facture_avoir",
+            )
+        ]
+        return propres + super().get_urls()
+
+    def avoir(self, request, pk):
+        facture = Facture.objects.get(pk=pk, type=Facture.Type.FACTURE)
+        formulaire = AvoirForm(request.POST or None)
+        if request.method == "POST" and formulaire.is_valid():
+            try:
+                avoir = paiements.emettre_avoir(
+                    facture.id,
+                    montant_ht=formulaire.cleaned_data["montant_ht"],
+                    motif=formulaire.cleaned_data["motif"],
+                    agent=request.user,
+                    adresse_ip=adresse_ip(request),
+                )
+            except paiements.FacturationImpossible as refus:
+                formulaire.add_error(None, str(refus))
+            else:
+                messages.success(request, f"Avoir {avoir.numero} émis sur {facture.numero}.")
+                return redirect("admin:paiements_facture_changelist")
+        contexte = {
+            **self.admin_site.each_context(request),
+            "title": f"Avoir sur la facture {facture.numero}",
+            "introduction": (
+                f"Facture de {facture.montant_ht} FCFA HT pour {facture.client}. "
+                "L'avoir corrige tout ou partie de la facture, qui, elle, ne change pas."
+            ),
+            "bouton": "Émettre l'avoir",
+            "formulaire": formulaire,
+            "opts": self.model._meta,
+        }
+        return TemplateResponse(request, "admin/backoffice/formulaire.html", contexte)
 
 
 @admin.register(Reglage)

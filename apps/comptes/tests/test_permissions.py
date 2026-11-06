@@ -42,6 +42,8 @@ ATTENDUS = {
     # Sans montant, le rechargement est refusé et le formulaire se réaffiche.
     "recharger": ("post", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 200}),
     "paiement": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
+    "factures": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
+    "facture": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
     "paiement-statut": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
     # La page du fournisseur simulé : un paiement inconnu n'existe pas.
     "simulateur-paiement": ("get", {ANONYME: 404, UTILISATEUR: 404, ADMIN: 404}),
@@ -112,6 +114,7 @@ def _adresse(nom, membres):
         "rappel-paiement",
         "paiement",
         "paiement-statut",
+        "facture",
         "simulateur-paiement",
         "simulateur-choix",
         "campagnes-modele",

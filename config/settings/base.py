@@ -205,6 +205,17 @@ PAIEMENTS_RAPPELS_PAR_MINUTE = int(env("PAIEMENTS_RAPPELS_PAR_MINUTE", "60"))
 # connexion compte (voir apps/paiements/rappels.py).
 PROXIES_DE_CONFIANCE = env_liste("PROXIES_DE_CONFIANCE", "")
 
+# Identité d'EL-IMMEKA portée par chaque facture (T-88). Ces valeurs ne
+# s'inventent pas : l'utilisateur les renseignera. Tant que l'une manque, aucune
+# facture n'est émise ; les achats sont crédités et attendent leur facture.
+FACTURATION_EMETTEUR = {
+    "raison_sociale": env("FACTURATION_RAISON_SOCIALE", ""),
+    "rccm": env("FACTURATION_RCCM", ""),
+    "ifu": env("FACTURATION_IFU", ""),
+    "regime_fiscal": env("FACTURATION_REGIME_FISCAL", ""),
+    "adresse": env("FACTURATION_ADRESSE", ""),
+}
+
 # Espace servi par ce processus. « client » : le portail et l'API des clients,
 # rôle applicatif, sans administration. « backoffice » : l'administration des
 # agents EL-IMMEKA, joignable du seul réseau interne, avec

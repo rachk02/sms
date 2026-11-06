@@ -54,6 +54,7 @@ CLOISONNEES = (
     "paiements_transaction",
     # Lus par tous, écrits par le back-office.
     "paiements_reglage",
+    "paiements_facture",
 )
 RESERVEES_AUX_WORKERS = (
     "telecom_connecteur",
@@ -63,6 +64,7 @@ RESERVEES_AUX_WORKERS = (
     "core_audit",
     "comptes_connexion",
     "telecom_prefixe",
+    "paiements_numerotation",
 )
 
 

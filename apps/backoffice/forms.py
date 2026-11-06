@@ -52,3 +52,10 @@ class PaiementManuelForm(forms.Form):
     justificatif = forms.FileField(
         required=False, help_text="Bordereau de virement ou reçu : PDF, JPEG ou PNG, 5 Mo au plus."
     )
+
+
+class AvoirForm(forms.Form):
+    """Avoir sur une facture : total ou partiel, motif obligatoire."""
+
+    montant_ht = forms.IntegerField(min_value=1, label="Montant de l'avoir (FCFA hors taxes)")
+    motif = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}))

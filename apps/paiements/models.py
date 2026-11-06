@@ -111,3 +111,92 @@ class Reglage(models.Model):
     def __str__(self):
         tva = f"TVA {self.taux_tva} %" if self.tva_active else "sans TVA"
         return f"Rechargement, {tva}"
+
+
+class Facture(Identifiable):
+    """Facture d'un achat de crédits, ou avoir qui en corrige une (T-88).
+
+    Une ligne émise ne change plus : tout son contenu, émetteur et client
+    compris, est figé dans `mentions` au moment de l'émission, et un
+    déclencheur refuse toute modification, sauf de rattacher une fois le PDF
+    archivé. Une correction passe par un avoir."""
+
+    class Type(models.TextChoices):
+        FACTURE = "FACTURE", "Facture"
+        AVOIR = "AVOIR", "Avoir"
+
+    client = models.ForeignKey("comptes.Client", on_delete=models.PROTECT, related_name="+")
+    type = models.CharField(max_length=10, choices=Type, default=Type.FACTURE)
+    serie = models.CharField(max_length=4)
+    annee = models.PositiveSmallIntegerField()
+    sequence = models.PositiveIntegerField()
+    numero = models.CharField(max_length=20, unique=True)
+    transaction = models.ForeignKey(
+        Transaction, on_delete=models.PROTECT, null=True, blank=True, related_name="+"
+    )
+    origine = models.ForeignKey(
+        "self", on_delete=models.PROTECT, null=True, blank=True, related_name="avoirs"
+    )
+    emise_le = models.DateTimeField()
+    montant_ht = models.PositiveIntegerField()
+    taux_tva = models.PositiveSmallIntegerField()
+    tva = models.PositiveIntegerField()
+    montant_ttc = models.PositiveIntegerField()
+    mentions = models.JSONField()
+    motif = models.TextField(blank=True)
+    emise_par = models.ForeignKey(
+        "comptes.Utilisateur", on_delete=models.PROTECT, null=True, blank=True, related_name="+"
+    )
+    fichier = models.ForeignKey(
+        "fichiers.Fichier", on_delete=models.PROTECT, null=True, blank=True, related_name="+"
+    )
+
+    class Meta:
+        db_table = "paiements_facture"
+        indexes = [models.Index(fields=["client", "emise_le"], name="facture_client_date")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["serie", "annee", "sequence"], name="facture_numero_unique"
+            ),
+            # Un achat, une facture : la relance de l'émission n'en fait pas deux.
+            models.UniqueConstraint(
+                fields=["transaction"],
+                condition=Q(type="FACTURE"),
+                name="facture_unique_par_transaction",
+            ),
+            models.CheckConstraint(
+                condition=Q(montant_ttc=models.F("montant_ht") + models.F("tva")),
+                name="facture_ttc_egal_ht_plus_tva",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(type="FACTURE") & Q(transaction__isnull=False) & Q(origine__isnull=True)
+                )
+                | (Q(type="AVOIR") & Q(origine__isnull=False) & ~Q(motif="")),
+                name="facture_ou_avoir_rattache",
+            ),
+            models.CheckConstraint(condition=Q(montant_ht__gt=0), name="facture_montant_positif"),
+        ]
+
+    def __str__(self):
+        return f"{self.get_type_display()} {self.numero}"
+
+
+class Numerotation(models.Model):
+    """Dernier numéro attribué, par série et par année. La ligne est verrouillée
+    dans la transaction même qui écrit la facture : deux émissions simultanées
+    s'attendent, et un échec rend son numéro avec lui. Ni trou, ni doublon,
+    ce qu'une séquence PostgreSQL ne garantit pas."""
+
+    serie = models.CharField(max_length=4)
+    annee = models.PositiveSmallIntegerField()
+    dernier = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = "paiements_numerotation"
+        constraints = [
+            models.UniqueConstraint(fields=["serie", "annee"], name="numerotation_unique")
+        ]
+
+    def __str__(self):
+        return f"{self.serie}-{self.annee} : {self.dernier}"

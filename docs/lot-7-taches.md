@@ -323,6 +323,20 @@ Choix faits, à confirmer :
 
 **Critères** La numérotation ne présente aucun trou ni doublon, y compris si deux factures sont émises simultanément. Les mentions obligatoires sont présentes et vérifiées par un test sur le contenu du PDF. Une facture émise n'est jamais modifiée, une correction passe par un avoir.
 
+**Fait.** Table `paiements_facture` (cloisonnée par client) : une facture par achat confirmé, en ligne ou manuel, et des avoirs qui la corrigent. L'émission ne retarde jamais un crédit : l'ordonnanceur, chaque minute après la relance des paiements, facture les achats confirmés qui n'en ont pas, dans l'ordre de leur confirmation, puis archive les PDF manquants hors de tout verrou. Le numéro (`F-2026-000001`, `AV-2026-000001` pour les avoirs) sort d'un compteur par série et par année, `paiements_numerotation`, verrouillé dans la transaction même qui écrit la facture : un échec rend son numéro, deux émissions simultanées s'attendent. Le test lance cinq émissions dans cinq transactions réelles et obtient 1 à 5. Tout le contenu (identité de l'émetteur et du client, ligne, montants HT, TVA et TTC pris sur le paiement, jamais sur les réglages du jour, référence et date du paiement) est figé à l'émission ; un déclencheur refuse toute modification et toute suppression, sauf de rattacher une fois le PDF archivé. Un avoir, partiel ou total, porte l'agent et le motif, se trace à l'audit, et la somme des avoirs ne dépasse jamais la facture. Le PDF s'écrit sans bibliothèque extérieure (polices de base en WinAnsi, qui couvrent le français, œ et l'apostrophe typographique) ; le test en extrait le texte avec `pypdf`, dépendance de développement seulement, et y cherche chaque mention. Le client liste ses factures (`/paiements/factures`) et télécharge chacune en PDF ; le back-office les liste en lecture seule et émet un avoir depuis une facture ; `manage.py exporter_factures --debut --fin` sort l'export comptable en CSV, période obligatoire, pagination par curseur.
+
+Tant que l'identité de l'émetteur (`FACTURATION_RAISON_SOCIALE`, `FACTURATION_RCCM`, `FACTURATION_IFU`, `FACTURATION_REGIME_FISCAL`, `FACTURATION_ADRESSE`) n'est pas renseignée, aucune facture n'est émise : les achats sont crédités et attendent leur facture, émise dans l'ordre dès que l'identité est complète.
+
+Choix faits, à confirmer :
+
+- la facture tient lieu de reçu : elle est émise acquittée, avec la date, le moyen et la référence du paiement ;
+- deux séries numérotées à part, F pour les factures et AV pour les avoirs, sur six chiffres, remises à un chaque année ;
+- la date de facture est celle de l'émission, la date du paiement figurant à part ;
+- sans TVA, la facture porte « TVA non appliquée » : la formule légale est à confirmer ;
+- un avoir partiel se fait au pas d'achat, pour que sa TVA tombe juste ; le dernier avoir prend le reste exact.
+
+Point ouvert, à trancher avec l'utilisateur : les mentions obligatoires d'une facture au Burkina Faso, le format de numérotation, et l'éventuelle obligation de certification ou de transmission des factures à l'administration fiscale (revue d'avant-démarrage). Rien n'est inventé sur ce point : le mécanisme est prêt, et l'émission reste coupée tant que l'identité de l'émetteur est vide.
+
 ## T-89 · Export des données et clôture de compte
 
 **Produit** L'export des répertoires, du journal et des factures à la demande du client, et la procédure de clôture : arrêt des envois, conservation des pièces comptables, suppression ou anonymisation des contacts, sort du solde.

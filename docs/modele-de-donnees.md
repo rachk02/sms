@@ -577,9 +577,21 @@ sont pas fixés), `delai_minutes` (15). Lisible de tous, écrite par le
 back-office. Le pas d'achat en découle : 100 divisé par le plus grand diviseur
 commun de 100 et du taux, soit 50 FCFA HT à 18 %, 1 sans TVA.
 
-**`paiements_facture`** : `id`, `client_id`, `numero` unique et séquentiel par
-année, `periode_debut`, `periode_fin`, `montant_ht`, `tva`, `montant_ttc`,
-`emise_le`, `chemin_pdf`.
+**`paiements_facture`** : `id`, `client_id`, `type` parmi FACTURE et AVOIR,
+`serie` (F ou AV), `annee`, `sequence`, `numero` unique (`F-2026-000001`),
+`transaction_id` (la facture d'un achat), `origine_id` (la facture qu'un avoir
+corrige), `emise_le`, `montant_ht`, `taux_tva`, `tva`, `montant_ttc`,
+`mentions` (tout le contenu figé à l'émission), `motif` et `emise_par_id` pour
+un avoir, `fichier_id` vers le PDF archivé.
+
+Unicité sur `(serie, annee, sequence)`, et une seule facture par transaction.
+`montant_ttc = montant_ht + tva`. Une facture porte sa transaction ; un avoir
+porte son origine et son motif. Un déclencheur refuse toute modification et
+toute suppression, sauf de rattacher une fois le PDF. Cloisonnée par client.
+
+**`paiements_numerotation`** : `serie`, `annee`, `dernier`. Le compteur est
+verrouillé dans la transaction qui écrit la facture : ni trou, ni doublon.
+Réservée aux workers et au back-office.
 
 ## conformite
 

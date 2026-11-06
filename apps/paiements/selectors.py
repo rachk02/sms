@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Transaction
+from .models import Facture, Transaction
 
 Etat = Transaction.Etat
 
@@ -58,3 +58,8 @@ def suivi(transaction_: Transaction, maintenant=None) -> Suivi:
         "et un courriel vous le dira.",
         termine=False,
     )
+
+
+def factures(client, limite: int = 200):
+    """Les factures et avoirs du compte, les plus récents d'abord."""
+    return list(Facture.objects.filter(client=client).order_by("-emise_le", "-id")[:limite])
