@@ -6,6 +6,55 @@ Découpage provisoire, à revoir en entrant dans le lot.
 
 C'est le lot où circule l'argent. Une erreur ici ne se rattrape pas par un correctif, elle se rattrape par des avoirs et des explications à des clients.
 
+## Décisions prises avant d'entrer dans le lot
+
+Tranchées avec l'utilisateur le 6 novembre 2026.
+
+**Moment du règlement.** Le pay-per-submitted reste le mode de tous les clients :
+un message accepté par le réseau consomme son coût à la soumission, comme
+aujourd'hui. Le pay-per-delivered s'active client par client, pour un grand
+compte qui l'a négocié. Les deux modes passent par la même réservation ; seul
+le moment du règlement change.
+
+**Sans accusé.** En pay-per-delivered, un message resté SANS_ACCUSE est facturé :
+l'absence d'accusé n'est pas un échec avéré. Seuls NON_LIVRE, EXPIRE et REJETE
+rendent leur réservation.
+
+**Facture et TVA.** La facture s'émet à l'achat des crédits. Les crédits sont
+hors taxes : le client achète 10 000 FCFA de crédits et paie 11 800 FCFA, TVA
+de 18 % en sus. Les prix des grilles restent hors taxes et entiers. Le taux de
+TVA se lit en base, pas dans le code.
+
+**Expiration.** Les crédits n'expirent pas. Aucune colonne `expire_le` sur le
+registre. Le sort des comptes dormants relève des conditions générales.
+
+**Clôture.** Le solde restant est remboursé sur demande écrite, pour la seule
+part payée et non consommée ; les crédits offerts ou recrédités sont perdus. Le
+remboursement est saisi par un agent et donne lieu à un avoir. T-89 écrit la
+règle de calcul de cette part et la teste.
+
+**Paliers de volume.** Le palier se calcule sur le volume de SMS soumis par le
+client depuis le début du mois civil. Le palier atteint au lancement d'une
+campagne vaut pour toute la campagne : le coût annoncé ne bouge pas en cours
+de diffusion. Un envoi hors campagne prend le palier atteint à sa soumission.
+
+**Moyens de paiement.** Aucun contrat marchand ni accès de bac à sable Orange
+Money ou Moov Money pour l'instant. Le parcours, les rappels, la vérification
+de statut et l'idempotence se construisent contre un fournisseur simulé, derrière
+une abstraction ; les adaptateurs réels s'écriront à la réception de la
+documentation marchande, avec l'accord de l'utilisateur pour tout compte
+externe et tout secret.
+
+**Grilles tarifaires.** Seul un super-administrateur publie une version datée
+d'une grille, sans double validation. L'ancien et le nouveau prix vont au
+journal d'audit. Une version publiée ne se modifie plus.
+
+**Mentions de la facture.** Les identifiants d'EL-IMMEKA (raison sociale, RCCM,
+IFU, régime fiscal, adresse) ne s'inventent pas : ils se lisent dans une
+configuration que l'utilisateur renseignera. Tant qu'elle est vide, l'émission
+d'une facture est refusée, et le test de T-88 vérifie la présence de chaque
+mention à partir de valeurs d'essai.
+
 ## T-77 · Registre de crédits, écritures complètes
 
 **Produit** Les quatre types d'écriture, achat, consommation, recrédit et ajustement, avec le motif obligatoire sur l'ajustement et l'auteur sur toute écriture manuelle.

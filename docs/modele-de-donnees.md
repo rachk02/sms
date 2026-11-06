@@ -623,7 +623,8 @@ possibles, si bien qu'aucun fichier n'est servi par l'application.
 ## Ce qui reste à trancher
 
 La durée de rétention en ligne des partitions du journal, qui décide du moment
-où elles sont détachées. La date de validité éventuelle des crédits, qui ajoute
-une colonne `expire_le` sur `credits_registre` si elle est retenue. Et le
-traitement de la TVA, exigible à l'achat du crédit ou à sa consommation, qui
-change le calcul porté par `paiements_facture`.
+où elles sont détachées.
+
+Tranché le 6 novembre 2026, à l'ouverture du lot 7 : les crédits n'expirent pas,
+`credits_registre` ne porte donc pas de colonne `expire_le` ; la facture s'émet
+à l'achat, sur des crédits hors taxes, TVA en sus (voir `docs/lot-7-taches.md`).
