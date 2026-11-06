@@ -51,6 +51,7 @@ CLOISONNEES = (
     "credits_grille",
     "credits_grille_version",
     "credits_grille_palier",
+    "paiements_transaction",
 )
 RESERVEES_AUX_WORKERS = (
     "telecom_connecteur",

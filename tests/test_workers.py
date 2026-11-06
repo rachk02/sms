@@ -14,6 +14,7 @@ from workers.accuses import WorkerAccuses
 from workers.base import Worker, WorkerEnAttente
 from workers.envoi import WorkerEnvoi
 from workers.ordonnanceur import CLE_VERROU, prendre_verrou
+from workers.paiements import WorkerPaiements
 
 DUREE_TRAITEMENT_S = 1.5
 
@@ -146,8 +147,10 @@ def test_chaque_point_d_entree_ecoute_ses_files():
         "contacts.desinscriptions",
         "journal.confirmations",
     )
+    assert WorkerPaiements.files == ("paiements.rappels",)
     connues = set(FILES) | set(ABONNEMENTS)
-    assert not {f for w in (WorkerEnvoi, WorkerAccuses) for f in w.files} - connues
+    ecoutees = {f for w in (WorkerEnvoi, WorkerAccuses, WorkerPaiements) for f in w.files}
+    assert not ecoutees - connues
 
 
 @pytest.mark.django_db(databases=["default", "worker"])

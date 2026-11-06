@@ -36,7 +36,7 @@ La même chaîne tourne sur GitHub Actions à chaque envoi sur `main`.
     uv run python manage.py runserver                  # service web des clients
     SMS_ESPACE=backoffice SMS_CONNEXION_PAR_DEFAUT=BACKOFFICE         uv run python manage.py runserver 127.0.0.1:8001  # back-office des agents
     uv run python -m workers.ordonnanceur              # relais des événements, partitions
-    uv run python -m workers.envoi                     # et accuses, import_contacts, webhook
+    uv run python -m workers.envoi                     # et accuses, import_contacts, webhook, paiements
 
 ## Exploiter
 

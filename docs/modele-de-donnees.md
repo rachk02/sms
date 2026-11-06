@@ -557,8 +557,15 @@ ORANGE_MONEY, MOOV_MONEY, CARTE, VIREMENT, ESPECES, `reference_transaction`,
 EXPIRE, REMBOURSE, `initie_le`, `confirme_le`, `expire_le`, `justificatif_id`,
 `saisi_par_id` pour les paiements manuels.
 
-Unicité sur `(fournisseur, reference_transaction)`. C'est cette contrainte qui
-empêche le double crédit quand un opérateur réémet son rappel.
+`fournisseur` compte aussi SIMULE, le fournisseur simulé du développement.
+`montant` est ce que le client paie (TTC), `credits` ce qui est porté au
+registre (HT), `montant >= credits`. `reference_transaction` reste vide tant
+que le fournisseur ne l'a pas rendue.
+
+Unicité sur `(fournisseur, reference_transaction)` quand la référence est
+renseignée. Avec le verrou de la ligne pendant la vérification, c'est ce qui
+empêche le double crédit quand un opérateur réémet son rappel. Cloisonnée par
+client ; les rappels et leur vérification passent par les workers.
 
 **`paiements_facture`** : `id`, `client_id`, `numero` unique et séquentiel par
 année, `periode_debut`, `periode_fin`, `montant_ht`, `tva`, `montant_ttc`,

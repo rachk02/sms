@@ -278,6 +278,15 @@ Prérequis de déploiement : la file `paiements.rappels` (déclarée par `declar
 
 **Critères** Un rappel forgé avec une référence inexistante ne crédite rien. Le même rappel reçu trois fois ne crédite qu'une fois. Un rappel arrivé après expiration du délai, mais confirmé par l'API de statut, crédite quand même.
 
+**Fait.** Table `paiements_transaction` (cloisonnée par client, migration dédiée dans `core`, couverte par `verifier_base`), unicité sur `(fournisseur, reference_transaction)`. Le worker `workers.paiements` consomme `paiements.rappels` et appelle `paiements.services.verifier` : l'API de statut du fournisseur est interrogée hors de toute transaction, puis la ligne de la transaction est verrouillée et l'état appliqué selon une table de transitions (EXPIRE peut passer à CONFIRME ; CONFIRME et ECHOUE ne reviennent pas en arrière). Seul un statut CONFIRME, sur une transaction connue, au montant TTC attendu, écrit l'ACHAT des crédits HT au registre, avec la référence `paiement:<id>`, et publie `paiements.transaction.confirmee`. Une référence inconnue ne crédite rien, même payée chez le fournisseur. Un montant différent ou un fournisseur qui confirme un paiement échoué ne crédite rien et lève une alerte (journal en erreur et événement `paiements.transaction.anomalie`). Une erreur du fournisseur renvoie le rappel au palier de réessai. Les tests rejouent le même rappel trois fois de suite, puis trois fois en même temps dans trois transactions réelles : un seul crédit.
+
+Choix faits, à confirmer :
+
+- un paiement ECHOUE ne se reprend pas, même confirmé ensuite par le fournisseur : il alerte, pour instruction par un agent ;
+- l'API de statut du fournisseur simulé lit ce que le simulateur a fixé dans Redis, puisqu'il imite un système extérieur.
+
+Prérequis de déploiement : un processus `python -m workers.paiements`.
+
 ## T-86 · Parcours de rechargement
 
 **Produit** Le choix du moyen, la redirection vers l'opérateur, la page d'attente qui interroge le statut, et les pages de résultat en cas de succès comme d'échec.
