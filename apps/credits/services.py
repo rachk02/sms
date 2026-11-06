@@ -4,11 +4,16 @@ Toute opération sur le solde prend d'abord le verrou de la ligne de cache du
 client (`credits_compte`, SELECT ... FOR UPDATE), puis celui de la réservation
 concernée, toujours dans cet ordre : deux opérations concurrentes sur un même
 client s'attendent au lieu de se croiser, et deux clients ne se gênent pas.
+
+Une réservation, demandée par un client qui attend la réponse, n'attend le
+verrou que `ATTENTE_RESERVATION_MS` : au-delà, elle est refusée par
+SoldeOccupe plutôt que de laisser l'écran tourner. Les autres opérations
+(achat, règlement, libération) viennent des workers et attendent leur tour.
 """
 
 from dataclasses import dataclass
 
-from django.db import transaction
+from django.db import OperationalError, connection, transaction
 from django.db.models import Sum
 from django.utils import timezone
 
@@ -23,6 +28,16 @@ class SoldeInsuffisant(Exception):
         self.disponible = disponible
         self.demande = demande
         super().__init__(f"Solde insuffisant : {disponible} FCFA disponibles, {demande} demandés.")
+
+
+class SoldeOccupe(Exception):
+    """Le verrou du solde n'a pas été obtenu dans le délai : une autre
+    opération du même client le tient encore. Rien n'a été réservé."""
+
+    def __init__(self):
+        super().__init__(
+            "Le solde est occupé par une autre opération en cours. Réessayez dans un instant."
+        )
 
 
 class MotifObligatoire(ValueError):
@@ -57,9 +72,33 @@ def _montant_positif(montant: int) -> None:
         raise ValueError(f"Le montant doit être un entier positif de FCFA : {montant!r}")
 
 
-def _compte_verrouille(client_id) -> CompteCredit:
+ATTENTE_RESERVATION_MS = 10_000
+VERROU_INDISPONIBLE = "55P03"
+
+
+def _compte_verrouille(client_id, attente_max_ms: int | None = None) -> CompteCredit:
+    """Verrouille la ligne de cache du client. Avec `attente_max_ms`, l'attente
+    du verrou est bornée (lock_timeout local, rendu à sa valeur ensuite) et son
+    dépassement lève SoldeOccupe."""
     CompteCredit.objects.bulk_create([CompteCredit(client_id=client_id)], ignore_conflicts=True)
-    return CompteCredit.objects.select_for_update().get(client_id=client_id)
+    if attente_max_ms is None:
+        return CompteCredit.objects.select_for_update().get(client_id=client_id)
+    with connection.cursor() as curseur:
+        curseur.execute(
+            "SELECT current_setting('lock_timeout'), set_config('lock_timeout', %s, true)",
+            [f"{attente_max_ms}ms"],
+        )
+        avant = curseur.fetchone()[0]
+    try:
+        with transaction.atomic():
+            return CompteCredit.objects.select_for_update().get(client_id=client_id)
+    except OperationalError as erreur:
+        if getattr(erreur.__cause__, "sqlstate", None) == VERROU_INDISPONIBLE:
+            raise SoldeOccupe() from None
+        raise
+    finally:
+        with connection.cursor() as curseur:
+            curseur.execute("SELECT set_config('lock_timeout', %s, true)", [avant])
 
 
 def _ecrire(compte: CompteCredit, type_, montant, *, reference="", motif="", auteur=None):
@@ -139,9 +178,10 @@ def reserver(
     message_date_reception=None,
 ) -> Reservation:
     """Retient `montant` sur le solde disponible, pour une campagne entière ou un
-    envoi unitaire. Lève SoldeInsuffisant si le solde ne couvre pas tout."""
+    envoi unitaire. Lève SoldeInsuffisant si le solde ne couvre pas tout,
+    SoldeOccupe si le verrou du solde reste pris au-delà du délai d'attente."""
     _montant_positif(montant)
-    compte = _compte_verrouille(client_id)
+    compte = _compte_verrouille(client_id, ATTENTE_RESERVATION_MS)
     if compte.solde_disponible < montant:
         raise SoldeInsuffisant(compte.solde_disponible, montant)
     compte.montant_reserve += montant

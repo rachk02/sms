@@ -294,6 +294,8 @@ def envoyer_test(campagne: Campagne, *, numero: str, auteur) -> object:
             raise CampagneRefusee(
                 f"Solde insuffisant pour l'envoi de test : {refus.disponible} FCFA disponibles."
             ) from None
+        except credits.SoldeOccupe as refus:
+            raise CampagneRefusee(str(refus)) from None
         mettre_en_file(message, prioritaire=True)
     return message
 
@@ -318,12 +320,6 @@ def _figer(campagne: Campagne, vu: Apercu, *, auteur) -> Campagne:
     programmée attend ensuite son heure ; les autres partent aussitôt."""
     if vu.destinataires == 0:
         raise CampagneRefusee("Aucun destinataire à servir.")
-    try:
-        credits.reserver(campagne.client_id, vu.cout, campagne_id=campagne.id)
-    except credits.SoldeInsuffisant as refus:
-        raise CampagneRefusee(
-            f"Solde insuffisant : {refus.disponible} FCFA disponibles, {refus.demande} nécessaires."
-        ) from None
     requete, parametres = (
         contacts(campagne)
         .values("id", "client_id", "numero_normalise", "operateur_confirme", "operateur_presume")
@@ -340,6 +336,17 @@ def _figer(campagne: Campagne, vu: Apercu, *, auteur) -> Campagne:
     figes = Destinataire.objects.filter(campagne=campagne).count()
     if figes != vu.destinataires:
         raise RuntimeError(f"{figes} destinataires figés pour {vu.destinataires} annoncés.")
+    # La réservation vient après l'insertion des destinataires : le verrou du
+    # solde n'est tenu que pour la fin de la transaction, pas pendant l'insertion.
+    # Un refus annule la transaction entière, destinataires compris.
+    try:
+        credits.reserver(campagne.client_id, vu.cout, campagne_id=campagne.id)
+    except credits.SoldeInsuffisant as refus:
+        raise CampagneRefusee(
+            f"Solde insuffisant : {refus.disponible} FCFA disponibles, {refus.demande} nécessaires."
+        ) from None
+    except credits.SoldeOccupe as refus:
+        raise CampagneRefusee(str(refus)) from None
     campagne.etat = Campagne.Etat.PLANIFIEE if campagne.planifiee_pour else Campagne.Etat.EN_ATTENTE
     if campagne.lissage_duree_minutes:
         # Arrondi au-dessus : la campagne finit au plus tard à la fin de la durée.

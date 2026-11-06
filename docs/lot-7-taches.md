@@ -157,6 +157,10 @@ Choix faits, à confirmer :
 
 **Critères** Deux campagnes lancées simultanément sur un solde qui n'en couvre qu'une : l'une passe, l'autre est refusée avec un message clair, et le solde final est juste. Le test lance les deux dans deux transactions réelles, pas en simulation.
 
+**Fait.** Le verrou de la ligne `credits_compte` (T-09) protège déjà la réservation ; T-79 y ajoute la gestion de l'attente. Une réservation n'attend le verrou que dix secondes (`ATTENTE_RESERVATION_MS`, par un `lock_timeout` local rendu ensuite à sa valeur) ; au-delà, elle est refusée par `SoldeOccupe`, que la campagne traduit en « Le solde est occupé par une autre opération en cours. Réessayez dans un instant. ». Les opérations des workers (achat, règlement, libération) attendent leur tour sans borne. À la confirmation, la réservation passe après l'insertion des destinataires, pour que le verrou du solde ne soit tenu qu'en fin de transaction ; un refus annule tout, destinataires compris. Les tests confirment deux campagnes dans deux fils, chacun sur sa connexion : l'une passe, l'autre reçoit « Solde insuffisant : 30 FCFA disponibles, 60 nécessaires. », reste en brouillon sans destinataire ni réservation, et le cache égale le solde recalculé.
+
+Choix fait, à confirmer : le délai de dix secondes, assez long pour une confirmation voisine qui insère des milliers de destinataires.
+
 ## T-80 · Rapprochement quotidien du registre
 
 **Produit** Le traitement qui compare le solde recalculé au cache pour chaque client, et l'alerte sur tout écart.
