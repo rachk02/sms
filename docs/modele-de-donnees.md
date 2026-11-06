@@ -555,7 +555,8 @@ s'écrivent que par les workers et le back-office.
 ORANGE_MONEY, MOOV_MONEY, CARTE, VIREMENT, ESPECES, `reference_transaction`,
 `montant`, `credits`, `etat` parmi INITIE, EN_ATTENTE, CONFIRME, ECHOUE,
 EXPIRE, REMBOURSE, `initie_le`, `confirme_le`, `expire_le`, `justificatif_id`,
-`saisi_par_id` pour les paiements manuels.
+`saisi_par_id` pour les paiements manuels, `initie_par_id` pour la personne
+qui a lancé un paiement en ligne et reçoit le courriel de confirmation.
 
 `fournisseur` compte aussi SIMULE, le fournisseur simulé du développement.
 `montant` est ce que le client paie (TTC), `credits` ce qui est porté au
@@ -566,6 +567,12 @@ Unicité sur `(fournisseur, reference_transaction)` quand la référence est
 renseignée. Avec le verrou de la ligne pendant la vérification, c'est ce qui
 empêche le double crédit quand un opérateur réémet son rappel. Cloisonnée par
 client ; les rappels et leur vérification passent par les workers.
+
+**`paiements_reglage`** : une seule ligne (`id` = 1), `tva_active`, `taux_tva`
+(entier, 18), `credits_min` et `credits_max` (FCFA HT, vides tant qu'ils ne
+sont pas fixés), `delai_minutes` (15). Lisible de tous, écrite par le
+back-office. Le pas d'achat en découle : 100 divisé par le plus grand diviseur
+commun de 100 et du taux, soit 50 FCFA HT à 18 %, 1 sans TVA.
 
 **`paiements_facture`** : `id`, `client_id`, `numero` unique et séquentiel par
 année, `periode_debut`, `periode_fin`, `montant_ht`, `tva`, `montant_ttc`,

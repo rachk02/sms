@@ -17,15 +17,22 @@ registre de crédits, une fois et une seule :
 """
 
 import logging
+import math
+from dataclasses import dataclass
+from datetime import timedelta
 
+from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
+from apps.core.audit import auditer
+from apps.core.courriels import envoyer
 from apps.core.evenements import publier
 from apps.credits import services as credits
 
 from . import fournisseurs
-from .models import Transaction
+from .models import Reglage, Transaction
 
 journal = logging.getLogger(__name__)
 
@@ -127,6 +134,16 @@ def _confirmer(transaction_: Transaction, statut: fournisseurs.Statut) -> None:
         reference=reference_registre(transaction_.id),
         auteur=transaction_.saisi_par,
     )
+    if transaction_.initie_par_id:
+        # Même si le client a fermé son navigateur : le courriel part au commit.
+        envoyer(
+            transaction_.initie_par.courriel,
+            "Rechargement confirmé",
+            f"Votre paiement de {transaction_.montant} FCFA est confirmé : "
+            f"{transaction_.credits} FCFA de crédits sont portés à votre solde.\n\n"
+            f"Référence : {transaction_.reference_transaction}\n"
+            f"{settings.PORTAIL_URL}/paiements/{transaction_.id}\n",
+        )
     publier(
         "paiements.transaction.confirmee",
         client_id=transaction_.client_id,
@@ -134,3 +151,123 @@ def _confirmer(transaction_: Transaction, statut: fournisseurs.Statut) -> None:
         donnees={"credits": transaction_.credits, "montant": transaction_.montant},
         cle_idempotence=f"paiement-confirme:{transaction_.id}",
     )
+
+
+# Rechargement en ligne (T-86)
+
+
+class RechargementRefuse(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class Montants:
+    credits: int
+    tva: int
+    ttc: int
+
+
+def reglage() -> Reglage:
+    """La ligne des réglages, ou ses valeurs par défaut tant qu'elle n'existe pas."""
+    return Reglage.objects.filter(id=1).first() or Reglage()
+
+
+CHAMPS_REGLAGE = ("tva_active", "taux_tva", "credits_min", "credits_max", "delai_minutes")
+
+
+@transaction.atomic
+def regler(reglage_: Reglage, *, agent, adresse_ip=None) -> Reglage:
+    """Le back-office change la TVA, les bornes ou le délai du rechargement.
+    Une seule ligne, tracée au journal d'audit."""
+    ancien = Reglage.objects.filter(id=1).first()
+    avant = {c: getattr(ancien, c) for c in CHAMPS_REGLAGE} if ancien else None
+    reglage_.id = 1
+    reglage_.full_clean()
+    reglage_.save()
+    auditer(
+        "paiements.reglage.modifie",
+        reglage_,
+        auteur=agent,
+        avant=avant,
+        apres={c: getattr(reglage_, c) for c in CHAMPS_REGLAGE},
+        adresse_ip=adresse_ip,
+    )
+    return reglage_
+
+
+def pas_d_achat(reglage_: Reglage) -> int:
+    """Le plus petit multiple de crédits HT dont la TVA tombe sur un franc
+    entier : 50 à 18 %, 1 sans TVA."""
+    if not reglage_.tva_active or not reglage_.taux_tva:
+        return 1
+    return 100 // math.gcd(100, reglage_.taux_tva)
+
+
+def montants(credits_ht: int, reglage_: Reglage | None = None) -> Montants:
+    """Ce que coûtent des crédits HT, TVA comprise. Refuse un montant hors du pas
+    ou des bornes : jamais d'arrondi sur une somme d'argent."""
+    reglage_ = reglage_ or reglage()
+    if not isinstance(credits_ht, int) or isinstance(credits_ht, bool) or credits_ht <= 0:
+        raise RechargementRefuse("Le montant de crédits est un nombre entier de FCFA.")
+    pas = pas_d_achat(reglage_)
+    if credits_ht % pas:
+        raise RechargementRefuse(f"Les crédits s'achètent par multiples de {pas} FCFA.")
+    if reglage_.credits_min is not None and credits_ht < reglage_.credits_min:
+        raise RechargementRefuse(f"Rechargement minimal : {reglage_.credits_min} FCFA.")
+    if reglage_.credits_max is not None and credits_ht > reglage_.credits_max:
+        raise RechargementRefuse(f"Rechargement maximal : {reglage_.credits_max} FCFA.")
+    tva = credits_ht * reglage_.taux_tva // 100 if reglage_.tva_active else 0
+    return Montants(credits_ht, tva, credits_ht + tva)
+
+
+def initier(client, *, credits_ht: int, fournisseur_nom: str, auteur) -> tuple[Transaction, str]:
+    """Lance un rechargement : la transaction est écrite INITIE, le fournisseur
+    ouvre le paiement hors de toute transaction, puis elle passe EN_ATTENTE avec
+    sa référence. Rend l'adresse où envoyer le client payer."""
+    fournisseur = fournisseurs.actifs().get(fournisseur_nom)
+    if fournisseur is None:
+        raise RechargementRefuse("Moyen de paiement indisponible.")
+    reglage_ = reglage()
+    calcul = montants(credits_ht, reglage_)
+    transaction_ = Transaction.objects.create(
+        client=client,
+        fournisseur=fournisseur.code,
+        montant=calcul.ttc,
+        credits=calcul.credits,
+        initie_par=auteur,
+        expire_le=timezone.now() + timedelta(minutes=reglage_.delai_minutes),
+    )
+    ouverture = fournisseur.initier(montant=calcul.ttc, transaction_id=transaction_.id)
+    Transaction.objects.filter(id=transaction_.id, etat=Etat.INITIE).update(
+        reference_transaction=ouverture.reference, etat=Etat.EN_ATTENTE
+    )
+    transaction_.refresh_from_db()
+    return transaction_, ouverture.adresse
+
+
+A_RELANCER = 200
+
+
+def relancer(maintenant=None) -> int:
+    """Balayage de l'ordonnanceur : chaque paiement en attente est revérifié
+    auprès de son fournisseur, rappel reçu ou non, pour qu'un paiement confirmé
+    pendant que le client a fermé son navigateur, ou dont le rappel s'est
+    perdu, soit crédité quand même. Au-delà du délai, ce qui attend toujours
+    passe EXPIRE ; un rappel tardif confirmé le reprendra. Sous le rôle worker."""
+    maintenant = maintenant or timezone.now()
+    en_attente = list(
+        Transaction.objects.filter(etat=Etat.EN_ATTENTE)
+        .exclude(reference_transaction="")
+        .order_by("initie_le")
+        .values_list("fournisseur", "reference_transaction")[:A_RELANCER]
+    )
+    for fournisseur_code, reference in en_attente:
+        try:
+            verifier(fournisseur_code, reference)
+        except Exception:
+            journal.exception("Relance du paiement %s %s impossible.", fournisseur_code, reference)
+    # Une mise à jour par ligne : celle qu'un vérificateur tient verrouillée attend,
+    # puis n'est plus EN_ATTENTE si elle vient d'être confirmée.
+    return Transaction.objects.filter(
+        Q(etat=Etat.EN_ATTENTE) | Q(etat=Etat.INITIE), expire_le__lt=maintenant
+    ).update(etat=Etat.EXPIRE)

@@ -16,6 +16,7 @@ import hmac
 import ipaddress
 import json
 import time
+import uuid
 from dataclasses import dataclass
 
 from django.conf import settings
@@ -39,9 +40,24 @@ class Statut:
     montant: int | None = None
 
 
+@dataclass(frozen=True)
+class Initiation:
+    """Ce que rend le fournisseur au lancement d'un paiement : sa référence, et
+    l'adresse où envoyer le client pour qu'il paie."""
+
+    reference: str
+    adresse: str
+
+
 class Fournisseur:
     code: str = ""
     nom_dans_l_adresse: str = ""
+    libelle: str = ""
+
+    def initier(self, *, montant: int, transaction_id) -> Initiation:
+        """Ouvre le paiement chez le fournisseur. Appel réseau : jamais sous un
+        verrou."""
+        raise NotImplementedError
 
     def statut(self, reference: str) -> Statut:
         """Interroge l'API de statut. Appel réseau : jamais sous un verrou."""
@@ -82,6 +98,19 @@ class Simule(Fournisseur):
 
     code = "SIMULE"
     nom_dans_l_adresse = "simule"
+    libelle = "Paiement simulé"
+
+    def initier(self, *, montant: int, transaction_id) -> Initiation:
+        from django.urls import reverse
+
+        reference = f"SIM-{uuid.uuid4().hex[:20].upper()}"
+        simuler(reference, montant=montant, etat="EN_ATTENTE")
+        client_redis().hset(
+            CLE_SIMULATION.format(reference=reference),
+            "retour",
+            reverse("paiement", args=[transaction_id]),
+        )
+        return Initiation(reference, reverse("simulateur-paiement", args=[reference]))
 
     def signature_valide(self, entetes, corps: bytes) -> bool:
         secret = settings.PAIEMENTS_SIMULE_SECRET
@@ -126,6 +155,13 @@ def simuler(reference: str, *, montant: int, etat: str) -> None:
     cle = CLE_SIMULATION.format(reference=reference)
     client_redis().hset(cle, mapping={"etat": etat, "montant": montant})
     client_redis().expire(cle, 30 * 24 * 3600)
+
+
+def simulation(reference: str) -> dict | None:
+    """Ce que le simulateur sait d'un paiement, pour sa page : montant, état et
+    adresse de retour vers la plateforme."""
+    brut = client_redis().hgetall(CLE_SIMULATION.format(reference=reference))
+    return {k.decode(): v.decode() for k, v in brut.items()} or None
 
 
 def par_code(code: str) -> Fournisseur | None:

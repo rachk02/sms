@@ -1,0 +1,12 @@
+{# Statut d'un rechargement (T-86). La sonde interroge le fragment toutes les deux secondes tant que le paiement attend, et s'arrête d'elle-même au délai : la page annonce alors l'état réel et les suites possibles. #}
+<section id="paiement-statut" class="max-w-xl rounded border border-slate-200 bg-white p-4 text-sm"{% if not suivi.termine %} hx-get="{% url 'paiement-statut' transaction.id %}" hx-trigger="every 2s [document.visibilityState === 'visible']" hx-swap="outerHTML"{% endif %} aria-live="polite">
+  <h2 class="mb-2 text-lg font-semibold">{{ suivi.titre }}</h2>
+  <p>{{ suivi.message }}</p>
+  {% if suivi.suites %}
+    <ul class="mt-3 space-y-1">
+      {% for libelle, adresse in suivi.suites %}
+        <li><a class="underline" href="{{ adresse }}">{{ libelle }}</a></li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</section>

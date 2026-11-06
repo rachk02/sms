@@ -39,6 +39,13 @@ ATTENDUS = {
     "rappel-jasmin": ("post", {ANONYME: 403, UTILISATEUR: 403, ADMIN: 403}),
     # Point public des fournisseurs : sans signature, la même réponse nue pour tous.
     "rappel-paiement": ("post", {ANONYME: 403, UTILISATEUR: 403, ADMIN: 403}),
+    # Sans montant, le rechargement est refusé et le formulaire se réaffiche.
+    "recharger": ("post", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 200}),
+    "paiement": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
+    "paiement-statut": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
+    # La page du fournisseur simulé : un paiement inconnu n'existe pas.
+    "simulateur-paiement": ("get", {ANONYME: 404, UTILISATEUR: 404, ADMIN: 404}),
+    "simulateur-choix": ("post", {ANONYME: 404, UTILISATEUR: 404, ADMIN: 404}),
     "campagnes": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "campagne-nouvelle": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "campagne": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
@@ -103,6 +110,10 @@ def _adresse(nom, membres):
     if nom in (
         "rappel-jasmin",
         "rappel-paiement",
+        "paiement",
+        "paiement-statut",
+        "simulateur-paiement",
+        "simulateur-choix",
         "campagnes-modele",
         "campagne",
         "campagne-test",

@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block contenu %}
+<h1 class="mb-1 text-2xl font-semibold">Fournisseur de paiement simulé</h1>
+<p class="mb-6 text-sm text-slate-600">Poste de développement seulement. Paiement {{ reference }} de {{ simulation.montant }} FCFA ; état chez le fournisseur : {{ simulation.etat }}.</p>
+<form method="post" action="{% url 'simulateur-choix' reference %}" class="flex flex-wrap gap-2 text-sm">
+  {% csrf_token %}
+  <button name="choix" value="payer" class="rounded bg-slate-900 px-3 py-1.5 font-medium text-white">Payer</button>
+  <button name="choix" value="payer_sans_rappel" class="rounded border border-slate-300 px-3 py-1.5">Payer, rappel perdu</button>
+  <button name="choix" value="refuser" class="rounded border border-slate-300 px-3 py-1.5">Refuser</button>
+</form>
+{% endblock %}

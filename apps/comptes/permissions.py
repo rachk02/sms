@@ -29,6 +29,9 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     "expediteurs.consulter": frozenset({ADMIN, UTILISATEUR}),
     # Déclarer un identifiant engage le compte entier auprès des opérateurs.
     "expediteurs.declarer": frozenset({ADMIN}),
+    # Recharger engage l'argent du compte ; suivre un paiement se fait à deux.
+    "credits.recharger": frozenset({ADMIN}),
+    "credits.consulter": frozenset({ADMIN, UTILISATEUR}),
 }
 
 

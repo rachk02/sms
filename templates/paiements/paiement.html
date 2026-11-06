@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block contenu %}
+<h1 class="mb-1 text-2xl font-semibold">Rechargement de {{ transaction.credits }} FCFA</h1>
+<p class="mb-6 text-sm text-slate-600">Montant payé : {{ transaction.montant }} FCFA ; référence {{ transaction.reference_transaction|default:"en cours d'attribution" }}.</p>
+{% include "paiements/_statut.html" %}
+{% endblock %}

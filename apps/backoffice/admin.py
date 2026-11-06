@@ -22,6 +22,8 @@ from apps.expediteurs import services as expediteurs
 from apps.expediteurs.models import Expediteur, ExpediteurReseau, Reserve
 from apps.fichiers.models import Fichier
 from apps.fichiers.services import lien
+from apps.paiements import services as paiements
+from apps.paiements.models import Reglage
 
 from . import selectors
 from .forms import EnregistrementClientForm
@@ -336,6 +338,23 @@ class FenetreAdmin(admin.ModelAdmin):
     def delete_queryset(self, request, queryset):
         for fenetre in queryset:
             self.delete_model(request, fenetre)
+
+
+@admin.register(Reglage)
+class ReglageAdmin(admin.ModelAdmin):
+    """Réglages du rechargement : TVA, bornes et délai d'attente. Une seule ligne,
+    chaque changement tracé au journal d'audit."""
+
+    list_display = ("__str__", "tva_active", "taux_tva", "credits_min", "credits_max")
+
+    def has_add_permission(self, request):
+        return not Reglage.objects.exists() and super().has_add_permission(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def save_model(self, request, obj, form, change):
+        paiements.regler(obj, agent=request.user, adresse_ip=adresse_ip(request))
 
 
 @admin.register(DossierPreuve)

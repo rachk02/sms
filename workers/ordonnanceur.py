@@ -79,6 +79,7 @@ class Ordonnanceur(Worker):
     periode_supervision_s = 15.0
     periode_sans_accuse_s = 60.0
     periode_rapprochement_s = 86_400.0
+    periode_paiements_s = 60.0
 
     async def _attendre(self, secondes: float) -> None:
         try:
@@ -95,6 +96,7 @@ class Ordonnanceur(Worker):
         from apps.core import bus
         from apps.credits.rapprochement import rapprocher
         from apps.journal.services import creer_partitions_a_venir
+        from apps.paiements.services import relancer as relancer_paiements
         from apps.telecom.sante import surveiller
         from apps.telecom.supervision import publier_etat_liaisons
 
@@ -116,7 +118,7 @@ class Ordonnanceur(Worker):
                 # -inf : les deux tâches tournent dès le premier tour, quelle que soit
                 # l'origine arbitraire de time.monotonic().
                 derniere_partition = derniere_supervision = dernier_constat = float("-inf")
-                dernier_rapprochement = float("-inf")
+                dernier_rapprochement = derniere_relance = float("-inf")
                 while not self.arret.is_set():
                     if time.monotonic() - derniere_partition >= self.periode_partitions_s:
                         await sync_to_async(creer_partitions_a_venir)()
@@ -135,6 +137,11 @@ class Ordonnanceur(Worker):
                     if time.monotonic() - dernier_rapprochement >= self.periode_rapprochement_s:
                         await sync_to_async(rapprocher)()
                         dernier_rapprochement = time.monotonic()
+                    # Paiements en attente revérifiés, rappel reçu ou non, puis
+                    # expirés au-delà du délai (T-86).
+                    if time.monotonic() - derniere_relance >= self.periode_paiements_s:
+                        await sync_to_async(relancer_paiements)()
+                        derniere_relance = time.monotonic()
                     # Envois programmés et occurrences échues, puis quelques lots
                     # par campagne à chaque tour : le relais et les autres
                     # campagnes avancent aussi.

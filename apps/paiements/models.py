@@ -44,6 +44,10 @@ class Transaction(Identifiable):
     saisi_par = models.ForeignKey(
         "comptes.Utilisateur", on_delete=models.PROTECT, null=True, blank=True, related_name="+"
     )
+    # Qui a lancé un rechargement en ligne : il reçoit le courriel de confirmation.
+    initie_par = models.ForeignKey(
+        "comptes.Utilisateur", on_delete=models.PROTECT, null=True, blank=True, related_name="+"
+    )
 
     class Meta:
         db_table = "paiements_transaction"
@@ -63,3 +67,39 @@ class Transaction(Identifiable):
 
     def __str__(self):
         return f"{self.fournisseur} {self.reference_transaction or self.id} {self.etat}"
+
+
+class Reglage(models.Model):
+    """Réglages du rechargement, en une seule ligne, modifiables sans
+    redéploiement par le back-office.
+
+    La TVA peut se couper : l'utilisateur n'est pas sûr qu'elle s'applique à ce
+    service (6 novembre 2026). Les crédits s'achètent par multiples d'un pas
+    qui rend la TVA entière (50 FCFA HT à 18 %). Les bornes d'un rechargement
+    restent vides tant que l'utilisateur ne les a pas fixées."""
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1)
+    tva_active = models.BooleanField(default=True)
+    taux_tva = models.PositiveSmallIntegerField(default=18)
+    credits_min = models.PositiveIntegerField(null=True, blank=True)
+    credits_max = models.PositiveIntegerField(null=True, blank=True)
+    # Au-delà, un paiement resté sans réponse du fournisseur passe EXPIRE.
+    delai_minutes = models.PositiveSmallIntegerField(default=15)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "paiements_reglage"
+        constraints = [
+            models.CheckConstraint(condition=Q(id=1), name="reglage_ligne_unique"),
+            models.CheckConstraint(condition=Q(taux_tva__lte=100), name="reglage_taux_borne"),
+            models.CheckConstraint(
+                condition=Q(credits_min__isnull=True)
+                | Q(credits_max__isnull=True)
+                | Q(credits_max__gte=models.F("credits_min")),
+                name="reglage_bornes_ordonnees",
+            ),
+        ]
+
+    def __str__(self):
+        tva = f"TVA {self.taux_tva} %" if self.tva_active else "sans TVA"
+        return f"Rechargement, {tva}"
