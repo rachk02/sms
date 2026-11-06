@@ -31,6 +31,7 @@ from django.db import connection, transaction
 from django.db.models import Exists, OuterRef
 from django.utils import timezone
 
+from apps.conformite import fenetre
 from apps.contacts.models import Contact
 from apps.core import controles
 from apps.core.audit import auditer
@@ -107,6 +108,11 @@ def publier_lot(campagne_id, taille: int = TAILLE_LOT, maintenant: datetime | No
     )
     if campagne.etat not in (Campagne.Etat.EN_ATTENTE, Campagne.Etat.EN_COURS):
         return 0
+    if hors_fenetre(campagne, maintenant):
+        # Avant tout le reste : une campagne qui attend l'ouverture ne démarre
+        # pas la nuit, et ses messages retenus ne sont pas remis en file pour
+        # être retenus de nouveau (T-72).
+        return 0
     if campagne.etat == Campagne.Etat.EN_ATTENTE:
         campagne.etat, campagne.demarree_le = Campagne.Etat.EN_COURS, maintenant
         campagne.save(update_fields=["etat", "demarree_le", "modifie_le"])
@@ -174,16 +180,35 @@ def _remettre_en_file(campagne: Campagne, taille: int) -> int:
     return len(repris)
 
 
+def hors_fenetre(campagne: Campagne, instant: datetime) -> bool:
+    """Vrai si la campagne est marketing et que la fenêtre légale de son pays
+    est fermée à cet instant. Une campagne transactionnelle n'attend jamais."""
+    return campagne.type == Campagne.Type.MARKETING and not fenetre.ouverte(
+        instant, campagne.client.pays
+    )
+
+
 def retenue(message) -> str | None:
     """Retenue enregistrée auprès de la soumission : un message d'une campagne
-    en pause attend, celui d'une campagne annulée ne partira pas."""
+    en pause attend, celui d'une campagne annulée ne partira pas, et celui
+    d'une campagne marketing attend, hors de la fenêtre légale, l'ouverture
+    suivante, où l'ordonnanceur le remet en file (T-72)."""
     if not message.campagne_id:
         return None
-    etat = Campagne.objects.filter(id=message.campagne_id).values_list("etat", flat=True).first()
+    lue = (
+        Campagne.objects.filter(id=message.campagne_id)
+        .values_list("etat", "type", "client__pays")
+        .first()
+    )
+    if lue is None:
+        return None
+    etat, nature, pays = lue
     if etat == Campagne.Etat.EN_PAUSE:
         return controles.RETENIR
     if etat == Campagne.Etat.ANNULEE:
         return controles.ANNULER
+    if nature == Campagne.Type.MARKETING and not fenetre.ouverte(timezone.now(), pays):
+        return controles.RETENIR
     return None
 
 

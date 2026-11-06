@@ -16,6 +16,7 @@ def contexte_suivi(campagne: Campagne) -> dict:
         "campagne": campagne,
         "suivi": selectors.suivi(campagne),
         "en_direct": selectors.en_direct(campagne),
+        "liberation": selectors.liberation(campagne),
     }
 
 

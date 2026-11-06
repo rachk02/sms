@@ -6,6 +6,12 @@
     Close le {{ campagne.terminee_le|date:"d/m/Y à H:i" }} : coût réel {{ campagne.cout_reel }} FCFA ; le reste de la réservation est rendu à votre solde.
   {% elif campagne.etat == "ANNULEE" %}
     Annulation en cours : les messages non partis sont annulés, puis le reste de la réservation est rendu à votre solde.
+  {% elif liberation %}
+    {% if liberation.prevue_le %}
+      Hors de la fenêtre légale des envois marketing : aucun message ne part. La diffusion reprendra seule le {{ liberation.prevue_le|date:"l j F Y à H:i" }}.
+    {% else %}
+      Hors de la fenêtre légale des envois marketing, et aucune ouverture n'est prévue : aucun message ne part. Contactez le support.
+    {% endif %}
   {% elif campagne.etat == "EN_PAUSE" %}
     En pause : aucun message ne part. Ceux dont la soumission avait commencé finissent leur chemin.
   {% elif campagne.etat == "EN_COURS" %}

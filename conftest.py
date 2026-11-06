@@ -109,3 +109,16 @@ def espaces(transactional_db, settings):
 
     yield basculer
     basculer("client")
+
+
+@pytest.fixture(autouse=True)
+def fenetre_toujours_ouverte(request, monkeypatch):
+    """La fenêtre légale (T-72) dépend de l'heure et du jour : sans ce réglage,
+    une campagne marketing testée la nuit ou le dimanche attendrait l'ouverture.
+    Un test marqué `fenetre_reelle` lit la vraie fenêtre."""
+    if request.node.get_closest_marker("fenetre_reelle"):
+        return
+    from apps.conformite import fenetre
+
+    monkeypatch.setattr(fenetre, "ouverte", lambda instant, pays="BF": True)
+    monkeypatch.setattr(fenetre, "prochaine_ouverture", lambda instant, pays="BF": instant)

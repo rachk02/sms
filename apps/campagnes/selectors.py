@@ -1,9 +1,12 @@
 """Lectures des campagnes."""
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from django.db.models import Sum
+from django.utils import timezone
 
+from apps.conformite import fenetre
 from apps.credits.models import Reservation
 from apps.journal.models import Compteur
 
@@ -89,3 +92,34 @@ def en_direct(campagne: Campagne) -> bool:
         Campagne.Etat.EN_COURS,
         Campagne.Etat.EN_PAUSE,
     ) or (campagne.etat == Campagne.Etat.ANNULEE and not campagne.terminee_le)
+
+
+@dataclass(frozen=True)
+class Liberation:
+    """Une campagne marketing retenue par la fenêtre légale (T-74) : l'heure où
+    elle repartira seule, ou None si aucune ouverture n'est prévue."""
+
+    prevue_le: datetime | None
+
+
+def liberation(campagne: Campagne, maintenant: datetime | None = None) -> Liberation | None:
+    """La libération d'une campagne qui attend l'ouverture de la fenêtre, None
+    si elle n'attend pas : transactionnelle, en pause, close, ou dans la
+    fenêtre. Calculée sur la fenêtre et les jours fériés en base, jamais
+    approximée. Une campagne programmée hors de la fenêtre l'annonce dès sa
+    programmation."""
+    if campagne.type != Campagne.Type.MARKETING:
+        return None
+    if campagne.etat not in (
+        Campagne.Etat.PLANIFIEE,
+        Campagne.Etat.EN_ATTENTE,
+        Campagne.Etat.EN_COURS,
+    ):
+        return None
+    depart = maintenant or timezone.now()
+    if campagne.etat == Campagne.Etat.PLANIFIEE and campagne.planifiee_pour:
+        depart = max(depart, campagne.planifiee_pour)
+    prevue = fenetre.prochaine_ouverture(depart, campagne.client.pays)
+    if prevue == depart:
+        return None
+    return Liberation(prevue)

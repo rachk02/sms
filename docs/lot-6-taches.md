@@ -115,6 +115,27 @@ sortants arrivent au lot 9 (T-111).
   l'administration du back-office ; chaque ajout, correction ou suppression
   passe par `conformite.services` et s'inscrit au journal d'audit.
 
+- **Deux points de contrôle de la fenêtre (T-72).** L'ordonnanceur ne publie
+  aucun lot d'une campagne marketing hors de la fenêtre, avant même de la
+  démarrer ou de remettre en file ses messages retenus ; le worker d'envoi
+  retient, comme pour une pause, tout message marketing tiré de la file hors de
+  la fenêtre. À l'ouverture suivante, l'ordonnanceur remet ces messages en file
+  par le chemin de la reprise (T-64). Une campagne interrompue reste EN_COURS
+  avec sa vraie date de départ ; elle ne se clôt pas la nuit, ses messages
+  retenus comptant comme non soumis, et sa réservation reste active. Les
+  campagnes transactionnelles, les envois unitaires (codes compris), les envois
+  de test et les confirmations de désinscription ne sont jamais retenus.
+- **Libération annoncée (T-74).** Le suivi d'une campagne marketing qui attend
+  l'ouverture annonce le jour et l'heure de la reprise, calculés sur la fenêtre
+  et les jours fériés en base ; une campagne programmée hors de la fenêtre
+  l'annonce dès sa programmation. Sans ouverture prévue, l'écran le dit. Une
+  campagne en attente s'annule comme avant (T-64) : le reliquat de sa
+  réservation revient au solde.
+- **Tests indépendants de l'heure.** Une fixture de `conftest.py` tient la
+  fenêtre ouverte pour toute la suite, faute de quoi une campagne testée la
+  nuit ou le dimanche attendrait ; les tests marqués `fenetre_reelle` lisent la
+  vraie fenêtre avec une horloge de test.
+
 ## T-69 · Détection du STOP entrant
 
 **Produit** La normalisation du message reçu, sans accents ni casse, et sa comparaison à la table des mots-clés : STOP, ARRET, ARRETER, et les variantes avec espaces ou ponctuation.
