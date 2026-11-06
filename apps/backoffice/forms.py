@@ -1,6 +1,7 @@
 from django import forms
 
 from apps.comptes.models import Client, Piece, pieces_attendues
+from apps.paiements.services import MANUELS
 
 
 class EnregistrementClientForm(forms.Form):
@@ -31,3 +32,23 @@ class EnregistrementClientForm(forms.Form):
             self.fields[f"piece_{type_piece}"] = forms.FileField(
                 required=False, label=libelle, help_text=aide
             )
+
+
+class PaiementManuelForm(forms.Form):
+    """Saisie d'un virement ou d'un versement en espèces reçu. Les règles (pas
+    d'achat, justificatif, doublon) sont dans paiements.services."""
+
+    client = forms.ModelChoiceField(queryset=Client.objects.order_by("raison_sociale"))
+    fournisseur = forms.ChoiceField(
+        choices=[(f.value, f.label) for f in MANUELS], label="Moyen de paiement"
+    )
+    reference = forms.CharField(
+        max_length=100, label="Référence", help_text="Référence du virement ou numéro du reçu."
+    )
+    credits = forms.IntegerField(
+        min_value=1, label="Crédits (FCFA hors taxes)", help_text="La TVA s'ajoute au montant payé."
+    )
+    motif = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}))
+    justificatif = forms.FileField(
+        required=False, help_text="Bordereau de virement ou reçu : PDF, JPEG ou PNG, 5 Mo au plus."
+    )

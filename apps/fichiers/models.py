@@ -12,6 +12,7 @@ class Fichier(BaseClient):
         EXPORT = "EXPORT", "Export"
         FACTURE = "FACTURE", "Facture"
         ARCHIVE = "ARCHIVE", "Archive"
+        PAIEMENT = "PAIEMENT", "Justificatif de paiement"
 
     famille = models.CharField(max_length=10, choices=Famille)
     # clients/<client_id>/<famille>/<uuid>.<ext> : jamais le nom d'origine.

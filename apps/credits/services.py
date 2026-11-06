@@ -120,7 +120,7 @@ def _ecrire(compte: CompteCredit, type_, montant, *, reference="", motif="", aut
 
 
 @transaction.atomic
-def acheter(client_id, montant: int, *, reference: str, auteur=None) -> Ecriture:
+def acheter(client_id, montant: int, *, reference: str, auteur=None, motif: str = "") -> Ecriture:
     """Achat constaté : paiement confirmé de serveur à serveur, ou paiement manuel
     validé par un agent, qui en est alors l'auteur. ACHAT ne désigne que des
     crédits payés : un crédit offert est un recrédit, jamais un achat."""
@@ -128,7 +128,14 @@ def acheter(client_id, montant: int, *, reference: str, auteur=None) -> Ecriture
     if not reference or not reference.strip():
         raise ReferenceObligatoire("Un achat renvoie à sa transaction de paiement.")
     compte = _compte_verrouille(client_id)
-    return _ecrire(compte, Ecriture.Type.ACHAT, montant, reference=reference.strip(), auteur=auteur)
+    return _ecrire(
+        compte,
+        Ecriture.Type.ACHAT,
+        montant,
+        reference=reference.strip(),
+        motif=(motif or "").strip(),
+        auteur=auteur,
+    )
 
 
 @transaction.atomic

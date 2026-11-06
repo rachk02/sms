@@ -23,10 +23,10 @@ from apps.expediteurs.models import Expediteur, ExpediteurReseau, Reserve
 from apps.fichiers.models import Fichier
 from apps.fichiers.services import lien
 from apps.paiements import services as paiements
-from apps.paiements.models import Reglage
+from apps.paiements.models import Reglage, Transaction
 
 from . import selectors
-from .forms import EnregistrementClientForm
+from .forms import EnregistrementClientForm, PaiementManuelForm
 from .models import DossierPreuve
 from .services import (
     CONTROLES_DE_REVUE,
@@ -338,6 +338,65 @@ class FenetreAdmin(admin.ModelAdmin):
     def delete_queryset(self, request, queryset):
         for fenetre in queryset:
             self.delete_model(request, fenetre)
+
+
+@admin.register(Transaction)
+class TransactionAdmin(admin.ModelAdmin):
+    """Paiements, en lecture seule : un paiement ne se modifie pas à la main.
+    L'ajout est la saisie d'un paiement manuel (T-87)."""
+
+    list_display = (
+        "initie_le",
+        "client",
+        "fournisseur",
+        "reference_transaction",
+        "credits",
+        "montant",
+        "etat",
+    )
+    list_filter = ("fournisseur", "etat")
+    search_fields = ("reference_transaction", "client__raison_sociale")
+    date_hierarchy = "initie_le"
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def add_view(self, request, form_url="", extra_context=None):
+        formulaire = PaiementManuelForm(request.POST or None, request.FILES or None)
+        if request.method == "POST" and formulaire.is_valid():
+            donnees = formulaire.cleaned_data
+            fichier = donnees.get("justificatif")
+            try:
+                transaction_ = paiements.saisir_manuel(
+                    donnees["client"],
+                    fournisseur=donnees["fournisseur"],
+                    credits_ht=donnees["credits"],
+                    reference=donnees["reference"],
+                    motif=donnees["motif"],
+                    justificatif=fichier.read() if fichier else None,
+                    nom_justificatif=fichier.name if fichier else "",
+                    agent=request.user,
+                    adresse_ip=adresse_ip(request),
+                )
+            except paiements.SaisieRefusee as refus:
+                formulaire.add_error(None, str(refus))
+            else:
+                messages.success(
+                    request,
+                    f"{transaction_.credits} FCFA de crédits portés au solde de "
+                    f"{transaction_.client} ({transaction_.montant} FCFA payés).",
+                )
+                return redirect("admin:paiements_transaction_changelist")
+        contexte = {
+            **self.admin_site.each_context(request),
+            "title": "Saisir un paiement manuel",
+            "formulaire": formulaire,
+            "opts": self.model._meta,
+        }
+        return TemplateResponse(request, "admin/backoffice/paiement_manuel.html", contexte)
 
 
 @admin.register(Reglage)

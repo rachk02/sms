@@ -30,6 +30,8 @@ from apps.core.audit import auditer
 from apps.core.courriels import envoyer
 from apps.core.evenements import publier
 from apps.credits import services as credits
+from apps.fichiers.models import Fichier
+from apps.fichiers.services import FichierRefuse, deposer
 
 from . import fournisseurs
 from .models import Reglage, Transaction
@@ -203,7 +205,7 @@ def pas_d_achat(reglage_: Reglage) -> int:
     return 100 // math.gcd(100, reglage_.taux_tva)
 
 
-def montants(credits_ht: int, reglage_: Reglage | None = None) -> Montants:
+def montants(credits_ht: int, reglage_: Reglage | None = None, *, bornes=True) -> Montants:
     """Ce que coûtent des crédits HT, TVA comprise. Refuse un montant hors du pas
     ou des bornes : jamais d'arrondi sur une somme d'argent."""
     reglage_ = reglage_ or reglage()
@@ -212,9 +214,9 @@ def montants(credits_ht: int, reglage_: Reglage | None = None) -> Montants:
     pas = pas_d_achat(reglage_)
     if credits_ht % pas:
         raise RechargementRefuse(f"Les crédits s'achètent par multiples de {pas} FCFA.")
-    if reglage_.credits_min is not None and credits_ht < reglage_.credits_min:
+    if bornes and reglage_.credits_min is not None and credits_ht < reglage_.credits_min:
         raise RechargementRefuse(f"Rechargement minimal : {reglage_.credits_min} FCFA.")
-    if reglage_.credits_max is not None and credits_ht > reglage_.credits_max:
+    if bornes and reglage_.credits_max is not None and credits_ht > reglage_.credits_max:
         raise RechargementRefuse(f"Rechargement maximal : {reglage_.credits_max} FCFA.")
     tva = credits_ht * reglage_.taux_tva // 100 if reglage_.tva_active else 0
     return Montants(credits_ht, tva, credits_ht + tva)
@@ -271,3 +273,102 @@ def relancer(maintenant=None) -> int:
     return Transaction.objects.filter(
         Q(etat=Etat.EN_ATTENTE) | Q(etat=Etat.INITIE), expire_le__lt=maintenant
     ).update(etat=Etat.EXPIRE)
+
+
+# Paiements manuels (T-87)
+
+MANUELS = (Transaction.Fournisseur.VIREMENT, Transaction.Fournisseur.ESPECES)
+
+
+class SaisieRefusee(ValueError):
+    pass
+
+
+@transaction.atomic
+def saisir_manuel(
+    client,
+    *,
+    fournisseur: str,
+    credits_ht: int,
+    reference: str,
+    motif: str,
+    justificatif: bytes | None,
+    nom_justificatif: str = "",
+    agent,
+    adresse_ip=None,
+) -> Transaction:
+    """Un agent saisit un virement ou un versement en espèces reçu. Le
+    justificatif est déposé, la transaction écrite CONFIRME, et l'ACHAT porte
+    l'agent et le motif : un paiement manuel est un crédit payé, jamais un
+    ajustement. Les bornes du rechargement en ligne ne s'appliquent pas, le pas
+    d'achat si. Sous le rôle du back-office."""
+    reference, motif = (reference or "").strip(), (motif or "").strip()
+    if fournisseur not in MANUELS:
+        raise SaisieRefusee("Un paiement manuel est un virement ou un versement en espèces.")
+    if agent is None:
+        raise SaisieRefusee("Un paiement manuel porte l'agent qui le saisit.")
+    if not justificatif:
+        raise SaisieRefusee("Aucune saisie manuelle sans justificatif téléversé.")
+    if not motif:
+        raise SaisieRefusee("Un paiement manuel exige un motif.")
+    if not reference:
+        raise SaisieRefusee("Indiquez la référence du virement ou le numéro du reçu.")
+    try:
+        calcul = montants(credits_ht, reglage(), bornes=False)
+    except RechargementRefuse as refus:
+        raise SaisieRefusee(str(refus)) from None
+    if Transaction.objects.filter(
+        fournisseur=fournisseur, reference_transaction=reference
+    ).exists():
+        raise SaisieRefusee("Ce paiement est déjà saisi sous cette référence.")
+    try:
+        fichier = deposer(
+            client=client,
+            famille=Fichier.Famille.PAIEMENT,
+            contenu=justificatif,
+            nom_origine=nom_justificatif or "justificatif",
+        )
+    except FichierRefuse as refus:
+        raise SaisieRefusee(str(refus)) from None
+    transaction_ = Transaction.objects.create(
+        client=client,
+        fournisseur=fournisseur,
+        reference_transaction=reference,
+        montant=calcul.ttc,
+        credits=calcul.credits,
+        etat=Etat.CONFIRME,
+        confirme_le=timezone.now(),
+        justificatif=fichier,
+        saisi_par=agent,
+        motif=motif,
+    )
+    credits.acheter(
+        client.id,
+        calcul.credits,
+        reference=reference_registre(transaction_.id),
+        auteur=agent,
+        motif=motif,
+    )
+    auditer(
+        "paiements.manuel.saisi",
+        transaction_,
+        auteur=agent,
+        client=client,
+        apres={
+            "fournisseur": fournisseur,
+            "reference": reference,
+            "credits": calcul.credits,
+            "montant": calcul.ttc,
+            "justificatif": str(fichier.id),
+        },
+        motif=motif,
+        adresse_ip=adresse_ip,
+    )
+    publier(
+        "paiements.transaction.confirmee",
+        client_id=client.id,
+        objet_id=transaction_.id,
+        donnees={"credits": calcul.credits, "montant": calcul.ttc, "manuel": True},
+        cle_idempotence=f"paiement-confirme:{transaction_.id}",
+    )
+    return transaction_

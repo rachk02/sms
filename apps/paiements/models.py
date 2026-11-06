@@ -44,6 +44,8 @@ class Transaction(Identifiable):
     saisi_par = models.ForeignKey(
         "comptes.Utilisateur", on_delete=models.PROTECT, null=True, blank=True, related_name="+"
     )
+    # Paiement manuel : pourquoi l'agent l'a saisi, porté aussi sur l'écriture.
+    motif = models.TextField(blank=True)
     # Qui a lancé un rechargement en ligne : il reçoit le courriel de confirmation.
     initie_par = models.ForeignKey(
         "comptes.Utilisateur", on_delete=models.PROTECT, null=True, blank=True, related_name="+"
@@ -53,6 +55,12 @@ class Transaction(Identifiable):
         db_table = "paiements_transaction"
         indexes = [models.Index(fields=["etat", "expire_le"], name="transaction_etat_expire")]
         constraints = [
+            # Aucune saisie manuelle sans justificatif, agent ni motif (T-87).
+            models.CheckConstraint(
+                condition=~Q(fournisseur__in=["VIREMENT", "ESPECES"])
+                | (Q(justificatif__isnull=False) & Q(saisi_par__isnull=False) & ~Q(motif="")),
+                name="transaction_manuelle_justifiee",
+            ),
             # Le double crédit d'un rappel réémis bute ici.
             models.UniqueConstraint(
                 fields=["fournisseur", "reference_transaction"],

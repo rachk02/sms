@@ -556,7 +556,10 @@ ORANGE_MONEY, MOOV_MONEY, CARTE, VIREMENT, ESPECES, `reference_transaction`,
 `montant`, `credits`, `etat` parmi INITIE, EN_ATTENTE, CONFIRME, ECHOUE,
 EXPIRE, REMBOURSE, `initie_le`, `confirme_le`, `expire_le`, `justificatif_id`,
 `saisi_par_id` pour les paiements manuels, `initie_par_id` pour la personne
-qui a lancé un paiement en ligne et reçoit le courriel de confirmation.
+qui a lancé un paiement en ligne et reçoit le courriel de confirmation,
+`motif` pour un paiement manuel. Un VIREMENT ou des ESPECES portent toujours
+leur justificatif, leur agent et leur motif : une contrainte de la base le
+refuse sinon.
 
 `fournisseur` compte aussi SIMULE, le fournisseur simulé du développement.
 `montant` est ce que le client paie (TTC), `credits` ce qui est porté au
@@ -650,7 +653,8 @@ renvoie la réponse stockée ; la même clé avec une autre empreinte est refus�
 ## fichiers
 
 **`fichiers_fichier`** : `id`, `client_id`, `famille` parmi PIECE, IMPORT,
-EXPORT, FACTURE, ARCHIVE, `chemin`, `nom_origine`, `type_mime`,
+EXPORT, FACTURE, ARCHIVE, PAIEMENT (justificatif d'un paiement manuel,
+chiffré), `chemin`, `nom_origine`, `type_mime`,
 `taille_octets`, `chiffre` booléen, `expire_le`, `supprime_le`.
 
 Le chemin suit la convention `clients/<client_id>/<famille>/<uuid>.<ext>`, avec

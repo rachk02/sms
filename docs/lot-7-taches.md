@@ -308,6 +308,14 @@ Choix faits, à confirmer :
 
 **Critères** Aucune saisie manuelle sans justificatif téléversé. L'écriture au registre porte l'agent. Le journal d'audit enregistre l'opération avec le montant.
 
+**Fait.** Au back-office, la liste des paiements est en lecture seule et son bouton d'ajout ouvre la saisie d'un paiement manuel : client, moyen (virement ou espèces), référence, crédits HT, motif et justificatif. `paiements.services.saisir_manuel` refuse une saisie sans justificatif, sans motif, sans référence, hors du pas d'achat, ou déjà faite sous la même référence ; il dépose le justificatif (famille PAIEMENT, PDF, JPEG ou PNG, chiffré), écrit la transaction CONFIRME avec l'agent et le motif, puis l'ACHAT au registre par `credits.acheter`, qui porte désormais aussi le motif, avec l'agent pour auteur, et trace l'opération au journal d'audit (`paiements.manuel.saisi`, crédits et montant TTC). Une contrainte de la base refuse un virement ou des espèces sans justificatif, agent ni motif.
+
+Choix faits, à confirmer :
+
+- l'agent saisit les crédits HT, et le montant payé TTC s'en déduit au taux en vigueur ; un virement dont le montant ne tombe pas sur le pas d'achat se saisit au multiple inférieur, l'écart se traite à part ;
+- les bornes du rechargement en ligne ne s'appliquent pas à un paiement manuel, le pas d'achat si ;
+- la référence (du virement, ou numéro du reçu d'espèces) est obligatoire : c'est elle qui empêche de saisir deux fois le même paiement.
+
 ## T-88 · Facturation
 
 **Produit** L'émission de la facture normalisée à chaque achat de crédits, la numérotation séquentielle par année, le reçu téléchargeable, et l'export comptable.
