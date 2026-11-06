@@ -31,6 +31,7 @@ from django.db import connection, transaction
 from django.db.models import Exists, OuterRef
 from django.utils import timezone
 
+from apps.comptes.models import Client
 from apps.conformite import fenetre
 from apps.contacts.models import Contact
 from apps.core import controles
@@ -41,7 +42,7 @@ from apps.credits.models import Reservation
 from apps.credits.tarifs import prix_segment
 from apps.expediteurs.controle import Action, choisir
 from apps.journal.models import Destinataire as Servi
-from apps.journal.models import Evenement
+from apps.journal.models import Evenement, Message
 from apps.journal.services import (
     MOTIF_ANNULE,
     NON_SOUMIS,
@@ -212,40 +213,89 @@ def retenue(message) -> str | None:
     return None
 
 
-# Messages soumis d'une campagne dont la consommation n'est pas encore écrite :
-# un worker interrompu entre la soumission et le règlement.
+# Messages soumis d'une campagne dont la consommation n'est pas encore écrite,
+# parmi les états qui consomment : tous les états d'un message soumis en
+# règlement à la soumission (un worker interrompu entre la soumission et le
+# règlement) ; livré ou sans accusé en règlement à la livraison.
 NON_REGLES = """
-SELECT m.id, m.cout_total FROM journal_message AS m
+SELECT m.id, m.cout_total, m.etat FROM journal_message AS m
 WHERE m.campagne_id = %s AND m.date_reception >= %s AND m.date_soumission IS NOT NULL
+  AND m.etat = ANY(%s)
   AND NOT EXISTS (
     SELECT 1 FROM credits_registre AS e
     WHERE e.type = 'CONSOMMATION' AND e.reference = 'message:' || m.id::text
   )
 """
+CONSOMMENT = {
+    Client.Reglement.SOUMISSION: sorted(Etat.values),
+    Client.Reglement.LIVRAISON: sorted(credits.CONSOMMENT_A_LA_LIVRAISON),
+}
 
 
-def _regler_retardataires(campagne: Campagne) -> None:
-    """Règle les messages soumis dont le worker n'a pas encore écrit la
-    consommation, avant que le reliquat soit libéré. Idempotent : si le worker
+def _regler_retardataires(campagne: Campagne, mode: str) -> None:
+    """Règle les messages qui consomment et dont la consommation n'est pas
+    encore écrite, avant que le reliquat soit libéré. Idempotent : si le worker
     y arrive ensuite, il trouve la consommation déjà écrite."""
     with connection.cursor() as curseur:
-        curseur.execute(NON_REGLES, [campagne.id, campagne.confirmee_le])
+        curseur.execute(NON_REGLES, [campagne.id, campagne.confirmee_le, CONSOMMENT[mode]])
         lignes = curseur.fetchall()
-    for message_id, cout in lignes:
-        credits.solder_message(
-            client_id=campagne.client_id,
-            message_id=message_id,
-            campagne_id=campagne.id,
-            montant=cout,
-            soumis=True,
-        )
+    for message_id, cout, etat in lignes:
+        if mode == Client.Reglement.LIVRAISON:
+            credits.solder_final(
+                client_id=campagne.client_id,
+                message_id=message_id,
+                campagne_id=campagne.id,
+                montant=cout,
+                etat=etat,
+            )
+        else:
+            credits.solder_message(
+                client_id=campagne.client_id,
+                message_id=message_id,
+                campagne_id=campagne.id,
+                montant=cout,
+                soumis=True,
+            )
+
+
+def _reservation(campagne: Campagne):
+    return (
+        Reservation.objects.filter(campagne_id=campagne.id)
+        .values_list("id", "montant_initial", "montant_restant", "etat", "mode")
+        .first()
+    )
+
+
+def attend_des_accuses(campagne: Campagne) -> bool:
+    """Vrai si un message soumis de la campagne n'a pas encore d'état final."""
+    return Message.objects.filter(
+        campagne_id=campagne.id, etat=Etat.SOUMIS, date_reception__gte=campagne.confirmee_le
+    ).exists()
+
+
+def _conclure_reservation(campagne: Campagne) -> int:
+    """Règle les retardataires, inscrit le coût réel, libère le reliquat.
+    Renvoie le montant libéré."""
+    reservation = _reservation(campagne)
+    if reservation is None:
+        return 0
+    _regler_retardataires(campagne, reservation[4])
+    reservation_id, initial, restant, etat, _mode = _reservation(campagne)
+    campagne.cout_reel = initial - restant
+    if etat == Reservation.Etat.ACTIVE:
+        return credits.liberer(reservation_id)
+    return 0
 
 
 def clore(campagne: Campagne) -> bool:
     """Clôt une campagne verrouillée par l'appelant, si plus rien n'est à
-    publier ni à soumettre : règle les retardataires, inscrit le coût réel,
-    libère le reliquat. Une campagne en cours devient TERMINEE ; une campagne
-    annulée le reste. Renvoie vrai si la campagne a été close."""
+    publier ni à soumettre. Une campagne en cours devient TERMINEE ; une
+    campagne annulée le reste. Renvoie vrai si la campagne a été close.
+
+    En règlement à la soumission, la réservation se conclut aussitôt : coût
+    réel inscrit, reliquat libéré. En règlement à la livraison, elle attend que
+    chaque message soumis ait son état final, livré, en échec ou sans accusé :
+    la campagne est close, son coût réel provisoire, et `solder` conclura."""
     if campagne.terminee_le:
         return False
     if campagne.etat == Campagne.Etat.EN_COURS:
@@ -258,18 +308,18 @@ def clore(campagne: Campagne) -> bool:
         return False
     if campagne.demarree_le and reste_a_soumettre(campagne.id, campagne.confirmee_le):
         return False
-    _regler_retardataires(campagne)
-    reservation = (
-        Reservation.objects.filter(campagne_id=campagne.id)
-        .values_list("id", "montant_initial", "montant_restant", "etat")
-        .first()
+    reservation = _reservation(campagne)
+    attente = bool(
+        reservation
+        and reservation[4] == Client.Reglement.LIVRAISON
+        and campagne.demarree_le
+        and attend_des_accuses(campagne)
     )
-    libere = 0
-    if reservation:
-        reservation_id, initial, restant, etat = reservation
-        campagne.cout_reel = initial - restant
-        if etat == Reservation.Etat.ACTIVE:
-            libere = credits.liberer(reservation_id)
+    if attente:
+        campagne.cout_reel = reservation[1] - reservation[2]  # consommé à ce jour
+        libere = 0
+    else:
+        libere = _conclure_reservation(campagne)
     if campagne.etat == Campagne.Etat.EN_COURS:
         campagne.etat = Campagne.Etat.TERMINEE
     campagne.terminee_le = timezone.now()
@@ -278,9 +328,50 @@ def clore(campagne: Campagne) -> bool:
         "campagnes.cloture",
         campagne,
         client=campagne.client,
-        apres={"etat": campagne.etat, "cout_reel": campagne.cout_reel, "libere": libere},
+        apres={
+            "etat": campagne.etat,
+            "cout_reel": campagne.cout_reel,
+            "libere": libere,
+            "attend_des_accuses": attente,
+        },
     )
     return True
+
+
+@transaction.atomic
+def solder(campagne_id) -> bool:
+    """Conclut la réservation d'une campagne close réglée à la livraison, une
+    fois que chaque message soumis a son état final. Renvoie vrai si la
+    réservation a été conclue."""
+    campagne = _verrouillee(campagne_id)
+    reservation = _reservation(campagne)
+    if not campagne.terminee_le or reservation is None:
+        return False
+    if reservation[3] != Reservation.Etat.ACTIVE or attend_des_accuses(campagne):
+        return False
+    libere = _conclure_reservation(campagne)
+    campagne.save(update_fields=["cout_reel", "modifie_le"])
+    auditer(
+        "campagnes.reglement",
+        campagne,
+        client=campagne.client,
+        apres={"cout_reel": campagne.cout_reel, "libere": libere},
+    )
+    return True
+
+
+def campagnes_a_solder() -> list:
+    """Campagnes closes réglées à la livraison dont la réservation est active."""
+    actives = Reservation.objects.filter(
+        etat=Reservation.Etat.ACTIVE,
+        mode=Client.Reglement.LIVRAISON,
+        campagne_id__isnull=False,
+    ).values_list("campagne_id", flat=True)
+    return list(
+        Campagne.objects.filter(id__in=actives, terminee_le__isnull=False).values_list(
+            "id", flat=True
+        )
+    )
 
 
 def _verrouillee(campagne_id) -> Campagne:
@@ -364,4 +455,9 @@ def publier(lots_max: int = 20, maintenant: datetime | None = None) -> int:
             cloturer(campagne_id)
         except Exception:
             journal.exception("Clôture de la campagne %s en échec.", campagne_id)
+    for campagne_id in campagnes_a_solder():
+        try:
+            solder(campagne_id)
+        except Exception:
+            journal.exception("Règlement de la campagne %s en échec.", campagne_id)
     return publies

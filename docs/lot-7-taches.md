@@ -116,6 +116,41 @@ terminal.
 
 **Critères** Les deux modèles passent par le même mécanisme, seul le moment du règlement change. Un message en échec définitif libère exactement sa réservation. Un message livré consomme exactement son coût figé à la soumission, même si la grille a changé entretemps.
 
+
+**Fait.** Le client porte son mode de règlement (`comptes_client.mode_reglement`,
+SOUMISSION par défaut), changé par `comptes.services.changer_mode_reglement`,
+motivé et tracé au journal d'audit. La réservation fige le mode du client au
+moment où elle est prise : un client passé à l'autre mode en cours de campagne
+ne change rien à celle-ci.
+
+- `credits.services.solder_message` reste la suite de la soumission : en
+  règlement à la soumission, le message consomme ; à la livraison, il attend.
+  Un refus avant le réseau ne coûte rien dans les deux modes.
+- `credits.services.solder_final` est la suite de l'état final : sans effet en
+  règlement à la soumission ; à la livraison, livré ou sans accusé consomme le
+  coût figé sur le message, non livré, expiré ou rejeté ne coûte rien, et la
+  réservation propre à un envoi unitaire est libérée.
+- Une campagne réglée à la livraison se clôt quand tout est soumis, avec un
+  coût réel provisoire ; sa réservation attend que plus aucun message ne soit
+  SOUMIS. L'ordonnanceur la conclut alors (`campagnes.diffusion.solder`) :
+  consommation des livrés et des sans accusé, libération du reliquat, coût réel
+  définitif, trace `campagnes.reglement` au journal d'audit.
+- L'ordonnanceur règle aussi, chaque minute, les envois unitaires réglés à la
+  livraison qui ont leur état final.
+
+Choix faits, à confirmer :
+
+- Le règlement se fait par balayage de l'ordonnanceur, pas au moment même de
+  l'accusé : `journal` et `credits` sont de la même couche et ne s'importent
+  pas, et un verrou du compte client à chaque accusé ralentirait le traitement
+  des accusés. Le client n'y perd rien : le montant est déjà réservé, son solde
+  disponible ne bouge qu'à la libération du reliquat.
+- Pour une campagne, la consommation s'écrit en une fois, à la conclusion, et
+  non au fil des accusés. Le compteur de coût du suivi en direct annonce le
+  coût émis, pas le coût facturé ; le coût réel de la campagne, lui, est juste
+  à la conclusion.
+- Aucun écran ne change encore le mode d'un client : le service existe, l'écran
+  du back-office viendra avec la refonte de l'interface.
 ## T-79 · Concurrence sur le solde
 
 **Produit** Le verrou sur la ligne de cache pendant la réservation, et la gestion de l'attente.

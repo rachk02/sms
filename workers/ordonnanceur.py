@@ -40,6 +40,37 @@ def constater_sans_accuse(maintenant=None, lots_max: int = 20) -> int:
     return total
 
 
+# Envois hors campagne réglés à la livraison dont le message a atteint un état
+# final : la réservation propre au message est encore active. Lecture par la clé
+# exacte du message, date de réception comprise.
+UNITAIRES_A_SOLDER = """
+SELECT r.client_id, r.message_id, m.cout_total, m.etat
+FROM credits_reservation AS r
+JOIN journal_message AS m ON m.id = r.message_id AND m.date_reception = r.message_date_reception
+WHERE r.etat = 'ACTIVE' AND r.mode = 'LIVRAISON' AND r.message_id IS NOT NULL
+  AND m.etat = ANY(%s)
+ORDER BY r.cree_le
+LIMIT %s
+"""
+
+
+def solder_envois_unitaires(taille: int = 500) -> int:
+    """Règle les envois hors campagne réglés à la livraison qui ont leur état
+    final. Le pont entre le journal et les crédits, qui ne s'importent pas l'un
+    l'autre. Renvoie le nombre d'envois réglés."""
+    from django.db import connection
+
+    from apps.core.etats import ETATS_TERMINAUX
+    from apps.credits.services import solder_final
+
+    with connection.cursor() as curseur:
+        curseur.execute(UNITAIRES_A_SOLDER, [sorted(ETATS_TERMINAUX), taille])
+        lignes = curseur.fetchall()
+    for client_id, message_id, cout, etat in lignes:
+        solder_final(client_id=client_id, message_id=message_id, montant=cout, etat=etat)
+    return len(lignes)
+
+
 class Ordonnanceur(Worker):
     nom = "ordonnanceur"
     attente_verrou_s = 5.0
@@ -94,6 +125,7 @@ class Ordonnanceur(Worker):
                         derniere_supervision = time.monotonic()
                     if time.monotonic() - dernier_constat >= self.periode_sans_accuse_s:
                         await sync_to_async(constater_sans_accuse)()
+                        await sync_to_async(solder_envois_unitaires)()
                         dernier_constat = time.monotonic()
                     # Envois programmés et occurrences échues, puis quelques lots
                     # par campagne à chaque tour : le relais et les autres

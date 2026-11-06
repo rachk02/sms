@@ -12,6 +12,9 @@ from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
 
+from apps.comptes.models import Client
+from apps.core.etats import Etat
+
 from .models import CompteCredit, Ecriture, Reservation
 
 
@@ -150,6 +153,7 @@ def reserver(
         message_date_reception=message_date_reception,
         montant_initial=montant,
         montant_restant=montant,
+        mode=Client.objects.values_list("mode_reglement", flat=True).get(id=client_id),
     )
 
 
@@ -201,42 +205,89 @@ def reference_message(message_id) -> str:
     return f"message:{message_id}"
 
 
+# États finals qui consomment en règlement à la livraison : livré, et sans
+# accusé, qui n'est pas un échec avéré (décision du 6 novembre 2026).
+CONSOMMENT_A_LA_LIVRAISON = frozenset({Etat.LIVRE, Etat.SANS_ACCUSE})
+
+
+def _reservation_de(compte: CompteCredit, message_id, campagne_id) -> Reservation:
+    filtre = {"campagne_id": campagne_id} if campagne_id else {"message_id": message_id}
+    reservation = Reservation.objects.filter(client_id=compte.client_id, **filtre).first()
+    if reservation is None:
+        raise SansReservation(f"Aucune réservation pour {reference_message(message_id)}.")
+    return reservation
+
+
+def _consommer(reservation: Reservation, montant: int, reference: str, campagne_id):
+    if campagne_id and reservation.etat == Reservation.Etat.REGLEE:
+        return None  # coût annoncé entièrement consommé : plus rien à facturer
+    if reservation.etat != Reservation.Etat.ACTIVE:
+        raise ReservationClose(f"Réservation {reservation.id} déjà close pour {reference}.")
+    if campagne_id:
+        # Le coût réel d'une campagne ne dépasse jamais le coût annoncé : un
+        # message plus long que prévu (contact modifié depuis la confirmation)
+        # consomme au plus ce qui reste de la réservation.
+        montant = min(montant, reservation.montant_restant)
+        if montant == 0:
+            return None
+    return regler(reservation.id, montant, reference=reference)
+
+
+def _rendre(reservation: Reservation, campagne_id) -> None:
+    """Un message qui ne coûte rien : la réservation propre au message est
+    libérée ; celle d'une campagne attend la fin de la campagne."""
+    if not campagne_id and reservation.etat == Reservation.Etat.ACTIVE:
+        liberer(reservation.id)
+
+
 @transaction.atomic
 def solder_message(
     *, client_id, message_id, campagne_id=None, montant: int, soumis: bool
 ) -> Ecriture | None:
-    """Suite comptable d'une soumission. Jusqu'au lot 7, un message consomme son
-    coût quand le réseau l'accepte (décision du 30 septembre 2026).
+    """Suite comptable d'une soumission, `montant` étant le coût figé sur le
+    message.
 
-    Soumis : écriture CONSOMMATION sur la réservation de sa campagne, ou sur la
-    sienne pour un envoi hors campagne. Refusé avant le réseau : rien n'est
-    consommé ; la réservation propre au message est libérée, celle d'une
-    campagne attend la fin de la campagne. Idempotent : une relivraison de la
-    soumission ne consomme pas deux fois, ce que la base garantit aussi.
+    Règlement à la soumission : soumis, le message consomme sur la réservation
+    de sa campagne, ou sur la sienne hors campagne ; refusé avant le réseau, il
+    ne coûte rien. Règlement à la livraison : soumis, il attend son état final
+    (`solder_final`) ; refusé avant le réseau, il ne coûte rien non plus.
+    Idempotent : une relivraison de la soumission ne consomme pas deux fois, ce
+    que la base garantit aussi.
     """
     compte = _compte_verrouille(client_id)
     reference = reference_message(message_id)
     if Ecriture.objects.filter(type=Ecriture.Type.CONSOMMATION, reference=reference).exists():
         return None
-    filtre = {"campagne_id": campagne_id} if campagne_id else {"message_id": message_id}
-    reservation = Reservation.objects.filter(client_id=compte.client_id, **filtre).first()
-    if reservation is None:
-        raise SansReservation(f"Aucune réservation pour {reference}.")
-    if campagne_id and soumis and reservation.etat == Reservation.Etat.REGLEE:
-        return None  # coût annoncé entièrement consommé : plus rien à facturer
-    if reservation.etat != Reservation.Etat.ACTIVE:
-        raise ReservationClose(f"Réservation {reservation.id} déjà close pour {reference}.")
-    if soumis:
-        if campagne_id:
-            # Le coût réel d'une campagne ne dépasse jamais le coût annoncé : un
-            # message plus long que prévu (contact modifié depuis la
-            # confirmation) consomme au plus ce qui reste de la réservation.
-            montant = min(montant, reservation.montant_restant)
-            if montant == 0:
-                return None
-        return regler(reservation.id, montant, reference=reference)
-    if not campagne_id:
-        liberer(reservation.id)
+    reservation = _reservation_de(compte, message_id, campagne_id)
+    if not soumis:
+        _rendre(reservation, campagne_id)
+        return None
+    if reservation.mode == Client.Reglement.LIVRAISON:
+        return None  # réglé à son état final
+    return _consommer(reservation, montant, reference, campagne_id)
+
+
+@transaction.atomic
+def solder_final(
+    *, client_id, message_id, campagne_id=None, montant: int, etat: str
+) -> Ecriture | None:
+    """Suite comptable de l'état final d'un message soumis. Ne fait rien en
+    règlement à la soumission, où tout s'est joué à la soumission. En règlement
+    à la livraison : livré ou sans accusé, le message consomme son coût figé ;
+    non livré, expiré ou rejeté par l'opérateur, il ne coûte rien. Idempotent.
+    """
+    compte = _compte_verrouille(client_id)
+    reservation = _reservation_de(compte, message_id, campagne_id)
+    # Le mode d'abord : en règlement à la soumission, la réservation est
+    # souvent déjà close, et ce n'est pas une anomalie.
+    if reservation.mode != Client.Reglement.LIVRAISON:
+        return None
+    reference = reference_message(message_id)
+    if Ecriture.objects.filter(type=Ecriture.Type.CONSOMMATION, reference=reference).exists():
+        return None
+    if etat in CONSOMMENT_A_LA_LIVRAISON:
+        return _consommer(reservation, montant, reference, campagne_id)
+    _rendre(reservation, campagne_id)
     return None
 
 

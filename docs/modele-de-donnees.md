@@ -58,6 +58,7 @@ audite dans la transaction même de son action (décision du 30 septembre 2026).
 | `pays` | char(2) | non nul, défaut BF |
 | `palier` | varchar(20) | DECOUVERTE, VERIFIE, CONTRACTUEL |
 | `etat` | varchar(20) | ACTIF, SUSPENDU, CLOTURE |
+| `mode_reglement` | varchar(12) | SOUMISSION (défaut), LIVRAISON ; changé par un agent, audité |
 | `contact_facturation` | varchar(254) | adresse de courriel |
 | `plafond_horaire` | integer | non nul, défaut selon le palier |
 | `plafond_journalier` | integer | non nul |
@@ -460,7 +461,8 @@ campagne ont atteint un état final.
 
 `id`, `client_id`, `campagne_id` UUID simple, `message_id` UUID simple,
 `message_date_reception`, `montant_initial`, `montant_restant`, `etat` parmi
-ACTIVE, REGLEE, LIBEREE, `cree_le`, `resolue_le`. Une contrainte impose qu'un
+ACTIVE, REGLEE, LIBEREE, `mode` parmi SOUMISSION et LIVRAISON, copié du client à
+la réservation et jamais changé ensuite, `cree_le`, `resolue_le`. Une contrainte impose qu'un
 seul des deux, `campagne_id` ou `message_id`, soit renseigné. Unicité sur
 `campagne_id` et sur `message_id` quand ils sont renseignés. Index sur
 `(client_id, etat)`.

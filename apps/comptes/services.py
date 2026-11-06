@@ -41,6 +41,35 @@ def creer_client(*, raison_sociale, forme, palier=Client.Palier.DECOUVERTE, **ch
 
 
 @transaction.atomic
+def changer_mode_reglement(client: Client, mode: str, *, auteur, motif: str) -> Client:
+    """Passe un client à l'autre mode de règlement, par décision d'un agent,
+    tracée au journal d'audit. Les campagnes déjà réservées gardent le mode de
+    leur réservation : seul ce qui sera réservé ensuite suit le nouveau mode."""
+    from apps.core.audit import auditer
+
+    if mode not in Client.Reglement.values:
+        raise ValueError(f"Mode de règlement inconnu : {mode!r}")
+    if not motif or not motif.strip():
+        raise ValueError("Un changement de mode de règlement exige un motif.")
+    avant = Client.objects.select_for_update().values_list("mode_reglement", flat=True)
+    avant = avant.get(id=client.id)
+    if avant == mode:
+        return client
+    Client.objects.filter(id=client.id).update(mode_reglement=mode)
+    auditer(
+        "comptes.mode_reglement",
+        client,
+        auteur=auteur,
+        client=client,
+        avant={"mode_reglement": avant},
+        apres={"mode_reglement": mode},
+        motif=motif.strip(),
+    )
+    client.mode_reglement = mode
+    return client
+
+
+@transaction.atomic
 def creer_utilisateur(*, courriel, mot_de_passe, nom, client=None, **champs) -> Utilisateur:
     return Utilisateur.objects.create_user(courriel, mot_de_passe, nom=nom, client=client, **champs)
 

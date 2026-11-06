@@ -7,6 +7,7 @@ crédits ». Tous les montants sont des FCFA entiers.
 from django.db import models
 from django.db.models import Q
 
+from apps.comptes.models import Client
 from apps.core.models import Identifiable
 
 
@@ -153,6 +154,14 @@ class Reservation(Identifiable):
     montant_initial = models.IntegerField()
     montant_restant = models.IntegerField()
     etat = models.CharField(max_length=10, choices=Etat, default=Etat.ACTIVE)
+    # Mode de règlement du client au moment de la réservation, figé : un client
+    # passé à l'autre mode en cours de campagne ne change rien à celle-ci.
+    mode = models.CharField(
+        max_length=12,
+        choices=Client.Reglement,
+        default=Client.Reglement.SOUMISSION,
+        db_default="SOUMISSION",
+    )
     cree_le = models.DateTimeField(auto_now_add=True)
     resolue_le = models.DateTimeField(null=True, blank=True)
 

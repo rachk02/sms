@@ -26,6 +26,13 @@ class Client(Base):
         SUSPENDU = "SUSPENDU", "Suspendu"
         CLOTURE = "CLOTURE", "Clôturé"
 
+    class Reglement(models.TextChoices):
+        # Un message accepté par le réseau consomme son coût : le mode de tous.
+        SOUMISSION = "SOUMISSION", "À la soumission"
+        # Seul un message livré, ou resté sans accusé, consomme : sur option,
+        # pour un grand compte qui l'a négocié (décision du 6 novembre 2026).
+        LIVRAISON = "LIVRAISON", "À la livraison"
+
     raison_sociale = models.CharField(max_length=200)
     forme = models.CharField(max_length=30, choices=Forme)
     # Nuls plutôt que vides : l'unicité ne porte que sur les valeurs renseignées.
@@ -34,6 +41,9 @@ class Client(Base):
     pays = models.CharField(max_length=2, default="BF")
     palier = models.CharField(max_length=20, choices=Palier, default=Palier.DECOUVERTE)
     etat = models.CharField(max_length=20, choices=Etat, default=Etat.ACTIF)
+    mode_reglement = models.CharField(
+        max_length=12, choices=Reglement, default=Reglement.SOUMISSION, db_default="SOUMISSION"
+    )
     contact_facturation = models.EmailField(max_length=254, blank=True)
     plafond_horaire = models.IntegerField()
     plafond_journalier = models.IntegerField()
