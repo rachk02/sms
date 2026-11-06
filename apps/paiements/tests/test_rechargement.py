@@ -106,6 +106,28 @@ def test_au_dela_du_delai_le_paiement_expire_puis_se_reprend(en_tant_que_worker)
     assert transaction_.etat == Etat.CONFIRME
 
 
+def test_paye_apres_le_delai_sans_rappel_la_reprise_le_credite(en_tant_que_worker):
+    membre = _membre()
+    transaction_, _ = services.initier(
+        membre.client, credits_ht=1_000, fournisseur_nom="simule", auteur=membre
+    )
+    apres = transaction_.expire_le + timedelta(minutes=1)
+    services.relancer(maintenant=apres)
+    fournisseurs.simuler(transaction_.reference_transaction, montant=1_180, etat="CONFIRME")
+
+    services.relancer(maintenant=apres)  # relance ordinaire : l'expiré n'est pas revu
+    transaction_.refresh_from_db()
+    assert transaction_.etat == Etat.EXPIRE
+
+    services.relancer(maintenant=apres, reprendre_expires=True)
+    transaction_.refresh_from_db()
+    assert transaction_.etat == Etat.CONFIRME
+    assert Ecriture.objects.filter(client_id=membre.client_id, montant=1_000).exists()
+
+    # Au-delà d'un jour, plus de reprise automatique.
+    assert services.relancer(maintenant=apres + timedelta(days=2), reprendre_expires=True) == 0
+
+
 def test_la_page_d_attente_s_arrete_au_delai_et_dit_l_etat_reel(client):
     membre = _membre()
     client.force_login(membre)

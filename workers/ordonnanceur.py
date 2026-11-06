@@ -80,6 +80,7 @@ class Ordonnanceur(Worker):
     periode_sans_accuse_s = 60.0
     periode_rapprochement_s = 86_400.0
     periode_paiements_s = 60.0
+    periode_reprise_paiements_s = 900.0
 
     async def _attendre(self, secondes: float) -> None:
         try:
@@ -118,7 +119,7 @@ class Ordonnanceur(Worker):
                 # -inf : les deux tâches tournent dès le premier tour, quelle que soit
                 # l'origine arbitraire de time.monotonic().
                 derniere_partition = derniere_supervision = dernier_constat = float("-inf")
-                dernier_rapprochement = derniere_relance = float("-inf")
+                dernier_rapprochement = derniere_relance = derniere_reprise = float("-inf")
                 while not self.arret.is_set():
                     if time.monotonic() - derniere_partition >= self.periode_partitions_s:
                         await sync_to_async(creer_partitions_a_venir)()
@@ -140,8 +141,13 @@ class Ordonnanceur(Worker):
                     # Paiements en attente revérifiés, rappel reçu ou non, puis
                     # expirés au-delà du délai (T-86).
                     if time.monotonic() - derniere_relance >= self.periode_paiements_s:
-                        await sync_to_async(relancer_paiements)()
+                        reprise = (
+                            time.monotonic() - derniere_reprise >= self.periode_reprise_paiements_s
+                        )
+                        await sync_to_async(relancer_paiements)(reprendre_expires=reprise)
                         derniere_relance = time.monotonic()
+                        if reprise:
+                            derniere_reprise = derniere_relance
                     # Envois programmés et occurrences échues, puis quelques lots
                     # par campagne à chaque tour : le relais et les autres
                     # campagnes avancent aussi.

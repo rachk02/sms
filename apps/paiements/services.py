@@ -248,17 +248,24 @@ def initier(client, *, credits_ht: int, fournisseur_nom: str, auteur) -> tuple[T
 
 
 A_RELANCER = 200
+REPRISE_DES_EXPIRES = timedelta(days=1)
 
 
-def relancer(maintenant=None) -> int:
+def relancer(maintenant=None, *, reprendre_expires=False) -> int:
     """Balayage de l'ordonnanceur : chaque paiement en attente est revérifié
     auprès de son fournisseur, rappel reçu ou non, pour qu'un paiement confirmé
     pendant que le client a fermé son navigateur, ou dont le rappel s'est
     perdu, soit crédité quand même. Au-delà du délai, ce qui attend toujours
-    passe EXPIRE ; un rappel tardif confirmé le reprendra. Sous le rôle worker."""
+    passe EXPIRE ; un rappel tardif confirmé le reprendra. Avec
+    `reprendre_expires`, à cadence plus lente, les paiements expirés depuis moins
+    d'un jour sont aussi revérifiés : payé après le délai et sans rappel, un
+    paiement serait sinon perdu pour le client. Sous le rôle worker."""
     maintenant = maintenant or timezone.now()
+    a_verifier = Q(etat=Etat.EN_ATTENTE)
+    if reprendre_expires:
+        a_verifier |= Q(etat=Etat.EXPIRE, expire_le__gte=maintenant - REPRISE_DES_EXPIRES)
     en_attente = list(
-        Transaction.objects.filter(etat=Etat.EN_ATTENTE)
+        Transaction.objects.filter(a_verifier)
         .exclude(reference_transaction="")
         .order_by("initie_le")
         .values_list("fournisseur", "reference_transaction")[:A_RELANCER]
