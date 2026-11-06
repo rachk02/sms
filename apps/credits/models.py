@@ -4,8 +4,10 @@ Voir docs/modele-de-donnees.md, section credits, et la charte, « Le registre de
 crédits ». Tous les montants sont des FCFA entiers.
 """
 
+from django.contrib.postgres.constraints import ExclusionConstraint
+from django.contrib.postgres.fields import DateTimeRangeField, RangeBoundary, RangeOperators
 from django.db import models
-from django.db.models import Q
+from django.db.models import Func, Q
 
 from apps.comptes.models import Client
 from apps.core.models import Identifiable
@@ -196,3 +198,103 @@ class Reservation(Identifiable):
 
     def __str__(self):
         return f"{self.etat} {self.montant_restant}/{self.montant_initial}"
+
+
+# Grilles tarifaires (T-81)
+
+
+class TsTzRange(Func):
+    function = "TSTZRANGE"
+    output_field = DateTimeRangeField()
+
+
+class Grille(Identifiable):
+    """Une grille de prix. Sans client, c'est la grille publique, unique ; avec
+    un client, une grille négociée (lot 7, T-83). Les prix vivent dans ses
+    versions datées : une grille sans version publiée n'est jamais appliquée."""
+
+    nom = models.CharField(max_length=150)
+    client = models.ForeignKey(
+        "comptes.Client", on_delete=models.PROTECT, null=True, blank=True, related_name="+"
+    )
+    devise = models.CharField(max_length=3, default="XOF")
+    cree_le = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "credits_grille"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["client"],
+                condition=Q(client__isnull=True),
+                nulls_distinct=False,
+                name="grille_publique_unique",
+            ),
+        ]
+
+    def __str__(self):
+        return self.nom
+
+
+class VersionGrille(Identifiable):
+    """Une version datée d'une grille, en vigueur sur [debut, fin), fin nulle pour
+    une version sans terme. Brouillon tant qu'elle n'est pas publiée ; une
+    version publiée ne change plus, sinon pour recevoir sa fin quand la suivante
+    est publiée. Deux versions publiées d'une même grille ne se chevauchent
+    jamais : la base le refuse."""
+
+    grille = models.ForeignKey(Grille, on_delete=models.PROTECT, related_name="versions")
+    debut = models.DateTimeField(null=True, blank=True)
+    fin = models.DateTimeField(null=True, blank=True)
+    publiee = models.BooleanField(default=False)
+    publiee_le = models.DateTimeField(null=True, blank=True)
+    publiee_par = models.ForeignKey(
+        "comptes.Utilisateur", on_delete=models.PROTECT, null=True, blank=True, related_name="+"
+    )
+    cree_le = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "credits_grille_version"
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(fin__isnull=True) | Q(debut__isnull=False, fin__gt=models.F("debut")),
+                name="version_fin_apres_debut",
+            ),
+            models.CheckConstraint(
+                condition=Q(publiee=False) | Q(debut__isnull=False, publiee_le__isnull=False),
+                name="version_publiee_datee",
+            ),
+            ExclusionConstraint(
+                name="version_sans_chevauchement",
+                expressions=[
+                    ("grille", RangeOperators.EQUAL),
+                    (TsTzRange("debut", "fin", RangeBoundary()), RangeOperators.OVERLAPS),
+                ],
+                condition=Q(publiee=True),
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.grille} du {self.debut} au {self.fin or '...'}"
+
+
+class PalierGrille(Identifiable):
+    """Prix d'un segment pour un pays et un réseau, à partir d'un volume
+    mensuel. Le palier retenu est celui du plus grand `volume_min` atteint."""
+
+    version = models.ForeignKey(VersionGrille, on_delete=models.PROTECT, related_name="paliers")
+    pays = models.CharField(max_length=2)
+    operateur = models.CharField(max_length=20)
+    volume_min = models.PositiveIntegerField(default=0)
+    prix_unitaire = models.PositiveIntegerField()
+
+    class Meta:
+        db_table = "credits_grille_palier"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["version", "pays", "operateur", "volume_min"], name="palier_unique"
+            ),
+            models.CheckConstraint(condition=Q(prix_unitaire__gt=0), name="palier_prix_positif"),
+        ]
+
+    def __str__(self):
+        return f"{self.pays} {self.operateur} dès {self.volume_min} : {self.prix_unitaire} FCFA"

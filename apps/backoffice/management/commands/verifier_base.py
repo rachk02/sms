@@ -47,6 +47,10 @@ CLOISONNEES = (
     "expediteurs_reserve",
     "conformite_fenetre",
     "conformite_jour_ferie",
+    # Grille publique pour tous, grille négociée pour son client, en lecture seule.
+    "credits_grille",
+    "credits_grille_version",
+    "credits_grille_palier",
 )
 RESERVEES_AUX_WORKERS = (
     "telecom_connecteur",

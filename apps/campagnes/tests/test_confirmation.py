@@ -18,7 +18,7 @@ from apps.contacts.models import Contact
 from apps.contacts.services import creer_contact
 from apps.core.models import Audit, EvenementSortant
 from apps.credits import services as credits
-from apps.credits.models import Reservation
+from apps.credits.models import Grille, Reservation
 from apps.expediteurs import services as expediteurs
 from apps.expediteurs.controle import Action
 from apps.journal.models import Message
@@ -213,3 +213,42 @@ def test_une_cible_d_un_autre_compte_est_refusee(client, auteur, cible):
         _campagne(autre, None, cible)
     with pytest.raises(services.CampagneRefusee, match="au moins une liste"):
         _campagne(client, auteur, [])
+
+
+def _grille_publique(auteur, prix: dict):
+    """Publie une version de la grille publique, créée au besoin, tout de suite."""
+    grille = Grille.objects.filter(client__isnull=True).first() or credits.creer_grille(
+        "Grille publique", auteur=auteur
+    )
+    version = credits.creer_version(grille)
+    for operateur, montant in prix.items():
+        credits.fixer_palier(version, pays="BF", operateur=operateur, prix_unitaire=montant)
+    return credits.publier_version(version, auteur=auteur)
+
+
+def test_l_envoi_de_test_prend_le_prix_en_vigueur_a_sa_date(client, auteur, cible):
+    """T-81 : la grille change entre deux envois ; chacun garde son prix."""
+    campagne = _campagne(client, auteur, cible)
+    with override_settings(SMS_PRIX_SEGMENT_PROVISOIRE=None):
+        _grille_publique(auteur, {"ORANGE": 20, "MOOV": 19, "TELECEL": 18})
+        premier = services.envoyer_test(campagne, numero="60 99 88 77", auteur=auteur)
+        _grille_publique(auteur, {"ORANGE": 20, "MOOV": 23, "TELECEL": 18})
+        second = services.envoyer_test(campagne, numero="60 99 88 77", auteur=auteur)
+
+    premier.refresh_from_db()
+    assert (premier.cout_unitaire, second.cout_unitaire) == (19, 23)
+    reservations = dict(
+        Reservation.objects.filter(message_id__in=[premier.id, second.id]).values_list(
+            "message_id", "montant_initial"
+        )
+    )
+    assert reservations == {premier.id: 19, second.id: 23}
+
+
+def test_sans_grille_publiee_l_apercu_est_refuse(client, auteur, cible):
+    campagne = _campagne(client, auteur, cible)
+    with override_settings(SMS_PRIX_SEGMENT_PROVISOIRE=None):
+        with pytest.raises(services.CampagneRefusee, match="Aucun tarif en vigueur"):
+            services.apercu(campagne)
+        with pytest.raises(services.CampagneRefusee, match="Aucun tarif en vigueur"):
+            services.envoyer_test(campagne, numero="60 99 88 77", auteur=auteur)

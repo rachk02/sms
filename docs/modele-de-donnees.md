@@ -468,14 +468,25 @@ seul des deux, `campagne_id` ou `message_id`, soit renseigné. Unicité sur
 `(client_id, etat)`.
 
 **`credits_grille`** : `id`, `nom`, `client_id` nul pour la grille publique,
-`devise` défaut XOF.
+`devise` défaut XOF, `cree_le`. Une seule grille publique (unicité de
+`client_id` nul).
 
-**`credits_grille_version`** : `id`, `grille_id`, `debut`, `fin`, `publiee`.
-Une contrainte d'exclusion interdit deux versions qui se chevauchent pour une
-même grille.
+**`credits_grille_version`** : `id`, `grille_id`, `debut`, `fin`, `publiee`,
+`publiee_le`, `publiee_par`, `cree_le`. Période `[debut, fin)`, `fin` nulle pour
+une version sans terme ; `debut` nul pour un brouillon qui prendra effet à sa
+publication. Une contrainte d'exclusion (`btree_gist`) interdit deux versions
+publiées qui se chevauchent pour une même grille ; un brouillon n'y est pas
+soumis. Une version publiée porte sa date d'effet et sa date de publication, et
+ne change plus, sinon pour recevoir sa `fin` quand la suivante est publiée.
 
 **`credits_grille_palier`** : `id`, `version_id`, `pays`, `operateur`,
-`volume_min`, `prix_unitaire` en FCFA entiers.
+`volume_min`, `prix_unitaire` en FCFA entiers strictement positifs. Unicité sur
+`(version_id, pays, operateur, volume_min)`. Le palier retenu est celui du plus
+grand `volume_min` atteint par le volume mensuel du client.
+
+Ces trois tables se lisent par le rôle applicatif sans s'écrire : la grille
+publique par tous, une grille négociée par son seul client, et les versions et
+paliers suivent la ligne parente. Elles s'écrivent par le back-office.
 
 ## telecom
 

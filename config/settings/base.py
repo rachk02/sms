@@ -212,9 +212,10 @@ PORTAIL_URL = env("PORTAIL_URL", "http://127.0.0.1:8000").rstrip("/")
 # Clé des secrets chiffrés en base (apps/core/chiffrement.py).
 SMS_CLE_CHIFFREMENT = env("SMS_CLE_CHIFFREMENT", "")
 
-# Prix d'un segment en FCFA entiers, sur une grille fictive, jusqu'aux grilles
-# tarifaires datées du lot 7 (voir apps/credits/tarifs.py).
-SMS_PRIX_SEGMENT_PROVISOIRE = int(env("SMS_PRIX_SEGMENT_PROVISOIRE", "20"))
+# Prix de secours d'un segment, en FCFA entiers, quand aucune grille tarifaire
+# publiée n'est en vigueur (voir apps/credits/tarifs.py). Absent hors du poste
+# de développement et des tests : sans grille, un envoi est refusé.
+SMS_PRIX_SEGMENT_PROVISOIRE = None
 
 # Numéro court de la plateforme, factice jusqu'à son attribution par l'ARCEP
 # (voir apps/telecom/numero_court.py).

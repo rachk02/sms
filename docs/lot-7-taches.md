@@ -48,6 +48,19 @@ externe et tout secret.
 d'une grille, sans double validation. L'ancien et le nouveau prix vont au
 journal d'audit. Une version publiée ne se modifie plus.
 
+Deux décisions de plus, tranchées avec l'utilisateur le 6 novembre 2026 en
+ouvrant T-81 :
+
+**Sans grille publiée.** Quand aucune version publiée n'est en vigueur, l'envoi
+est refusé avec « Aucun tarif en vigueur pour le réseau ... ». Le prix
+provisoire des réglages (`SMS_PRIX_SEGMENT_PROVISOIRE`) ne sert plus qu'en
+développement et dans les tests, jamais en recette ni en production.
+
+**Prix d'une campagne.** La version de grille et le palier en vigueur à la
+confirmation valent pour tous les messages de la campagne. La réservation est
+exacte, et un changement de grille pendant une campagne lissée ou en pause ne
+la touche pas.
+
 ## Choix faits à l'ouverture, à confirmer
 
 Ces points n'ont pas été posés à l'utilisateur. Ce sont des choix techniques
@@ -179,6 +192,16 @@ Choix faits, à confirmer :
 **Produit** Les grilles, leurs versions avec dates de prise d'effet et de fin, les paliers de volume, le prix par réseau et par pays, et la contrainte d'exclusion qui interdit le chevauchement.
 
 **Critères** Deux versions qui se chevauchent sont refusées par la base. Une grille sans version publiée n'est jamais appliquée. Le prix appliqué à un message est celui en vigueur à sa date de soumission, ce qu'un test vérifie en changeant la grille entre deux envois.
+
+**Fait.** Trois tables, `credits_grille`, `credits_grille_version` et `credits_grille_palier`. Une contrainte d'exclusion (extension `btree_gist`) refuse deux versions publiées d'une même grille dont les périodes `[debut, fin)` se recouvrent ; une seule grille publique. Les services préparent une version en brouillon, posent ses prix, puis la publient : elle prend effet à sa date ou tout de suite, jamais dans le passé, clôt la version en vigueur à cette date, et la publication va au journal d'audit avec les anciens et les nouveaux prix. Une version publiée ne change plus. La grille publique doit tarifer, dès le premier segment du mois, chaque réseau connu des pays qu'elle couvre. `credits.tarifs.prix_segment` lit la version publiée en vigueur à la date demandée, pour le pays du client, le réseau et le volume ; sans version publiée, il refuse (`AucunTarif`), sauf prix de secours posé en développement. La grille publique se lit par tous les clients, une grille négociée par son seul client, versions et prix compris (migration de cloisonnement dédiée dans `core`) ; le rôle applicatif n'y écrit pas. Les tests changent la grille entre deux envois de test : le premier garde 19 FCFA, le second prend 23 FCFA.
+
+Choix faits, à confirmer :
+
+- un brouillon peut recouvrir une version publiée : la contrainte d'exclusion ne porte que sur les versions publiées, sinon aucune version future ne pourrait se préparer tant que la version en vigueur n'a pas de fin ;
+- le palier retenu s'applique à tout le segment, pas par tranches : à 10 000 SMS dans le mois, chaque segment suivant coûte le prix du palier 10 000 ;
+- la diffusion d'une campagne lit encore la grille message par message ; T-82 fige le prix à la confirmation, comme décidé.
+
+Prérequis de production : l'extension PostgreSQL `btree_gist`, créée par la migration sous le rôle propriétaire. Elle est de confiance depuis PostgreSQL 13, le propriétaire de la base peut donc la créer sans super-utilisateur.
 
 ## T-82 · Calcul du coût et gel sur le message
 

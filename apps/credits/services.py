@@ -16,13 +16,13 @@ personne pour réessayer.
 from dataclasses import dataclass
 
 from django.db import OperationalError, connection, transaction
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.utils import timezone
 
 from apps.comptes.models import Client
 from apps.core.etats import Etat
 
-from .models import CompteCredit, Ecriture, Reservation
+from .models import CompteCredit, Ecriture, Grille, PalierGrille, Reservation, VersionGrille
 
 
 class SoldeInsuffisant(Exception):
@@ -350,3 +350,144 @@ def solde_recalcule(client_id) -> Solde:
         client_id=client_id, etat=Reservation.Etat.ACTIVE
     ).aggregate(total=Sum("montant_restant"))["total"]
     return Solde(acquis or 0, reserve or 0)
+
+
+# Grilles tarifaires (T-81)
+#
+# Une grille se prépare en brouillon (version, puis paliers), puis se publie.
+# Une version publiée ne change plus : un changement de prix est une nouvelle
+# version, publiée à son tour, qui clôt la précédente à sa date d'effet. Les
+# grilles sont publiées par le super-administrateur, sans double validation,
+# et chaque publication est tracée au journal d'audit avec les anciens et les
+# nouveaux prix (décision du 6 novembre 2026).
+
+
+class TarifInvalide(ValueError):
+    pass
+
+
+def _prix_entier(valeur, nom: str, minimum: int) -> None:
+    if not isinstance(valeur, int) or isinstance(valeur, bool) or valeur < minimum:
+        raise TarifInvalide(
+            f"{nom} doit être un entier de FCFA au moins égal à {minimum} : {valeur!r}"
+        )
+
+
+@transaction.atomic
+def creer_grille(nom: str, *, auteur, client_id=None) -> Grille:
+    """Crée une grille vide. Sans client, la grille publique, qui est unique."""
+    from apps.core.audit import auditer
+
+    if not nom or not nom.strip():
+        raise TarifInvalide("Une grille porte un nom.")
+    grille = Grille.objects.create(nom=nom.strip(), client_id=client_id)
+    auditer("credits.grille.creation", grille, auteur=auteur, apres={"nom": grille.nom})
+    return grille
+
+
+@transaction.atomic
+def creer_version(grille: Grille, *, debut=None) -> VersionGrille:
+    """Ouvre un brouillon de version. Sans `debut`, la version prendra effet à
+    sa publication."""
+    return VersionGrille.objects.create(grille=grille, debut=debut)
+
+
+@transaction.atomic
+def fixer_palier(
+    version: VersionGrille, *, pays: str, operateur: str, prix_unitaire: int, volume_min: int = 0
+) -> PalierGrille:
+    """Pose le prix d'un segment d'une version en brouillon, pour un pays, un
+    réseau et un volume mensuel minimal ; remplace le prix déjà posé."""
+    version = VersionGrille.objects.select_for_update().get(id=version.id)
+    if version.publiee:
+        raise TarifInvalide("Une version publiée ne change plus : préparez une nouvelle version.")
+    _prix_entier(prix_unitaire, "Le prix d'un segment", 1)
+    _prix_entier(volume_min, "Le volume minimal", 0)
+    palier, _ = PalierGrille.objects.update_or_create(
+        version=version,
+        pays=pays.upper(),
+        operateur=operateur.upper(),
+        volume_min=volume_min,
+        defaults={"prix_unitaire": prix_unitaire},
+    )
+    return palier
+
+
+def _prix_de(version: VersionGrille | None) -> list[dict]:
+    if version is None:
+        return []
+    return [
+        {
+            "pays": p.pays,
+            "operateur": p.operateur,
+            "volume_min": p.volume_min,
+            "prix_unitaire": p.prix_unitaire,
+        }
+        for p in version.paliers.order_by("pays", "operateur", "volume_min")
+    ]
+
+
+def _verifier_complete(grille: Grille, paliers: list[PalierGrille]) -> None:
+    """Chaque réseau tarifé a un prix dès le premier segment du mois ; la grille
+    publique couvre en plus chaque réseau connu des pays qu'elle tarifie."""
+    from apps.telecom.models import Prefixe
+
+    if not paliers:
+        raise TarifInvalide("Une version sans prix ne se publie pas.")
+    des_le_premier = {(p.pays, p.operateur) for p in paliers if p.volume_min == 0}
+    attendus = {(p.pays, p.operateur) for p in paliers}
+    if grille.client_id is None:
+        pays = {p.pays for p in paliers}
+        attendus |= set(
+            Prefixe.objects.filter(pays__in=pays, actif=True)
+            .values_list("pays", "operateur")
+            .distinct()
+        )
+    manquants = sorted(attendus - des_le_premier)
+    if manquants:
+        liste = ", ".join(f"{operateur} ({pays})" for pays, operateur in manquants)
+        raise TarifInvalide(f"Aucun prix dès le premier segment pour : {liste}.")
+
+
+@transaction.atomic
+def publier_version(version: VersionGrille, *, auteur, maintenant=None) -> VersionGrille:
+    """Publie un brouillon : il prend effet à son `debut`, ou tout de suite s'il
+    n'en a pas, jamais dans le passé. La version publiée en vigueur à cette date
+    reçoit sa fin ; une version publiée qui prendrait effet plus tard refuse la
+    publication. Tracé au journal d'audit avec les anciens et les nouveaux prix."""
+    from apps.core.audit import auditer
+
+    grille = Grille.objects.select_for_update().get(id=version.grille_id)
+    version = VersionGrille.objects.select_for_update().get(id=version.id)
+    if version.publiee:
+        raise TarifInvalide("Cette version est déjà publiée.")
+    maintenant = maintenant or timezone.now()
+    debut = version.debut or maintenant
+    if debut < maintenant:
+        raise TarifInvalide("Une version ne prend pas effet dans le passé.")
+    _verifier_complete(grille, list(version.paliers.all()))
+    publiees = VersionGrille.objects.select_for_update().filter(grille=grille, publiee=True)
+    ulterieure = publiees.filter(debut__gte=debut).order_by("debut").first()
+    if ulterieure:
+        date = timezone.localtime(ulterieure.debut)
+        raise TarifInvalide(f"Une version publiée prend déjà effet le {date:%d/%m/%Y %H:%M}.")
+    precedente = (
+        publiees.filter(debut__lt=debut).filter(Q(fin__isnull=True) | Q(fin__gt=debut)).first()
+    )
+    if precedente:
+        precedente.fin = debut
+        precedente.save(update_fields=["fin"])
+    version.debut = debut
+    version.publiee = True
+    version.publiee_le = maintenant
+    version.publiee_par = auteur
+    version.save(update_fields=["debut", "publiee", "publiee_le", "publiee_par"])
+    auditer(
+        "credits.grille.publication",
+        version,
+        auteur=auteur,
+        client=grille.client,
+        avant={"version": str(precedente.id) if precedente else None, "prix": _prix_de(precedente)},
+        apres={"grille": grille.nom, "debut": debut.isoformat(), "prix": _prix_de(version)},
+    )
+    return version

@@ -32,7 +32,7 @@ from apps.contacts.models import Contact, Liste, ListeContact, Segment
 from apps.core.audit import auditer
 from apps.core.numeros import NumeroInvalide, normaliser
 from apps.credits import services as credits
-from apps.credits.tarifs import prix_segment
+from apps.credits.tarifs import AucunTarif, prix_segment
 from apps.expediteurs.controle import Action, Choix, choisir
 from apps.expediteurs.models import OPERATEURS, Expediteur
 from apps.journal.services import enregistrer_message, mettre_en_file
@@ -235,7 +235,10 @@ def apercu(campagne: Campagne) -> Apercu:
         operateur_confirme="", operateur_presume__in=servis
     )
     gabarit = modeles.gabarit(client, campagne.modele_texte)
-    estimation = estimer(client, gabarit, vises.filter(condition))
+    try:
+        estimation = estimer(client, gabarit, vises.filter(condition))
+    except AucunTarif as refus:
+        raise CampagneRefusee(str(refus)) from None
     par_expediteur = Counter()
     for reseau, nombre in par_reseau.items():
         if reseau:
@@ -268,11 +271,14 @@ def envoyer_test(campagne: Campagne, *, numero: str, auteur) -> object:
     if not reseau:
         raise CampagneRefusee("Réseau du numéro de test inconnu.")
     gabarit = modeles.gabarit(client, campagne.modele_texte)
-    exemple = estimer(client, gabarit, contacts(campagne)).exemple
-    texte = exemple or gabarit.rendre(Contact(numero_normalise=numero, champs={}))
     choix = choisir(client.id, _libelle(campagne), reseau, campagne.politique_expediteur)
     expediteur = choix.expediteur if choix.action == Action.ENVOYER else numero_court()
-    prix = prix_segment(client.id, reseau)
+    try:
+        exemple = estimer(client, gabarit, contacts(campagne)).exemple
+        prix = prix_segment(client.id, reseau)
+    except AucunTarif as refus:
+        raise CampagneRefusee(str(refus)) from None
+    texte = exemple or gabarit.rendre(Contact(numero_normalise=numero, champs={}))
     with transaction.atomic():
         message = enregistrer_message(
             client=client,
