@@ -103,7 +103,14 @@ def test_la_base_refuse_aussi_un_ajustement_sans_motif(client):
 )
 def test_la_base_refuse_un_montant_de_mauvais_signe(client, type_, montant):
     with pytest.raises(IntegrityError), transaction.atomic():
-        Ecriture(client_id=client.id, type=type_, montant=montant, solde_apres=0, motif="x").save()
+        Ecriture(
+            client_id=client.id,
+            type=type_,
+            montant=montant,
+            solde_apres=0,
+            motif="x",
+            reference="x",
+        ).save()
 
 
 def test_une_reservation_au_dela_du_disponible_est_refusee(client):

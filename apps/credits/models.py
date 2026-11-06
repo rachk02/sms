@@ -24,6 +24,15 @@ class EcrituresQuerySet(models.QuerySet):
     def bulk_update(self, objs, fields, batch_size=None):
         raise EcritureSeuleError("credits_registre est en écriture seule : mise à jour refusée.")
 
+    def bulk_create(self, objs, *args, **kwargs):
+        # Une insertion qui, en conflit, mettrait à jour la ligne existante est
+        # une modification déguisée.
+        if kwargs.get("update_conflicts"):
+            raise EcritureSeuleError(
+                "credits_registre est en écriture seule : mise à jour en conflit refusée."
+            )
+        return super().bulk_create(objs, *args, **kwargs)
+
 
 class Ecriture(Identifiable):
     """Une ligne du registre. Aucune ligne n'est modifiée ni supprimée, jamais :
@@ -62,6 +71,20 @@ class Ecriture(Identifiable):
             ),
             models.CheckConstraint(
                 condition=~Q(type="AJUSTEMENT") | ~Q(motif=""), name="registre_ajustement_motive"
+            ),
+            # Un achat renvoie toujours à sa transaction de paiement.
+            models.CheckConstraint(
+                condition=~Q(type="ACHAT") | ~Q(reference=""), name="registre_achat_reference"
+            ),
+            # Un recrédit est soit automatique, et renvoie au message ou à
+            # l'incident, soit manuel, et porte son agent et son motif.
+            models.CheckConstraint(
+                condition=(
+                    ~Q(type="RECREDIT")
+                    | ~Q(reference="")
+                    | (Q(auteur__isnull=False) & ~Q(motif=""))
+                ),
+                name="registre_recredit_trace",
             ),
             models.CheckConstraint(
                 condition=(

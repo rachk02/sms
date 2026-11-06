@@ -26,6 +26,10 @@ class MotifObligatoire(ValueError):
     pass
 
 
+class ReferenceObligatoire(ValueError):
+    pass
+
+
 class ReservationClose(Exception):
     pass
 
@@ -73,16 +77,29 @@ def _ecrire(compte: CompteCredit, type_, montant, *, reference="", motif="", aut
 
 @transaction.atomic
 def acheter(client_id, montant: int, *, reference: str, auteur=None) -> Ecriture:
-    """Achat constaté : paiement confirmé de serveur à serveur, ou virement validé."""
+    """Achat constaté : paiement confirmé de serveur à serveur, ou paiement manuel
+    validé par un agent, qui en est alors l'auteur. ACHAT ne désigne que des
+    crédits payés : un crédit offert est un recrédit, jamais un achat."""
     _montant_positif(montant)
+    if not reference or not reference.strip():
+        raise ReferenceObligatoire("Un achat renvoie à sa transaction de paiement.")
     compte = _compte_verrouille(client_id)
-    return _ecrire(compte, Ecriture.Type.ACHAT, montant, reference=reference, auteur=auteur)
+    return _ecrire(compte, Ecriture.Type.ACHAT, montant, reference=reference.strip(), auteur=auteur)
 
 
 @transaction.atomic
 def recrediter(client_id, montant: int, *, motif: str = "", reference: str = "", auteur=None):
-    """Recrédit : défaillance imputable à la plateforme, ou geste commercial."""
+    """Recrédit, crédit offert : défaillance imputable à la plateforme, ou geste
+    commercial. Automatique, il renvoie au message ou à l'incident par sa
+    référence ; manuel, il porte son agent et son motif."""
     _montant_positif(montant)
+    motif, reference = (motif or "").strip(), (reference or "").strip()
+    if auteur is not None and not motif:
+        raise MotifObligatoire("Un recrédit manuel exige un motif.")
+    if auteur is None and not reference:
+        raise ReferenceObligatoire(
+            "Un recrédit automatique renvoie au message ou à l'incident qui le justifie."
+        )
     compte = _compte_verrouille(client_id)
     return _ecrire(
         compte, Ecriture.Type.RECREDIT, montant, reference=reference, motif=motif, auteur=auteur

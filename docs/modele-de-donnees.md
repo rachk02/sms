@@ -433,6 +433,13 @@ integer, pas forcément la somme de toutes.
 Le registre refuse toute modification et toute suppression à deux niveaux : le
 modèle Django, et un déclencheur PostgreSQL qui vaut pour tous les rôles.
 
+Chaque écriture est tracée, et la base le vérifie : un ACHAT porte la référence
+de sa transaction ; un RECREDIT porte soit la référence du message ou de
+l'incident (automatique), soit son auteur et son motif (manuel) ; un AJUSTEMENT
+porte son motif. ACHAT ne désigne que des crédits payés, RECREDIT des crédits
+offerts, AJUSTEMENT la correction d'une erreur : la règle de remboursement à la
+clôture en dépend.
+
 Une consommation par message au plus : les écritures CONSOMMATION de référence
 message:<id>` sont uniques (index partiel). Jusqu'au lot 7, le worker d'envoi
 solde chaque message après sa soumission (`credits.services.solder_message`) :

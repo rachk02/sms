@@ -22,8 +22,7 @@ rendent leur réservation.
 
 **Facture et TVA.** La facture s'émet à l'achat des crédits. Les crédits sont
 hors taxes : le client achète 10 000 FCFA de crédits et paie 11 800 FCFA, TVA
-de 18 % en sus. Les prix des grilles restent hors taxes et entiers. Le taux de
-TVA se lit en base, pas dans le code.
+de 18 % en sus. Les prix des grilles restent hors taxes et entiers.
 
 **Expiration.** Les crédits n'expirent pas. Aucune colonne `expire_le` sur le
 registre. Le sort des comptes dormants relève des conditions générales.
@@ -36,7 +35,7 @@ règle de calcul de cette part et la teste.
 **Paliers de volume.** Le palier se calcule sur le volume de SMS soumis par le
 client depuis le début du mois civil. Le palier atteint au lancement d'une
 campagne vaut pour toute la campagne : le coût annoncé ne bouge pas en cours
-de diffusion. Un envoi hors campagne prend le palier atteint à sa soumission.
+de diffusion.
 
 **Moyens de paiement.** Aucun contrat marchand ni accès de bac à sable Orange
 Money ou Moov Money pour l'instant. Le parcours, les rappels, la vérification
@@ -49,17 +48,49 @@ externe et tout secret.
 d'une grille, sans double validation. L'ancien et le nouveau prix vont au
 journal d'audit. Une version publiée ne se modifie plus.
 
-**Mentions de la facture.** Les identifiants d'EL-IMMEKA (raison sociale, RCCM,
-IFU, régime fiscal, adresse) ne s'inventent pas : ils se lisent dans une
-configuration que l'utilisateur renseignera. Tant qu'elle est vide, l'émission
-d'une facture est refusée, et le test de T-88 vérifie la présence de chaque
-mention à partir de valeurs d'essai.
+## Choix faits à l'ouverture, à confirmer
+
+Ces points n'ont pas été posés à l'utilisateur. Ce sont des choix techniques
+pris pour avancer, à confirmer ou à corriger.
+
+- Le taux de TVA se lit en base, pas dans le code.
+- Un envoi hors campagne prend le palier atteint à sa soumission.
+- Les identifiants d'EL-IMMEKA portés par la facture (raison sociale, RCCM, IFU,
+  régime fiscal, adresse) ne s'inventent pas : ils se lisent dans une
+  configuration que l'utilisateur renseignera. Tant qu'elle est vide,
+  l'émission d'une facture est refusée, et le test de T-88 vérifie la présence
+  de chaque mention à partir de valeurs d'essai.
+- Sens des types d'écriture, que la règle de clôture exige de tenir distincts :
+  ACHAT est un crédit payé, et seulement cela, y compris un paiement manuel
+  (T-87 passe par l'achat, avec l'agent pour auteur, jamais par un ajustement
+  positif) ; RECREDIT est un crédit offert, défaillance de la plateforme ou
+  geste commercial ; AJUSTEMENT corrige une erreur, il n'offre jamais rien.
+- Reste à poser à l'utilisateur en ouvrant T-89 : quels crédits se consomment
+  en premier, les payés ou les offerts. La réponse fixe le montant remboursable
+  à la clôture ; les deux se calculent par sommes par type, sans colonne de plus.
 
 ## T-77 · Registre de crédits, écritures complètes
 
 **Produit** Les quatre types d'écriture, achat, consommation, recrédit et ajustement, avec le motif obligatoire sur l'ajustement et l'auteur sur toute écriture manuelle.
 
 **Critères** Aucune méthode ne modifie ni ne supprime une écriture. Le solde recalculé depuis le registre égale le cache après mille opérations mêlant les quatre types. Un ajustement sans motif est refusé au niveau du service, pas seulement du formulaire.
+
+**Fait.** L'essentiel tenait depuis T-08 : modèle et déclencheur en écriture seule,
+ajustement motivé au service et en base, signe du montant contrôlé en base. T-77
+ajoute la trace des écritures manuelles et automatiques :
+
+- un achat renvoie toujours à sa transaction de paiement, refusé sans référence
+  au service et en base (`registre_achat_reference`) ; un paiement manuel porte
+  l'agent pour auteur ;
+- un recrédit est soit automatique, avec la référence du message ou de
+  l'incident, soit manuel, avec son agent et son motif ; la base refuse tout
+  autre cas (`registre_recredit_trace`) ;
+- une insertion qui mettrait à jour en conflit (`bulk_create` avec
+  `update_conflicts`) est refusée par le modèle, et par le déclencheur si on
+  contourne le modèle ;
+- mille opérations tirées au hasard d'une graine fixe, mêlant les quatre types,
+  réservations, règlements et libérations, laissent le cache égal au solde
+  recalculé, et chaque ligne porte le solde cumulé jusqu'à elle.
 
 ## T-78 · Réservation et règlement
 
