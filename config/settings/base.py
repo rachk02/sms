@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     "apps.expediteurs",
     "apps.contacts",
     "apps.campagnes",
+    "apps.paiements",
     "apps.api",
     "apps.backoffice",
 ]
@@ -191,6 +192,18 @@ VALIDITE_SMS_HEURES = int(env("VALIDITE_SMS_HEURES", "48"))
 
 # Secret des jetons portés par les adresses de rappel des passerelles.
 RAPPELS_SECRET = env("RAPPELS_SECRET", "")
+
+# Paiements (lot 7). Le fournisseur simulé tient la place d'Orange Money et de
+# Moov Money tant qu'aucun contrat marchand n'existe ; il n'est jamais actif en
+# production (prod.py le coupe). Sans secret ni plage d'adresses, tout rappel
+# est refusé : aucune valeur réelle n'est écrite ici.
+PAIEMENTS_SIMULATEUR = env("PAIEMENTS_SIMULATEUR", "") == "1"
+PAIEMENTS_SIMULE_SECRET = env("PAIEMENTS_SIMULE_SECRET", "")
+PAIEMENTS_PLAGES = {"simule": env_liste("PAIEMENTS_SIMULE_PLAGES", "")}
+PAIEMENTS_RAPPELS_PAR_MINUTE = int(env("PAIEMENTS_RAPPELS_PAR_MINUTE", "60"))
+# Frontaux dont on croit l'en-tête X-Forwarded-For. Vide : seule l'adresse de la
+# connexion compte (voir apps/paiements/rappels.py).
+PROXIES_DE_CONFIANCE = env_liste("PROXIES_DE_CONFIANCE", "")
 
 # Espace servi par ce processus. « client » : le portail et l'API des clients,
 # rôle applicatif, sans administration. « backoffice » : l'administration des

@@ -6,7 +6,7 @@ from apps.core import bus, files
 
 
 class Command(BaseCommand):
-    help = "Déclare les échanges, les douze files et les paliers de réessai. Idempotent."
+    help = "Déclare les échanges, les treize files et les paliers de réessai. Idempotent."
 
     def handle(self, *args, **options):
         async def declarer():

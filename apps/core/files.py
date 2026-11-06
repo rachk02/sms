@@ -1,6 +1,6 @@
 """Échanges et files RabbitMQ, et paliers de réessai.
 
-Un échange de type sujet, `sms`, et douze files séparées par nature de trafic
+Un échange de type sujet, `sms`, et treize files séparées par nature de trafic
 et par réseau destinataire (voir l'architecture, « Files, workers et reprise »).
 Chaque file est liée à `sms` par son propre nom.
 
@@ -27,6 +27,7 @@ FILES = (
     "messages.entrants",
     "webhooks.sortants",
     "courriels.sortants",
+    "paiements.rappels",
     "rebut",
 )
 

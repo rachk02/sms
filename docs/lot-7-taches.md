@@ -262,6 +262,16 @@ Choix faits, à confirmer :
 
 **Critères** Un rappel non signé est rejeté sans réponse détaillée. Un rappel venu d'une adresse hors liste blanche est rejeté et journalisé. Un client malveillant qui sonde la route n'apprend rien sur l'existence d'une transaction.
 
+**Fait.** Nouveau module `apps/paiements` (quatrième couche). La route publique `/rappels/paiements/<fournisseur>` applique, dans cet ordre, la liste blanche des plages d'adresses du fournisseur, la limite de débit par adresse source (compteur Redis par minute) et la signature. Le fournisseur simulé signe comme le fera un vrai : en-tête `X-Signature: t=<horodatage>,v1=<HMAC-SHA256 de « horodatage.corps »>`, refusé au-delà de cinq minutes. Tout refus, fournisseur inconnu compris, reçoit la même réponse nue (403, corps vide, mêmes en-têtes), et sa raison va au journal applicatif. Un rappel accepté est déposé dans la nouvelle file `paiements.rappels` et la réponse part aussitôt : la vue ne lit aucune table de paiement, la réponse est donc la même qu'une transaction existe ou non. Chaque réception a sa propre clé dans la boîte d'envoi : un rappel réémis trois fois arrive trois fois au worker, dont l'idempotence est l'objet de T-85. Sans secret ni plage configurés, tout est refusé ; le simulateur n'existe que si les réglages l'activent (poste de développement), et `prod.py` le coupe.
+
+Choix faits, à confirmer :
+
+- l'adresse source est celle de la connexion ; l'en-tête X-Forwarded-For n'est cru que venant d'un frontal déclaré dans `PROXIES_DE_CONFIANCE`, et seule sa dernière adresse compte ;
+- soixante rappels par minute et par adresse source (`PAIEMENTS_RAPPELS_PAR_MINUTE`) ;
+- un fournisseur inconnu reçoit le même 403 que les autres refus, plutôt qu'un 404.
+
+Prérequis de déploiement : la file `paiements.rappels` (déclarée par `declarer_files`), les variables `PAIEMENTS_SIMULE_SECRET` et `PAIEMENTS_SIMULE_PLAGES` hors production.
+
 ## T-85 · Vérification et crédit
 
 **Produit** L'interrogation de l'API de statut du fournisseur avant tout crédit, l'unicité sur fournisseur et référence de transaction, et l'écriture ACHAT au registre.
