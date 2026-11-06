@@ -147,7 +147,12 @@ def explication_tarif(campagne: Campagne) -> list[str]:
             else "premier palier"
         )
         grille = GRILLES.get(detail.get("grille"), "")
-        lignes.append(f"{reseau} : {detail['prix']} FCFA par SMS, {grille}{palier}.")
+        lignes.append(f"{reseau} : {detail['prix']} FCFA par segment, {grille}{palier}.")
+    if campagne.segments_prevus > 1:
+        lignes.append(
+            f"Chaque message compte {campagne.segments_prevus} segments au plus, "
+            "facturés chacun à ce prix."
+        )
     lignes.append(
         "Les SMS de cette campagne comptent dans le volume du mois des envois suivants ; "
         "un palier franchi ou une grille changée pendant sa diffusion ne change pas son prix."

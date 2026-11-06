@@ -142,7 +142,11 @@ def detail(request, pk):
     if campagne.recurrente:
         contexte["occurrences"] = campagne.occurrences.order_by("-occurrence_le")[:50]
     if campagne.etat == Campagne.Etat.BROUILLON:
-        vu = services.apercu(campagne)
+        try:
+            vu = services.apercu(campagne)
+        except services.CampagneRefusee as refus:
+            contexte["refus_apercu"] = str(refus)
+            return render(request, "campagnes/campagne.html", contexte)
         contexte |= {
             "apercu": vu,
             "par_expediteur": sorted(

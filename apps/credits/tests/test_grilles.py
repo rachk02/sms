@@ -43,7 +43,9 @@ def reseaux(en_tant_que_worker):
 
 @pytest.fixture
 def agent(reseaux):
-    return creer_utilisateur(courriel="admin@el-immeka.test", mot_de_passe="x-1234-abcd", nom="A")
+    return creer_utilisateur(
+        courriel="admin@el-immeka.test", mot_de_passe="x-1234-abcd", nom="A", is_superuser=True
+    )
 
 
 @pytest.fixture
@@ -264,3 +266,16 @@ def test_une_grille_negociee_ne_se_lit_que_par_son_client(transactional_db):
     with connections["worker"].cursor() as curseur:
         curseur.execute("SELECT count(*) FROM credits_grille")
         assert curseur.fetchone()[0] == 2
+
+
+def test_seul_un_super_administrateur_cree_ou_publie_une_grille(reseaux, publique):
+    agent = creer_utilisateur(courriel="agent@el-immeka.test", mot_de_passe="x-1234-abcd", nom="B")
+    with pytest.raises(services.PublicationNonAutorisee):
+        services.creer_grille("Promotion", auteur=agent, nature=Grille.Nature.PROMOTION)
+    version = _version(publique, PRIX)
+    with pytest.raises(services.PublicationNonAutorisee):
+        services.publier_version(version, auteur=agent)
+    with pytest.raises(services.PublicationNonAutorisee):
+        services.publier_version(version, auteur=None)
+    version.refresh_from_db()
+    assert not version.publiee

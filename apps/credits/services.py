@@ -366,6 +366,17 @@ class TarifInvalide(ValueError):
     pass
 
 
+class PublicationNonAutorisee(PermissionError):
+    pass
+
+
+def _super_administrateur(auteur) -> None:
+    """Seul un super-administrateur crée ou publie une grille (décision du
+    6 novembre 2026, sans double validation)."""
+    if not getattr(auteur, "is_superuser", False):
+        raise PublicationNonAutorisee("Seul un super-administrateur crée ou publie une grille.")
+
+
 def _prix_entier(valeur, nom: str, minimum: int) -> None:
     if not isinstance(valeur, int) or isinstance(valeur, bool) or valeur < minimum:
         raise TarifInvalide(
@@ -382,6 +393,7 @@ def creer_grille(
     réservée à un client."""
     from apps.core.audit import auditer
 
+    _super_administrateur(auteur)
     if not nom or not nom.strip():
         raise TarifInvalide("Une grille porte un nom.")
     if nature not in Grille.Nature.values:
@@ -476,6 +488,7 @@ def publier_version(version: VersionGrille, *, auteur, maintenant=None) -> Versi
     publication. Tracé au journal d'audit avec les anciens et les nouveaux prix."""
     from apps.core.audit import auditer
 
+    _super_administrateur(auteur)
     grille = Grille.objects.select_for_update().get(id=version.grille_id)
     version = VersionGrille.objects.select_for_update().get(id=version.id)
     if version.publiee:

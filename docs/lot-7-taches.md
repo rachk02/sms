@@ -71,6 +71,18 @@ bas de ces prix. Sans l'une ni l'autre, la grille publique s'applique.
 client nommé. Elle est toujours à durée limitée, avec une date de fin
 obligatoire.
 
+Et avant T-84, pour le rechargement et la facture :
+
+**Montants et TVA.** Les crédits s'achètent par multiples de 50 FCFA HT : à
+18 %, la TVA tombe toujours sur un franc entier (50 HT, 9 de TVA, 59 TTC). La
+TVA doit pouvoir se désactiver par configuration : l'utilisateur n'est pas sûr
+qu'elle s'applique à ce service. Le pas se déduit du taux (100 divisé par le
+plus grand diviseur commun de 100 et du taux), et vaut 1 franc sans TVA.
+
+**Bornes d'un rechargement.** Non fixées par l'utilisateur. Le montant minimal
+et le montant maximal sont des réglages vides tant qu'il ne les a pas choisis ;
+à fixer avec les plafonds des portefeuilles mobiles.
+
 ## Choix faits à l'ouverture, à confirmer
 
 Ces points n'ont pas été posés à l'utilisateur. Ce sont des choix techniques
@@ -210,6 +222,8 @@ Choix faits, à confirmer :
 - un brouillon peut recouvrir une version publiée : la contrainte d'exclusion ne porte que sur les versions publiées, sinon aucune version future ne pourrait se préparer tant que la version en vigueur n'a pas de fin ;
 - le palier retenu s'applique à tout le segment, pas par tranches : à 10 000 SMS dans le mois, chaque segment suivant coûte le prix du palier 10 000 ;
 - la diffusion d'une campagne lit encore la grille message par message ; T-82 fige le prix à la confirmation, comme décidé.
+
+Publication hors des tests : `manage.py publier_grille prix.csv --par <courriel du super-administrateur>` (options `--nature`, `--client`, `--nom`, `--debut`, `--fin`), sous le rôle du back-office, tout ou rien. Seul un super-administrateur crée ou publie une grille, par la commande comme par les services. La recette n'a pas de prix de secours : une grille publique doit y être publiée par cette commande avant tout envoi. Une page de campagne en brouillon sans tarif l'annonce au lieu d'échouer.
 
 Prérequis de production : l'extension PostgreSQL `btree_gist`, créée par la migration sous le rôle propriétaire. Elle est de confiance depuis PostgreSQL 13, le propriétaire de la base peut donc la créer sans super-utilisateur.
 

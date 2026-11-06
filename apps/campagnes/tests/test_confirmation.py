@@ -216,7 +216,13 @@ def test_une_cible_d_un_autre_compte_est_refusee(client, auteur, cible):
 
 
 def _grille_publique(auteur, prix: dict):
-    """Publie une version de la grille publique, créée au besoin, tout de suite."""
+    """Publie une version de la grille publique, créée au besoin, tout de suite,
+    par un super-administrateur d'EL-IMMEKA."""
+    from apps.comptes.models import Utilisateur
+
+    auteur = Utilisateur.objects.filter(is_superuser=True).first() or creer_utilisateur(
+        courriel="admin@el-immeka.test", mot_de_passe="x-1234-abcd", nom="A", is_superuser=True
+    )
     grille = Grille.objects.filter(client__isnull=True).first() or credits.creer_grille(
         "Grille publique", auteur=auteur
     )

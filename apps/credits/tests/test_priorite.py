@@ -41,7 +41,9 @@ def agent(en_tant_que_worker):
         [Prefixe(pays="BF", prefixe=p, operateur=o) for p, o in RESEAUX.items()],
         ignore_conflicts=True,
     )
-    yield creer_utilisateur(courriel="admin@el-immeka.test", mot_de_passe="x-1234-abcd", nom="A")
+    yield creer_utilisateur(
+        courriel="admin@el-immeka.test", mot_de_passe="x-1234-abcd", nom="A", is_superuser=True
+    )
     Prefixe.objects.filter(pays="BF").delete()
 
 

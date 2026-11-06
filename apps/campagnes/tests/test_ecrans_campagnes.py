@@ -316,3 +316,12 @@ def test_quarante_mille_messages_ne_ralentissent_pas_le_suivi(client, membre):
     assert len(requetes_grand) == len(requetes_petit)
     # Borne large : le temps de réponse ne suit pas le nombre de messages.
     assert _duree(client, campagne) < 3 * duree_petit + 0.05
+
+
+def test_sans_grille_publiee_le_brouillon_explique_le_refus(client, membre):
+    client.force_login(membre)
+    campagne, _ = _creer(client, membre)
+    with override_settings(SMS_PRIX_SEGMENT_PROVISOIRE=None):
+        reponse = client.get(f"/campagnes/{campagne.id}")
+    assert reponse.status_code == 200
+    assert "Aucun tarif en vigueur pour le réseau ORANGE (BF)." in reponse.content.decode()

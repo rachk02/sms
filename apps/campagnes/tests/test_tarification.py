@@ -38,7 +38,9 @@ def sans_secours():
 
 @pytest.fixture
 def agent(client):  # noqa: F811
-    return creer_utilisateur(courriel="admin@el-immeka.test", mot_de_passe="x-1234-abcd", nom="A")
+    return creer_utilisateur(
+        courriel="admin@el-immeka.test", mot_de_passe="x-1234-abcd", nom="A", is_superuser=True
+    )
 
 
 def _publier(agent, paliers: dict, debut=None):
@@ -141,7 +143,7 @@ def test_le_rapport_de_campagne_explique_le_tarif(client, worker, agent):  # noq
     assert f"volume de {PALIER} SMS soumis depuis le début du mois" in lignes[0]
     assert (
         lignes[1]
-        == f"ORANGE : {PRIX_BAS} FCFA par SMS, palier à partir de {PALIER} SMS dans le mois."
+        == f"ORANGE : {PRIX_BAS} FCFA par segment, palier à partir de {PALIER} SMS dans le mois."
     )
     assert "un palier franchi ou une grille changée pendant sa diffusion" in lignes[2]
 
