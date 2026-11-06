@@ -78,6 +78,7 @@ class Ordonnanceur(Worker):
     periode_partitions_s = 3_600.0
     periode_supervision_s = 15.0
     periode_sans_accuse_s = 60.0
+    periode_rapprochement_s = 86_400.0
 
     async def _attendre(self, secondes: float) -> None:
         try:
@@ -92,6 +93,7 @@ class Ordonnanceur(Worker):
         from apps.campagnes.diffusion import publier as publier_campagnes
         from apps.campagnes.planification import planifier
         from apps.core import bus
+        from apps.credits.rapprochement import rapprocher
         from apps.journal.services import creer_partitions_a_venir
         from apps.telecom.sante import surveiller
         from apps.telecom.supervision import publier_etat_liaisons
@@ -114,6 +116,7 @@ class Ordonnanceur(Worker):
                 # -inf : les deux tâches tournent dès le premier tour, quelle que soit
                 # l'origine arbitraire de time.monotonic().
                 derniere_partition = derniere_supervision = dernier_constat = float("-inf")
+                dernier_rapprochement = float("-inf")
                 while not self.arret.is_set():
                     if time.monotonic() - derniere_partition >= self.periode_partitions_s:
                         await sync_to_async(creer_partitions_a_venir)()
@@ -127,6 +130,11 @@ class Ordonnanceur(Worker):
                         await sync_to_async(constater_sans_accuse)()
                         await sync_to_async(solder_envois_unitaires)()
                         dernier_constat = time.monotonic()
+                    # Une fois par jour, et au démarrage : le rapprochement ne fait que
+                    # lire et alerter, le refaire après un redémarrage ne coûte rien.
+                    if time.monotonic() - dernier_rapprochement >= self.periode_rapprochement_s:
+                        await sync_to_async(rapprocher)()
+                        dernier_rapprochement = time.monotonic()
                     # Envois programmés et occurrences échues, puis quelques lots
                     # par campagne à chaque tour : le relais et les autres
                     # campagnes avancent aussi.

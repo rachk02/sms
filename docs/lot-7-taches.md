@@ -167,6 +167,13 @@ Choix fait, à confirmer : le délai de dix secondes, assez long pour une confir
 
 **Critères** Un écart introduit artificiellement d'un franc déclenche l'alerte. Le traitement passe sur mille comptes en moins d'une minute. L'alerte nomme le client et le montant de l'écart.
 
+**Fait.** `apps/credits/rapprochement.py` compare, en une seule requête, le solde acquis du cache à la somme du registre et le montant réservé à la somme des réservations actives, pour tous les clients, y compris un client qui a des écritures sans ligne de cache. Une seule requête voit les trois tables dans le même instantané : une opération en cours n'y crée pas de faux écart. Chaque écart donne une ligne d'erreur au journal applicatif, qui nomme le client (raison sociale et identifiant) et les montants, et un événement `credits.rapprochement.ecart` dans la boîte d'envoi. Rien n'est corrigé automatiquement : une correction passe par une écriture d'ajustement motivée. L'ordonnanceur le lance au démarrage puis toutes les vingt-quatre heures. Les tests couvrent un franc d'écart sur le solde, un franc sur le réservé, un cache manquant, et mille comptes rapprochés en moins d'une minute, borne vérifiée par le test.
+
+Choix faits, à confirmer :
+
+- le rapprochement tourne toutes les vingt-quatre heures depuis le démarrage de l'ordonnanceur, pas à heure fixe ; un redémarrage le relance, ce qui peut répéter une alerte ;
+- l'alerte est une ligne d'erreur et un événement ; qui la reçoit (courriel aux administrateurs, tableau du back-office) relève du module des notifications, au lot qui le porte.
+
 ## T-81 · Grilles tarifaires datées
 
 **Produit** Les grilles, leurs versions avec dates de prise d'effet et de fin, les paliers de volume, le prix par réseau et par pays, et la contrainte d'exclusion qui interdit le chevauchement.
