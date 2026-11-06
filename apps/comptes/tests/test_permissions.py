@@ -37,6 +37,8 @@ ATTENDUS = {
     "second-facteur-verifier": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "metriques": ("get", {ANONYME: 401, UTILISATEUR: 401, ADMIN: 401}),
     "rappel-jasmin": ("post", {ANONYME: 403, UTILISATEUR: 403, ADMIN: 403}),
+    # Point public des fournisseurs : sans signature, la même réponse nue pour tous.
+    "rappel-paiement": ("post", {ANONYME: 403, UTILISATEUR: 403, ADMIN: 403}),
     "campagnes": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "campagne-nouvelle": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "campagne": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
@@ -100,6 +102,7 @@ def _adresse(nom, membres):
         return reverse(nom, args=["jeton-invalide"])
     if nom in (
         "rappel-jasmin",
+        "rappel-paiement",
         "campagnes-modele",
         "campagne",
         "campagne-test",

@@ -49,9 +49,9 @@ async def _attendre(file, delai_s):
     raise AssertionError(f"aucun message dans {file.name} après {delai_s} s")
 
 
-def test_il_y_a_douze_files_de_trafic():
-    assert len(FILES) == 12
-    assert len(set(FILES)) == 12
+def test_il_y_a_treize_files_de_trafic():
+    assert len(FILES) == 13
+    assert len(set(FILES)) == 13
 
 
 def test_les_files_et_les_paliers_existent_apres_declaration():
