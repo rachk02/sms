@@ -49,18 +49,39 @@ def _que_politesse(mots: tuple[str, ...]) -> bool:
     )
 
 
+def _regrouper_lettres(mots: tuple[str, ...]) -> tuple[str, ...]:
+    """Recolle les lettres isolées qui se suivent : « S T O P MERCI » devient
+    « STOP MERCI ». Une lettre seule reste seule (« S IL VOUS PLAIT »)."""
+    regroupes, lettres = [], []
+    for mot in (*mots, ""):
+        if len(mot) == 1:
+            lettres.append(mot)
+            continue
+        if lettres:
+            regroupes.append("".join(lettres))
+            lettres = []
+        if mot:
+            regroupes.append(mot)
+    return tuple(regroupes)
+
+
 def correspond(texte: str, mot_cle: str) -> bool:
     """Vrai si le texte n'est que ce mot-clé, au plus entouré de politesse.
 
-    Un mot-clé épelé lettre par lettre (« S T O P », « S.T.O.P ») est reconnu
-    aussi : sans les espaces, le texte entier est alors le mot-clé."""
+    Un mot-clé épelé lettre par lettre (« S T O P », « S.T.O.P merci ») est
+    reconnu aussi : ses lettres sont recollées avant la comparaison."""
     canonique = normaliser(texte)
     cle = tuple(normaliser(mot_cle).split())
     if not cle:
         return False
     if canonique.replace(" ", "") == "".join(cle):
         return True
-    mots = tuple(canonique.split())
+    brut = tuple(canonique.split())
+    return any(_seul(mots, cle) for mots in {brut, _regrouper_lettres(brut)})
+
+
+def _seul(mots: tuple[str, ...], cle: tuple[str, ...]) -> bool:
+    """Vrai si les mots ne sont que la clé, entourée au plus de politesse."""
     for debut in range(len(mots) - len(cle) + 1):
         fin = debut + len(cle)
         if mots[debut:fin] == cle and _que_politesse(mots[:debut]) and _que_politesse(mots[fin:]):

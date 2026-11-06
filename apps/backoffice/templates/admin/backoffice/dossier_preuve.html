@@ -1,0 +1,60 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<form method="get" class="module">
+  <h2>Rechercher un numéro</h2>
+  <p>
+    <label>Numéro, sous n'importe quelle forme <input name="numero" value="{{ saisi }}" required autofocus></label>
+    <input type="submit" class="default" value="Chercher">
+  </p>
+  {% if erreur %}<p class="errornote">{{ erreur }}</p>{% endif %}
+</form>
+
+{% if dossier %}
+<div class="module">
+  <h2>{{ dossier.numero }} : {{ dossier.clients|length }} client{{ dossier.clients|length|pluralize }}</h2>
+  <p>Messages comptés depuis le {{ dossier.depuis|date:"d/m/Y" }}, soit les douze derniers mois.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Client</th><th>Origine du contact</th><th>Entré le</th><th>Consentement</th>
+        <th>Messages reçus</th><th>Liste noire</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ligne in dossier.clients %}
+      <tr>
+        <td>{% if ligne.client %}{{ ligne.client.raison_sociale }}{% else %}Plateforme, tous les clients{% endif %}</td>
+        <td>{% if ligne.contact %}{{ ligne.contact.get_origine_display }}{% else %}Pas dans ses contacts{% endif %}</td>
+        <td>{% if ligne.contact %}{{ ligne.contact.cree_le|date:"d/m/Y H:i" }}{% endif %}</td>
+        <td>{% if ligne.contact.consentement_le %}{{ ligne.contact.consentement_le|date:"d/m/Y" }}{% if ligne.contact.consentement_source %}, {{ ligne.contact.consentement_source }}{% endif %}{% elif ligne.contact %}Non déclaré{% endif %}</td>
+        <td>{% if ligne.client %}{{ ligne.messages }}{% if ligne.messages %}, du {{ ligne.premier|date:"d/m/Y" }} au {{ ligne.dernier|date:"d/m/Y" }}{% endif %}{% endif %}</td>
+        <td>{% if ligne.liste_noire %}{{ ligne.liste_noire.get_origine_display }}, le {{ ligne.liste_noire.ajoute_le|date:"d/m/Y H:i" }}{% else %}Non{% endif %}</td>
+        <td>{% if ligne.client %}<a href="{% url 'admin:backoffice_dossierpreuve_client' %}?numero={{ dossier.numero|urlencode }}&amp;client={{ ligne.client.id }}">Messages et preuve</a>{% endif %}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7">Aucun client ne connaît ce numéro ni ne lui a écrit sur la période.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="module">
+  <h2>Mots-clés reçus de ce numéro</h2>
+  <table>
+    <thead><tr><th>Reçu le</th><th>Message reçu, mot pour mot</th><th>Mot-clé</th><th>Rapproché de</th></tr></thead>
+    <tbody>
+      {% for entrant in dossier.desinscriptions %}
+      <tr>
+        <td>{{ entrant.recu_le|date:"d/m/Y H:i:s" }}</td>
+        <td>{{ entrant.texte }}</td>
+        <td>{{ entrant.mot_cle_reconnu }}</td>
+        <td>{% if entrant.client %}{{ entrant.client.raison_sociale }}{% elif entrant.traite_le %}Plusieurs clients, ou aucun envoi correspondant{% else %}Pas encore traité{% endif %}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4">Aucun mot-clé reçu de ce numéro sur la période.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

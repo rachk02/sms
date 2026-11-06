@@ -17,12 +17,15 @@ from apps.comptes.models import Client, Dossier, Piece, Utilisateur
 from apps.conformite import services as conformite
 from apps.conformite.models import Fenetre, JourFerie
 from apps.core.models import Audit
+from apps.core.numeros import NumeroInvalide, normaliser
 from apps.expediteurs import services as expediteurs
 from apps.expediteurs.models import Expediteur, ExpediteurReseau, Reserve
 from apps.fichiers.models import Fichier
 from apps.fichiers.services import lien
 
+from . import selectors
 from .forms import EnregistrementClientForm
+from .models import DossierPreuve
 from .services import (
     CONTROLES_DE_REVUE,
     DecisionRefusee,
@@ -333,3 +336,72 @@ class FenetreAdmin(admin.ModelAdmin):
     def delete_queryset(self, request, queryset):
         for fenetre in queryset:
             self.delete_model(request, fenetre)
+
+
+@admin.register(DossierPreuve)
+class DossierPreuveAdmin(admin.ModelAdmin):
+    """Dossier de preuve d'un numéro (T-75) : ce que demandera l'ARCEP ou un
+    abonné mécontent. Premier clic, l'entrée du menu ; deuxième, la recherche du
+    numéro, qui montre chaque client qui le connaît ou lui a écrit ; troisième,
+    les messages d'un client et la preuve de la désinscription."""
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_urls(self):
+        propres = [
+            path(
+                "client/",
+                self.admin_site.admin_view(self.client_view),
+                name="backoffice_dossierpreuve_client",
+            )
+        ]
+        return propres + super().get_urls()
+
+    def _numero(self, request):
+        saisi = request.GET.get("numero", "").strip()
+        if not saisi:
+            return saisi, None, ""
+        try:
+            return saisi, normaliser(saisi), ""
+        except NumeroInvalide as refus:
+            return saisi, None, f"Numéro invalide : {refus.cause}."
+
+    def changelist_view(self, request, extra_context=None):
+        saisi, numero, erreur = self._numero(request)
+        contexte = {
+            **self.admin_site.each_context(request),
+            "title": "Dossier de preuve d'un numéro",
+            "opts": self.model._meta,
+            "saisi": saisi,
+            "erreur": erreur,
+            "dossier": selectors.dossier(numero) if numero else None,
+        }
+        return TemplateResponse(request, "admin/backoffice/dossier_preuve.html", contexte)
+
+    def client_view(self, request):
+        _, numero, erreur = self._numero(request)
+        client = Client.objects.filter(id=request.GET.get("client") or None).first()
+        if not numero or client is None:
+            messages.error(request, erreur or "Numéro ou client introuvable.")
+            return redirect("admin:backoffice_dossierpreuve_changelist")
+        dossier = selectors.dossier(numero)
+        ligne = next((ligne for ligne in dossier.clients if ligne.client == client), None)
+        contexte = {
+            **self.admin_site.each_context(request),
+            "title": f"{numero} chez {client.raison_sociale}",
+            "opts": self.model._meta,
+            "numero": numero,
+            "client": client,
+            "ligne": ligne,
+            "dossier": dossier,
+            "messages_recus": selectors.messages_recus(numero, client.id),
+            "plafond": selectors.MESSAGES_AFFICHES,
+        }
+        return TemplateResponse(request, "admin/backoffice/dossier_preuve_client.html", contexte)

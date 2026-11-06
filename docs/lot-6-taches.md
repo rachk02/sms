@@ -40,6 +40,16 @@ Tranchées le même jour, en entrant dans T-71 :
 - **Pas de réponse à un STOP sans émetteur** : rien n'a été inscrit, rien
   n'est confirmé ; l'exploitation traite le cas.
 
+Tranchées le 6 novembre 2026, en entrant dans T-75 :
+
+- **Douze mois au dossier de preuve.** La durée de rétention du journal n'est
+  pas encore tranchée ; le dossier compte et liste les messages des douze
+  derniers mois, la borne des recherches du journal, et l'écran le dit.
+- **Écran seul pour le consentement.** Le dossier montre le consentement quand
+  il est déclaré, « non déclaré » sinon. Aucun chemin ne le déclare encore : il
+  viendra avec l'API (lot 9) et une colonne d'import ; la table
+  `conformite_consentement` attend jusque-là.
+
 Déjà tranché par l'architecture : un STOP touché par plusieurs clients dans
 les soixante-douze heures s'applique à tous, une ligne par client, la
 désinscription l'emportant sur le chiffre d'affaires. Le webhook du client
@@ -51,9 +61,10 @@ sortants arrivent au lot 9 (T-111).
 - **Reconnaissance stricte du mot-clé (T-69).** Le texte reçu est ramené en
   majuscules, sans accent, chaque signe remplacé par une espace. Il est reconnu
   s'il n'est que le mot-clé, au plus entouré de formules de politesse (svp,
-  stp, merci, s'il vous plaît, s'il te plaît), ou s'il donne le mot-clé une
-  fois ses espaces retirées (« S T O P »). Un mot-clé pris dans une phrase
-  n'est pas reconnu. Les mots-clés vivent dans `telecom_mot_cle`, relue à
+  stp, merci, s'il vous plaît, s'il te plaît). Un mot-clé épelé est reconnu
+  aussi, ses lettres isolées recollées (« S T O P », « S.T.O.P merci ! »,
+  forme trouvée par le point de contrôle T-76). Un mot-clé pris dans une
+  phrase n'est pas reconnu. Les mots-clés vivent dans `telecom_mot_cle`, relue à
   chaque message entrant ; la plateforme y sème STOP, ARRET et ARRETER. Les
   formules de politesse sont une donnée de la langue et restent dans le code.
 - **Reconnaissance à l'enregistrement (T-69).** Le mot-clé reconnu s'écrit
@@ -136,6 +147,16 @@ sortants arrivent au lot 9 (T-111).
   nuit ou le dimanche attendrait ; les tests marqués `fenetre_reelle` lisent la
   vraie fenêtre avec une horloge de test.
 
+- **Dossier de preuve au back-office (T-75).** Une entrée « Dossiers de
+  preuve » de l'administration (premier clic) ; la recherche d'un numéro, sous
+  n'importe quelle forme (deuxième), montre chaque client qui le connaît ou lui
+  a écrit : origine et date d'entrée du contact, consentement, nombre de
+  messages sur douze mois, inscription en liste noire, et les mots-clés reçus
+  de ce numéro ; le détail d'un client (troisième) liste ses messages et le
+  message de désinscription d'origine. Lu par le rôle du back-office, qui voit
+  tous les clients. Le compte exclut les confirmations de désinscription, que
+  la liste montre à part.
+
 ## T-69 · Détection du STOP entrant
 
 **Produit** La normalisation du message reçu, sans accents ni casse, et sa comparaison à la table des mots-clés : STOP, ARRET, ARRETER, et les variantes avec espaces ou ponctuation.
@@ -183,3 +204,32 @@ sortants arrivent au lot 9 (T-111).
 **Produit** Un scénario complet : envoi vers un numéro, réception d'un STOP sous une forme inhabituelle, désinscription effective, tentative de renvoi bloquée, et production du dossier de preuve pour ce numéro.
 
 **Critères** Le second envoi vers ce numéro est bloqué au filtrage avant soumission, pas seulement à la constitution de la campagne. Le dossier de preuve contient l'origine du contact, la date d'entrée, la liste des messages reçus et le message de désinscription d'origine.
+
+## Bilan du lot, 6 novembre 2026
+
+Les huit tâches sont faites. Le point de contrôle (T-76) est un test
+automatique, `tests/test_point_de_controle_lot6.py` : une campagne atteint un
+numéro ; une seconde campagne est confirmée, ce numéro compris ; le numéro
+répond « S.T.O.P merci ! » par le point d'entrée des rappels de la passerelle ;
+la désinscription est rapprochée, inscrite avec le message d'origine et
+confirmée gratuitement ; la seconde campagne part, et le message vers ce numéro
+est refusé au filtrage avant soumission (LISTE_NOIRE), non à la constitution ;
+le dossier de preuve réunit l'origine du contact, sa date d'entrée, les
+messages reçus et le message de désinscription d'origine. Chaque événement y
+est livré deux fois, pour le rejeu. Le point de contrôle a fait trouver un
+trou de T-69 : un mot-clé épelé suivi d'une politesse n'était pas reconnu.
+
+Ce qui reste ouvert :
+
+- La durée de rétention du journal reste à trancher ; le dossier de preuve lit
+  douze mois en attendant.
+- Aucun chemin ne déclare encore le consentement d'un contact : il viendra
+  avec l'API (lot 9) et une colonne d'import ; `conformite_consentement`
+  n'est pas créée.
+- Les jours fériés du Burkina Faso sont à saisir par un agent, année par
+  année : aucune date n'a été semée faute de source vérifiée.
+- L'annonce `contacts.desinscription.inscrite` attend les webhooks du lot 9
+  (T-111) ; un STOP sans émetteur ne reçoit pas de réponse et se traite à la
+  main, signalé par la métrique `sms_desinscriptions_sans_emetteur_total`.
+- Le numéro court reste factice tant que l'ARCEP ne l'a pas attribué : sans
+  lui, aucun STOP n'arrive par SMS en production.

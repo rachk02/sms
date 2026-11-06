@@ -1,0 +1,43 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<p><a href="{% url 'admin:backoffice_dossierpreuve_changelist' %}?numero={{ numero|urlencode }}">Retour au dossier du numéro</a></p>
+
+<div class="module">
+  <h2>Le contact</h2>
+  {% if ligne.contact %}
+    <p>
+      Entré par {{ ligne.contact.get_origine_display|lower }} le {{ ligne.contact.cree_le|date:"d/m/Y à H:i" }}.
+      Consentement : {% if ligne.contact.consentement_le %}déclaré le {{ ligne.contact.consentement_le|date:"d/m/Y" }}{% if ligne.contact.consentement_source %} ({{ ligne.contact.consentement_source }}){% endif %}{% else %}non déclaré{% endif %}.
+    </p>
+  {% else %}
+    <p>Ce numéro n'est pas dans les contacts de {{ client.raison_sociale }} : il a reçu des messages adressés à un numéro libre.</p>
+  {% endif %}
+  {% if ligne.liste_noire %}
+    <p>
+      Sur la liste noire depuis le {{ ligne.liste_noire.ajoute_le|date:"d/m/Y à H:i:s" }} ({{ ligne.liste_noire.get_origine_display|lower }}).
+      {% if ligne.liste_noire.message_origine %}Message de désinscription d'origine : « {{ ligne.liste_noire.message_origine }} ».{% endif %}
+    </p>
+  {% endif %}
+</div>
+
+<div class="module">
+  <h2>{{ ligne.messages|default:0 }} message{{ ligne.messages|pluralize }} du client reçu{{ ligne.messages|pluralize }} depuis le {{ dossier.depuis|date:"d/m/Y" }}, hors confirmations de désinscription</h2>
+  {% if messages_recus|length == plafond %}<p>Seuls les {{ plafond }} plus récents sont affichés.</p>{% endif %}
+  <table>
+    <thead><tr><th>Reçu le</th><th>Expéditeur</th><th>Texte</th><th>État</th><th>Accusé</th></tr></thead>
+    <tbody>
+      {% for message in messages_recus %}
+      <tr>
+        <td>{{ message.date_reception|date:"d/m/Y H:i:s" }}</td>
+        <td>{{ message.expediteur_libelle }}</td>
+        <td>{{ message.texte }}{% if message.nature == "SYSTEME" %} (confirmation de désinscription){% endif %}</td>
+        <td>{{ message.get_etat_display }}</td>
+        <td>{{ message.date_accuse|date:"d/m/Y H:i:s" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">Aucun message sur la période.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
