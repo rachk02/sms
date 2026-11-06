@@ -45,6 +45,8 @@ CLOISONNEES = (
     # Lecture et création seules pour le client, lecture seule pour tous.
     "expediteurs_reseau",
     "expediteurs_reserve",
+    "conformite_fenetre",
+    "conformite_jour_ferie",
 )
 RESERVEES_AUX_WORKERS = (
     "telecom_connecteur",

@@ -32,6 +32,9 @@ DJANGO_SETTINGS_MODULE = "config.settings.dev"
 python_files = ["test_*.py"]
 testpaths = ["apps", "tests"]
 addopts = "--strict-markers"
+markers = [
+    "fenetre_reelle: le test lit la vraie fenêtre légale au lieu d'une fenêtre toujours ouverte",
+]
 
 [tool.ruff]
 target-version = "py314"

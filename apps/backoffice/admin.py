@@ -14,6 +14,8 @@ from django.utils.dateparse import parse_date
 
 from apps.comptes import second_facteur
 from apps.comptes.models import Client, Dossier, Piece, Utilisateur
+from apps.conformite import services as conformite
+from apps.conformite.models import Fenetre, JourFerie
 from apps.core.models import Audit
 from apps.expediteurs import services as expediteurs
 from apps.expediteurs.models import Expediteur, ExpediteurReseau, Reserve
@@ -290,3 +292,44 @@ class ReserveAdmin(admin.ModelAdmin):
     list_display = ("libelle", "motif", "actif")
     list_filter = ("actif",)
     search_fields = ("libelle",)
+
+
+@admin.register(JourFerie)
+class JourFerieAdmin(admin.ModelAdmin):
+    """Jours fériés, saisis par un agent année par année : les fêtes mobiles ne
+    se calculent pas. Chaque saisie est tracée au journal d'audit."""
+
+    list_display = ("date", "libelle", "pays")
+    list_filter = ("pays",)
+    date_hierarchy = "date"
+    search_fields = ("libelle",)
+
+    def save_model(self, request, obj, form, change):
+        conformite.enregistrer_jour_ferie(obj, agent=request.user, adresse_ip=adresse_ip(request))
+
+    def delete_model(self, request, obj):
+        conformite.supprimer_jour_ferie(obj, agent=request.user, adresse_ip=adresse_ip(request))
+
+    def delete_queryset(self, request, queryset):
+        for jour in queryset:
+            self.delete_model(request, jour)
+
+
+@admin.register(Fenetre)
+class FenetreAdmin(admin.ModelAdmin):
+    """Fenêtre légale des envois marketing, jour par jour, en heure locale. Un
+    jour sans ligne est fermé."""
+
+    list_display = ("jour", "ouverture", "fermeture", "pays")
+    list_filter = ("pays",)
+    ordering = ("pays", "jour")
+
+    def save_model(self, request, obj, form, change):
+        conformite.regler_fenetre(obj, agent=request.user, adresse_ip=adresse_ip(request))
+
+    def delete_model(self, request, obj):
+        conformite.fermer_jour(obj, agent=request.user, adresse_ip=adresse_ip(request))
+
+    def delete_queryset(self, request, queryset):
+        for fenetre in queryset:
+            self.delete_model(request, fenetre)

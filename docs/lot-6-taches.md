@@ -103,6 +103,18 @@ sortants arrivent au lot 9 (T-111).
   confirmation est donc semé par la migration qui crée la table, avant le
   cloisonnement ; il se modifie ensuite par le rôle des workers.
 
+- **Fenêtre et jours fériés en base (T-72, T-73).** `conformite_fenetre`
+  porte une plage par jour de la semaine et par pays, en heure locale ; un jour
+  sans ligne est fermé, et un pays sans aucune fenêtre n'est jamais ouvert :
+  l'écran annonce alors qu'aucune ouverture n'est prévue plutôt que d'inventer
+  une heure. L'ouverture est incluse, la fermeture exclue. Les deux tables sont
+  relues à chaque question, sans cache : un jour férié saisi prend effet
+  aussitôt. Aucun jour férié n'est semé, faute de source vérifiée pour les
+  dates ; la table reste vide jusqu'à la saisie d'un agent.
+- **Écran d'agent (T-73).** La fenêtre et les jours fériés se tiennent dans
+  l'administration du back-office ; chaque ajout, correction ou suppression
+  passe par `conformite.services` et s'inscrit au journal d'audit.
+
 ## T-69 · Détection du STOP entrant
 
 **Produit** La normalisation du message reçu, sans accents ni casse, et sa comparaison à la table des mots-clés : STOP, ARRET, ARRETER, et les variantes avec espaces ou ponctuation.

@@ -538,7 +538,16 @@ année, `periode_debut`, `periode_fin`, `montant_ht`, `tva`, `montant_ttc`,
 
 ## conformite
 
-**`conformite_jour_ferie`** : `id`, `pays`, `date`, `libelle`.
+**`conformite_fenetre`** : `id`, `pays`, `jour` de 1 (lundi) à 7 (dimanche),
+`ouverture`, `fermeture`, en heure locale du pays. Unicité sur `(pays, jour)`,
+ouverture avant fermeture. Un jour sans ligne est fermé aux envois marketing.
+Semée du lundi au samedi, de 8 h à 20 h, pour le Burkina Faso.
+
+**`conformite_jour_ferie`** : `id`, `pays`, `date`, `libelle`. Unicité sur
+`(pays, date)`. Saisie par un agent, année par année ; rien n'est semé.
+
+Ces deux tables sont lues par tous, sans client posé, et ne s'écrivent que par
+le back-office, chaque changement tracé au journal d'audit.
 
 **`conformite_consentement`** : `id`, `client_id`, `contact_id` UUID simple,
 `source`, `preuve` en jsonb, `obtenu_le`.
