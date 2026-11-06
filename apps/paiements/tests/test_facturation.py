@@ -180,16 +180,16 @@ def test_la_correction_passe_par_des_avoirs_bornes_a_la_facture(compte, emetteur
         facture.id, montant_ht=5_000, motif="Remboursement", agent=agent
     )
     assert (premier.numero, premier.tva, premier.montant_ttc) == ("AV-2026-000001", 900, 5_900)
-    with pytest.raises(services.FacturationImpossible, match="multiples de 50"):
-        services.emettre_avoir(facture.id, montant_ht=125, motif="x", agent=agent)
-    solde = services.emettre_avoir(facture.id, montant_ht=5_000, motif="Solde", agent=agent)
-    assert solde.tva + premier.tva == facture.tva
+    impair = services.emettre_avoir(facture.id, montant_ht=125, motif="Reliquat", agent=agent)
+    assert impair.tva == 22  # 22,5 arrondi au franc inférieur
+    solde = services.emettre_avoir(facture.id, montant_ht=4_875, motif="Solde", agent=agent)
+    assert solde.tva + impair.tva + premier.tva == facture.tva
     with pytest.raises(services.FacturationImpossible, match="trop élevé"):
         services.emettre_avoir(facture.id, montant_ht=50, motif="De trop", agent=agent)
 
     texte = _texte(rendu.facture_pdf(premier.mentions))
     assert "Avoir n° AV-2026-000001" in texte and "facture n° F-2026-000001" in texte
-    assert Audit.objects.filter(action="paiements.avoir.emis").count() == 2
+    assert Audit.objects.filter(action="paiements.avoir.emis").count() == 3
     facture.refresh_from_db()
     assert facture.montant_ht == 10_000  # la facture, elle, n'a pas bougé
 

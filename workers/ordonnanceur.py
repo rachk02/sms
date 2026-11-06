@@ -94,6 +94,7 @@ class Ordonnanceur(Worker):
 
         from apps.campagnes.diffusion import publier as publier_campagnes
         from apps.campagnes.planification import planifier
+        from apps.contacts.services import effacer_comptes_clos
         from apps.core import bus
         from apps.credits.rapprochement import rapprocher
         from apps.journal.services import creer_partitions_a_venir
@@ -138,6 +139,8 @@ class Ordonnanceur(Worker):
                     # lire et alerter, le refaire après un redémarrage ne coûte rien.
                     if time.monotonic() - dernier_rapprochement >= self.periode_rapprochement_s:
                         await sync_to_async(rapprocher)()
+                        # Contacts des comptes clos depuis trente jours (T-89).
+                        await sync_to_async(effacer_comptes_clos)()
                         dernier_rapprochement = time.monotonic()
                     # Paiements en attente revérifiés, rappel reçu ou non, puis
                     # expirés au-delà du délai (T-86).

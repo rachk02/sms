@@ -1,8 +1,10 @@
 """Lectures du journal des messages. Aucune écriture."""
 
-from datetime import datetime, timedelta
+import csv
+import io
+from datetime import datetime, time, timedelta
 
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.utils import timezone
 
 from .models import Compteur, Message
@@ -58,3 +60,87 @@ def volume_mensuel(client_id, maintenant: datetime | None = None) -> int:
         client_id=client_id, heure__gte=debut_du_mois(maintenant)
     ).aggregate(total=Sum("emis"))["total"]
     return total or 0
+
+
+# Export du journal par le client (T-89)
+
+EXPORT_JOURS_MAX = 366
+EXPORT_LOT = 2_000
+COLONNES_EXPORT = (
+    "date_reception",
+    "numero",
+    "operateur",
+    "expediteur",
+    "nature",
+    "texte",
+    "segments",
+    "cout_total",
+    "etat",
+    "motif_echec",
+    "date_soumission",
+    "date_accuse",
+    "campagne_id",
+)
+
+
+def periode_d_export(debut: str | None, fin: str | None) -> tuple[datetime, datetime]:
+    """[debut, fin) en heure locale, fin incluse dans la saisie : un an au plus."""
+    from django.utils.dateparse import parse_date
+
+    jour_debut, jour_fin = parse_date(debut or ""), parse_date(fin or "")
+    if jour_debut is None or jour_fin is None:
+        raise ValueError("Indiquez une date de début et une date de fin (AAAA-MM-JJ).")
+    if jour_fin < jour_debut:
+        raise ValueError("La date de fin précède la date de début.")
+    if (jour_fin - jour_debut).days >= EXPORT_JOURS_MAX:
+        raise ValueError(f"Un export couvre {EXPORT_JOURS_MAX} jours au plus.")
+    depart = timezone.make_aware(datetime.combine(jour_debut, time.min))
+    return depart, timezone.make_aware(datetime.combine(jour_fin + timedelta(days=1), time.min))
+
+
+def _ligne(valeurs) -> str:
+    tampon = io.StringIO()
+    csv.writer(tampon, delimiter=";").writerow(valeurs)
+    return tampon.getvalue()
+
+
+def _date(valeur) -> str:
+    return timezone.localtime(valeur).isoformat(timespec="seconds") if valeur else ""
+
+
+def export_csv(client_id, debut: datetime, fin: datetime):
+    """Les messages du client sur [debut, fin), en CSV ligne par ligne, par lots
+    paginés par curseur sur (date_reception, id) : jamais d'OFFSET."""
+    yield "﻿" + _ligne(COLONNES_EXPORT)
+    curseur = None
+    while True:
+        lot = Message.objects.filter(
+            client_id=client_id, date_reception__gte=debut, date_reception__lt=fin
+        )
+        if curseur:
+            lot = lot.filter(
+                Q(date_reception__gt=curseur[0]) | Q(date_reception=curseur[0], id__gt=curseur[1])
+            )
+        lot = list(
+            lot.order_by("date_reception", "id").values_list(
+                "date_reception",
+                "numero_normalise",
+                "operateur",
+                "expediteur_libelle",
+                "nature",
+                "texte",
+                "segments",
+                "cout_total",
+                "etat",
+                "motif_echec",
+                "date_soumission",
+                "date_accuse",
+                "campagne_id",
+                "id",
+            )[:EXPORT_LOT]
+        )
+        if not lot:
+            return
+        for recu, *milieu, soumis, accuse, campagne, _id in lot:
+            yield _ligne([_date(recu), *milieu, _date(soumis), _date(accuse), campagne or ""])
+        curseur = (lot[-1][0], lot[-1][-1])

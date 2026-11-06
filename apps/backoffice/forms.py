@@ -59,3 +59,16 @@ class AvoirForm(forms.Form):
 
     montant_ht = forms.IntegerField(min_value=1, label="Montant de l'avoir (FCFA hors taxes)")
     motif = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}))
+
+
+class ClotureForm(forms.Form):
+    motif = forms.CharField(
+        widget=forms.Textarea(attrs={"rows": 3}),
+        help_text="La demande écrite du client : date, auteur, moyen de réception.",
+    )
+
+
+class RemboursementForm(forms.Form):
+    reference = forms.CharField(
+        max_length=100, label="Référence du virement", help_text="Le virement fait au client."
+    )

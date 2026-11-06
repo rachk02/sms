@@ -43,6 +43,9 @@ ATTENDUS = {
     "recharger": ("post", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 200}),
     "paiement": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
     "factures": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
+    "donnees": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
+    # Sans période, l'export du journal est refusé.
+    "journal-export": ("get", {ANONYME: CONNEXION, UTILISATEUR: 400, ADMIN: 400}),
     "facture": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
     "paiement-statut": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
     # La page du fournisseur simulé : un paiement inconnu n'existe pas.

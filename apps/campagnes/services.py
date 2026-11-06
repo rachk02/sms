@@ -27,6 +27,7 @@ from django.db.models import Q, Value
 from django.db.models.functions import Coalesce, NullIf
 from django.utils import timezone
 
+from apps.comptes.models import Client
 from apps.contacts import liste_noire, segments
 from apps.contacts.models import Contact, Liste, ListeContact, Segment
 from apps.core.audit import auditer
@@ -292,11 +293,18 @@ def apercu(campagne: Campagne) -> Apercu:
 # Envoi de test
 
 
+def _compte_ouvert(client) -> None:
+    """Un compte suspendu ou clos n'envoie plus rien (T-89)."""
+    if client.etat != Client.Etat.ACTIF:
+        raise CampagneRefusee(f"Compte {client.get_etat_display().lower()} : aucun envoi possible.")
+
+
 def envoyer_test(campagne: Campagne, *, numero: str, auteur) -> object:
     """Un exemplaire du message, au cas le plus long, vers un numéro. Facturé
     comme un envoi unitaire, hors de la réservation de la campagne (décision
     du 30 septembre 2026) ; toujours sur la file prioritaire."""
     client = campagne.client
+    _compte_ouvert(client)
     try:
         numero = normaliser(numero, client.pays)
     except NumeroInvalide as refus:
@@ -361,6 +369,7 @@ def _figer(campagne: Campagne, vu: Apercu, *, auteur, attente_max_ms=None) -> Ca
     programmée attend ensuite son heure ; les autres partent aussitôt.
     `attente_max_ms` borne l'attente du verrou du solde pour un client qui
     attend la réponse ; l'ordonnanceur attend sans borne."""
+    _compte_ouvert(campagne.client)
     if vu.destinataires == 0:
         raise CampagneRefusee("Aucun destinataire à servir.")
     requete, parametres = (

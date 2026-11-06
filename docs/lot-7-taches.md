@@ -349,7 +349,7 @@ Choix faits, à confirmer :
 - deux séries numérotées à part, F pour les factures et AV pour les avoirs, sur six chiffres, remises à un chaque année ;
 - la date de facture est celle de l'émission, la date du paiement figurant à part ;
 - sans TVA, la facture porte « TVA non appliquée » : la formule légale est à confirmer ;
-- un avoir partiel se fait au pas d'achat, pour que sa TVA tombe juste ; le dernier avoir prend le reste exact.
+- la TVA d'un avoir partiel est arrondie au franc inférieur ; le dernier avoir d'une facture prend le reste exact (changé en T-89, pour qu'un remboursement au franc près reste possible).
 
 Point ouvert, à trancher avec l'utilisateur : les mentions obligatoires d'une facture au Burkina Faso, le format de numérotation, et l'éventuelle obligation de certification ou de transmission des factures à l'administration fiscale (revue d'avant-démarrage). Rien n'est inventé sur ce point : le mécanisme est prêt, et l'émission reste coupée tant que l'identité de l'émetteur est vide.
 
@@ -358,6 +358,16 @@ Point ouvert, à trancher avec l'utilisateur : les mentions obligatoires d'une f
 **Produit** L'export des répertoires, du journal et des factures à la demande du client, et la procédure de clôture : arrêt des envois, conservation des pièces comptables, suppression ou anonymisation des contacts, sort du solde.
 
 **Critères** L'export s'obtient sans demander quoi que ce soit au support. Une clôture laisse les pièces comptables intactes et rend les contacts irrécupérables au terme du délai. Le sort du solde suit la règle écrite aux conditions générales, et le test échoue si cette règle n'est pas encore tranchée.
+
+**Fait.** Export : la page « Mes données » (`/compte/donnees`) mène à l'export du répertoire (existant, par courriel), à l'export du journal d'envois en CSV (`/journal/export`, période obligatoire d'un an au plus, pagination par curseur, client posé par le générateur lui-même) et aux factures. Clôture, au back-office, depuis la fiche du client : `backoffice.services.cloturer_compte` clôt le compte (`comptes.services.clore` : état CLOTURE, date, membres désactivés, trace à l'audit), puis annule chaque campagne en cours ou programmée, ce qui libère ses réservations ; un compte qui n'est plus actif ne peut plus ni confirmer une campagne ni envoyer un test. Le remboursement se saisit à part, sur demande écrite : `credits.part_remboursable` applique la règle tranchée (offerts consommés d'abord, seule la part payée et non consommée se rembourse, un ajustement corrige une consommation) ; `paiements.rembourser_cloture` émet les avoirs, sur les factures les plus récentes d'abord, puis solde le compte par deux ajustements, le remboursement et les crédits offerts perdus. L'ordonnanceur, une fois par jour, efface les contacts des comptes clos depuis trente jours (contacts, listes, segments, champs, imports et exports, et leurs fichiers dans le stockage) ; restent la liste noire, les consentements, les factures, les justificatifs, le registre et l'audit. Les tests suivent la règle du solde pas à pas, le remboursement en deux avoirs, et l'effacement à 29 puis à 31 jours.
+
+Choix faits, à confirmer :
+
+- le remboursement exige que les factures des achats soient émises : tant que l'identité de l'émetteur manque, il est refusé ;
+- la TVA d'un avoir partiel est arrondie au franc inférieur, le dernier avoir d'une facture reprenant le reste exact ;
+- la liste noire du compte est gardée après l'effacement : elle prouve qu'un abonné s'est opposé aux envois ;
+- les messages du journal suivent la durée de rétention du journal, encore à trancher (lot 6), et ne sont pas effacés à la clôture ;
+- le remboursement attend que les réservations des campagnes annulées soient libérées.
 
 ## T-90 · Point de contrôle du lot
 

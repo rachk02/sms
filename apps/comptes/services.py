@@ -311,3 +311,43 @@ def retirer_membre(membre: Utilisateur, *, auteur, adresse_ip=None) -> None:
         apres={"actif": False},
         adresse_ip=adresse_ip,
     )
+
+
+# Clôture (T-89)
+
+
+class ClotureRefusee(ValueError):
+    pass
+
+
+@transaction.atomic
+def clore(client: Client, *, auteur, motif: str, adresse_ip=None) -> Client:
+    """Clôt un compte : plus aucun envoi, plus aucune connexion de ses membres.
+    Les pièces comptables et les traces restent ; les contacts sont effacés au
+    terme du délai, par l'ordonnanceur. Tracé au journal d'audit."""
+    from apps.core.audit import auditer
+
+    motif = (motif or "").strip()
+    if not motif:
+        raise ClotureRefusee("Une clôture exige un motif : la demande écrite du client.")
+    client = Client.objects.select_for_update().get(id=client.id)
+    if client.etat == Client.Etat.CLOTURE:
+        raise ClotureRefusee("Ce compte est déjà clos.")
+    avant = client.etat
+    client.etat = Client.Etat.CLOTURE
+    client.cloture_le = timezone.now()
+    client.save(update_fields=["etat", "cloture_le", "modifie_le"])
+    membres = Utilisateur.objects.filter(client=client, is_active=True)
+    retires = list(membres.values_list("id", flat=True))
+    membres.update(is_active=False)
+    auditer(
+        "comptes.cloture",
+        client,
+        auteur=auteur,
+        client=client,
+        avant={"etat": avant},
+        apres={"etat": client.etat, "membres_desactives": [str(i) for i in retires]},
+        motif=motif,
+        adresse_ip=adresse_ip,
+    )
+    return client

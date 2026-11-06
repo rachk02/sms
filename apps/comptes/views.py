@@ -57,6 +57,12 @@ def deconnexion(request):
 
 
 @permission_requise("compte.consulter")
+def donnees(request):
+    """Les exports du compte, sans passer par le support (T-89)."""
+    return render(request, "comptes/donnees.html")
+
+
+@permission_requise("compte.consulter")
 def accueil(request):
     client = request.user.client
     dossier = Dossier.objects.filter(client=client).order_by("-cree_le").first()

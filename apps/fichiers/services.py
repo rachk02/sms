@@ -21,6 +21,7 @@ from functools import cache
 from urllib.parse import urlparse
 
 from django.conf import settings
+from django.utils import timezone
 from minio import Minio
 from minio.sse import SseS3
 
@@ -194,3 +195,11 @@ def ouvrir(fichier: Fichier):
 def lien(fichier: Fichier, duree: timedelta = DUREE_LIEN) -> str:
     """Lien signé vers le fichier, à produire après contrôle des droits."""
     return _stockage().presigned_get_object(settings.MINIO_BUCKET, fichier.chemin, expires=duree)
+
+
+def supprimer(fichier: Fichier) -> None:
+    """Efface le contenu du stockage et note la suppression. La ligne reste, sans
+    contenu derrière elle : la trace de ce qui a existé, rien de plus."""
+    if fichier.supprime_le is None:
+        _stockage().remove_object(settings.MINIO_BUCKET, fichier.chemin)
+        Fichier.objects.filter(id=fichier.id).update(supprime_le=timezone.now())

@@ -14,10 +14,12 @@ from django.utils.dateparse import parse_date
 
 from apps.comptes import second_facteur
 from apps.comptes.models import Client, Dossier, Piece, Utilisateur
+from apps.comptes.services import ClotureRefusee
 from apps.conformite import services as conformite
 from apps.conformite.models import Fenetre, JourFerie
 from apps.core.models import Audit
 from apps.core.numeros import NumeroInvalide, normaliser
+from apps.credits import services as credits
 from apps.expediteurs import services as expediteurs
 from apps.expediteurs.models import Expediteur, ExpediteurReseau, Reserve
 from apps.fichiers.models import Fichier
@@ -26,7 +28,13 @@ from apps.paiements import services as paiements
 from apps.paiements.models import Facture, Reglage, Transaction
 
 from . import selectors
-from .forms import AvoirForm, EnregistrementClientForm, PaiementManuelForm
+from .forms import (
+    AvoirForm,
+    ClotureForm,
+    EnregistrementClientForm,
+    PaiementManuelForm,
+    RemboursementForm,
+)
 from .models import DossierPreuve
 from .services import (
     CONTROLES_DE_REVUE,
@@ -34,6 +42,7 @@ from .services import (
     EnregistrementRefuse,
     PieceDeposee,
     approuver_dossier,
+    cloturer_compte,
     enregistrer_client,
     rejeter_dossier,
 )
@@ -48,6 +57,97 @@ class ClientAdmin(admin.ModelAdmin):
     list_display = ("raison_sociale", "forme", "rccm", "ifu", "palier", "etat", "cree_le")
     list_filter = ("forme", "palier", "etat")
     search_fields = ("raison_sociale", "rccm", "ifu")
+
+    def get_urls(self):
+        propres = [
+            path(
+                "<uuid:pk>/cloturer/",
+                self.admin_site.admin_view(self.cloturer),
+                name="comptes_client_cloturer",
+            ),
+            path(
+                "<uuid:pk>/rembourser/",
+                self.admin_site.admin_view(self.rembourser),
+                name="comptes_client_rembourser",
+            ),
+        ]
+        return propres + super().get_urls()
+
+    def _formulaire(self, request, titre, introduction, bouton, formulaire):
+        contexte = {
+            **self.admin_site.each_context(request),
+            "title": titre,
+            "introduction": introduction,
+            "bouton": bouton,
+            "formulaire": formulaire,
+            "opts": self.model._meta,
+        }
+        return TemplateResponse(request, "admin/backoffice/formulaire.html", contexte)
+
+    def cloturer(self, request, pk):
+        """Clôture sur demande écrite du client (T-89)."""
+        client = Client.objects.get(pk=pk)
+        formulaire = ClotureForm(request.POST or None)
+        if request.method == "POST" and formulaire.is_valid():
+            try:
+                annulees = cloturer_compte(
+                    client,
+                    agent=request.user,
+                    motif=formulaire.cleaned_data["motif"],
+                    adresse_ip=adresse_ip(request),
+                )
+            except ClotureRefusee as refus:
+                formulaire.add_error(None, str(refus))
+            else:
+                messages.success(
+                    request,
+                    f"{client} clos ; {len(annulees)} campagne(s) annulée(s). Les contacts "
+                    "seront effacés dans trente jours.",
+                )
+                return redirect("admin:comptes_client_change", client.id)
+        return self._formulaire(
+            request,
+            f"Clore le compte {client}",
+            "Plus aucun envoi ni aucune connexion ; les campagnes en cours sont annulées. "
+            "Factures, justificatifs et registre restent. Les contacts sont effacés trente "
+            "jours après la clôture.",
+            "Clore le compte",
+            formulaire,
+        )
+
+    def rembourser(self, request, pk):
+        """Remboursement de la part payée et non consommée, compte clos (T-89)."""
+        client = Client.objects.get(pk=pk)
+        part = credits.part_remboursable(client.id)
+        formulaire = RemboursementForm(request.POST or None)
+        if request.method == "POST" and formulaire.is_valid():
+            try:
+                resultat = paiements.rembourser_cloture(
+                    client,
+                    agent=request.user,
+                    reference=formulaire.cleaned_data["reference"],
+                    adresse_ip=adresse_ip(request),
+                )
+            except (paiements.RemboursementRefuse, paiements.FacturationImpossible) as refus:
+                formulaire.add_error(None, str(refus))
+            else:
+                messages.success(
+                    request,
+                    f"{resultat.montant_ttc} FCFA TTC remboursés ({resultat.credits_rembourses} "
+                    f"FCFA de crédits) ; avoirs {', '.join(resultat.avoirs) or 'aucun'} ; "
+                    f"{resultat.credits_perdus} FCFA de crédits offerts perdus.",
+                )
+                return redirect("admin:comptes_client_change", client.id)
+        return self._formulaire(
+            request,
+            f"Rembourser le solde de {client}",
+            f"Crédits payés {part.payes} FCFA, offerts {part.offerts}, consommés "
+            f"{part.consomme} ; solde {part.solde}. Remboursable : {part.remboursable} FCFA HT "
+            f"de crédits ; perdus : {part.perdu} FCFA de crédits offerts. Le virement au client "
+            "se fait hors de la plateforme : indiquez sa référence.",
+            "Enregistrer le remboursement",
+            formulaire,
+        )
 
     def add_view(self, request, form_url="", extra_context=None):
         """Enregistrer un client signé : identité, représentant, pièces."""

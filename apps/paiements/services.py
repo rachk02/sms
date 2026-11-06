@@ -535,9 +535,7 @@ def emettre_avoir(
     if deja_ht + montant_ht == origine.montant_ht:
         tva = origine.tva - deja_tva  # le solde exact, sans reste d'arrondi
     else:
-        pas = 100 // math.gcd(100, taux) if taux else 1
-        if montant_ht % pas:
-            raise FacturationImpossible(f"Un avoir partiel se fait par multiples de {pas} FCFA HT.")
+        # Arrondie au franc inférieur ; le dernier avoir reprend le reste exact.
         tva = montant_ht * taux // 100
     avoir = _ecrire_facture(
         type_=Facture.Type.AVOIR,
@@ -619,3 +617,112 @@ def facturer_en_attente(limite: int = A_FACTURER) -> int:
         except Exception:
             journal.exception("PDF de la facture %s impossible à archiver.", facture.numero)
     return emises
+
+
+# Remboursement à la clôture (T-89)
+
+
+class RemboursementRefuse(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class Remboursement:
+    credits_rembourses: int
+    montant_ttc: int
+    credits_perdus: int
+    avoirs: list
+
+
+@transaction.atomic
+def rembourser_cloture(client, *, agent, reference: str, adresse_ip=None) -> Remboursement:
+    """Sur demande écrite d'un client dont le compte est clos, un agent saisit le
+    remboursement de la part payée et non consommée (règle des conditions
+    générales, voir credits.part_remboursable). Des avoirs la portent, sur les
+    factures les plus récentes d'abord ; deux ajustements soldent le compte, l'un
+    pour le remboursement, l'autre pour les crédits offerts perdus. Le virement
+    au client se fait hors de la plateforme : `reference` est la sienne."""
+    from apps.comptes.models import Client
+
+    reference = (reference or "").strip()
+    if agent is None:
+        raise RemboursementRefuse("Un remboursement porte l'agent qui le saisit.")
+    if not reference:
+        raise RemboursementRefuse("Indiquez la référence du virement de remboursement.")
+    if client.etat != Client.Etat.CLOTURE:
+        raise RemboursementRefuse("Le solde ne se rembourse qu'à la clôture du compte.")
+    if credits.solde(client.id).reserve:
+        raise RemboursementRefuse(
+            "Des réservations sont encore actives : attendre la fin des campagnes annulées."
+        )
+    part = credits.part_remboursable(client.id)
+    if not part.remboursable and not part.perdu:
+        raise RemboursementRefuse("Le solde du compte est nul : rien à rembourser.")
+
+    avoirs = []
+    reste = part.remboursable
+    factures = (
+        Facture.objects.select_for_update()
+        .filter(client=client, type=Facture.Type.FACTURE)
+        .order_by("-emise_le", "-id")
+    )
+    for facture in factures:
+        if not reste:
+            break
+        corrige = facture.avoirs.aggregate(total=Sum("montant_ht"))["total"] or 0
+        part_facture = min(reste, facture.montant_ht - corrige)
+        if part_facture <= 0:
+            continue
+        avoirs.append(
+            emettre_avoir(
+                facture.id,
+                montant_ht=part_facture,
+                motif=f"Remboursement à la clôture du compte, virement {reference}",
+                agent=agent,
+                adresse_ip=adresse_ip,
+            )
+        )
+        reste -= part_facture
+    if reste:
+        raise RemboursementRefuse(
+            f"{reste} FCFA payés ne portent pas encore de facture : le remboursement "
+            "attend l'émission des factures."
+        )
+
+    if part.remboursable:
+        credits.ajuster(
+            client.id,
+            -part.remboursable,
+            motif=f"Remboursement à la clôture, virement {reference}",
+            auteur=agent,
+            reference=f"cloture:{client.id}",
+        )
+    if part.perdu:
+        credits.ajuster(
+            client.id,
+            -part.perdu,
+            motif="Crédits offerts perdus à la clôture",
+            auteur=agent,
+            reference=f"cloture:{client.id}",
+        )
+    resultat = Remboursement(
+        credits_rembourses=part.remboursable,
+        montant_ttc=sum(a.montant_ttc for a in avoirs),
+        credits_perdus=part.perdu,
+        avoirs=[a.numero for a in avoirs],
+    )
+    auditer(
+        "paiements.remboursement.cloture",
+        client,
+        auteur=agent,
+        client=client,
+        apres={
+            "credits_rembourses": resultat.credits_rembourses,
+            "montant_ttc": resultat.montant_ttc,
+            "credits_perdus": resultat.credits_perdus,
+            "avoirs": resultat.avoirs,
+            "reference": reference,
+        },
+        adresse_ip=adresse_ip,
+    )
+    return resultat

@@ -238,3 +238,25 @@ def rejeter_dossier(dossier_id, *, agent, motif: str, detail: str = "", adresse_
         donnees={"motif": motif, "libelle": libelle, "detail": dossier.motif_detail},
     )
     return dossier
+
+
+# Clôture d'un compte (T-89)
+
+
+@transaction.atomic
+def cloturer_compte(client, *, agent, motif: str, adresse_ip=None) -> list:
+    """Sur demande écrite du client : le compte est clos (plus d'envoi, plus de
+    connexion), puis chaque campagne en cours ou programmée est annulée, ce qui
+    libère ses réservations. Rend les campagnes annulées. Le remboursement du
+    solde se saisit à part (paiements.rembourser_cloture), et les contacts sont
+    effacés par l'ordonnanceur trente jours plus tard."""
+    from apps.campagnes import services as campagnes
+    from apps.campagnes.models import Campagne
+    from apps.comptes.services import clore
+
+    clore(client, auteur=agent, motif=motif, adresse_ip=adresse_ip)
+    annulees = []
+    en_cours = Campagne.objects.filter(client=client, etat__in=campagnes.ANNULABLES)
+    for campagne in en_cours.order_by("cree_le"):
+        annulees.append(campagnes.annuler(campagne, auteur=agent))
+    return annulees

@@ -540,3 +540,47 @@ def publier_version(version: VersionGrille, *, auteur, maintenant=None) -> Versi
         },
     )
     return version
+
+
+# Part remboursable à la clôture (T-89)
+
+
+@dataclass(frozen=True)
+class PartRemboursable:
+    """Ce que le registre dit d'un compte au moment de sa clôture. `remboursable`
+    est la part payée et non consommée ; `perdu`, le reste du solde, offert."""
+
+    payes: int
+    offerts: int
+    consomme: int
+    solde: int
+    remboursable: int
+    perdu: int
+
+
+def part_remboursable(client_id) -> PartRemboursable:
+    """Règle des conditions générales, tranchée le 6 novembre 2026 : les envois
+    consomment d'abord les crédits offerts, puis les crédits payés. Seule la
+    part payée et non consommée se rembourse ; les crédits offerts restants sont
+    perdus. Un ajustement corrige une consommation : positif, il la réduit ;
+    négatif, il l'accroît, comme le débit du remboursement lui-même, après
+    lequel plus rien n'est remboursable."""
+    sommes = dict(
+        Ecriture.objects.filter(client_id=client_id)
+        .values_list("type")
+        .annotate(total=Sum("montant"))
+        .values_list("type", "total")
+    )
+    payes = sommes.get(Ecriture.Type.ACHAT, 0)
+    offerts = sommes.get(Ecriture.Type.RECREDIT, 0)
+    consomme = -sommes.get(Ecriture.Type.CONSOMMATION, 0) - sommes.get(Ecriture.Type.AJUSTEMENT, 0)
+    solde = payes + offerts - consomme
+    remboursable = max(0, payes - max(0, consomme - offerts))
+    return PartRemboursable(
+        payes=payes,
+        offerts=offerts,
+        consomme=consomme,
+        solde=solde,
+        remboursable=remboursable,
+        perdu=max(0, solde - remboursable),
+    )

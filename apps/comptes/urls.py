@@ -14,5 +14,6 @@ urlpatterns = [
     path("second-facteur/activer", vues_second_facteur.activer, name="second-facteur-activer"),
     path("second-facteur/codes", vues_second_facteur.codes, name="second-facteur-codes"),
     path("second-facteur/verifier", vues_second_facteur.verifier, name="second-facteur-verifier"),
+    path("compte/donnees", views.donnees, name="donnees"),
     path("", views.accueil, name="accueil"),
 ]
