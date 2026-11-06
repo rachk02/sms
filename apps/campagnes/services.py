@@ -289,6 +289,7 @@ def envoyer_test(campagne: Campagne, *, numero: str, auteur) -> object:
                 message.cout_total,
                 message_id=message.id,
                 message_date_reception=message.date_reception,
+                attente_max_ms=credits.ATTENTE_RESERVATION_MS,
             )
         except credits.SoldeInsuffisant as refus:
             raise CampagneRefusee(
@@ -313,11 +314,13 @@ ON CONFLICT DO NOTHING
 """
 
 
-def _figer(campagne: Campagne, vu: Apercu, *, auteur) -> Campagne:
+def _figer(campagne: Campagne, vu: Apercu, *, auteur, attente_max_ms=None) -> Campagne:
     """Fige les destinataires et réserve le coût de l'aperçu `vu`, pour une
     campagne verrouillée par l'appelant. Seule porte, que la confirmation
     vienne d'un client ou d'une occurrence sous son plafond. Une campagne
-    programmée attend ensuite son heure ; les autres partent aussitôt."""
+    programmée attend ensuite son heure ; les autres partent aussitôt.
+    `attente_max_ms` borne l'attente du verrou du solde pour un client qui
+    attend la réponse ; l'ordonnanceur attend sans borne."""
     if vu.destinataires == 0:
         raise CampagneRefusee("Aucun destinataire à servir.")
     requete, parametres = (
@@ -340,7 +343,9 @@ def _figer(campagne: Campagne, vu: Apercu, *, auteur) -> Campagne:
     # solde n'est tenu que pour la fin de la transaction, pas pendant l'insertion.
     # Un refus annule la transaction entière, destinataires compris.
     try:
-        credits.reserver(campagne.client_id, vu.cout, campagne_id=campagne.id)
+        credits.reserver(
+            campagne.client_id, vu.cout, campagne_id=campagne.id, attente_max_ms=attente_max_ms
+        )
     except credits.SoldeInsuffisant as refus:
         raise CampagneRefusee(
             f"Solde insuffisant : {refus.disponible} FCFA disponibles, {refus.demande} nécessaires."
@@ -411,7 +416,7 @@ def confirmer(campagne: Campagne, *, auteur, destinataires_lus: int, cout_lu: in
         )
     if campagne.recurrente:
         return _armer(campagne, vu, auteur=auteur)
-    return _figer(campagne, vu, auteur=auteur)
+    return _figer(campagne, vu, auteur=auteur, attente_max_ms=credits.ATTENTE_RESERVATION_MS)
 
 
 # Occurrences d'une campagne récurrente

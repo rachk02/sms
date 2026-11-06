@@ -6,6 +6,7 @@ celui de la ligne `credits_compte`.
 """
 
 import threading
+import time
 import uuid
 
 import pytest
@@ -176,6 +177,35 @@ def test_le_delai_d_attente_est_rendu_a_la_transaction(client):
     """La borne ne vaut que pour la prise du verrou de la réservation."""
     with transaction.atomic(), connection.cursor() as curseur:
         curseur.execute("SET LOCAL lock_timeout = '42s'")
-        credits.reserver(client.id, PRIX, campagne_id=uuid.uuid7())
+        credits.reserver(client.id, PRIX, campagne_id=uuid.uuid7(), attente_max_ms=300)
         curseur.execute("SHOW lock_timeout")
         assert curseur.fetchone()[0] == "42s"
+
+
+def test_sans_borne_la_reservation_attend_son_tour(client):
+    """L'ordonnanceur (occurrence récurrente) attend le verrou au lieu d'échouer :
+    personne ne serait là pour réessayer."""
+    verrou_pris, erreurs = threading.Event(), []
+
+    def tenir_le_solde():
+        try:
+            with transaction.atomic():
+                CompteCredit.objects.select_for_update().get(client_id=client.id)
+                verrou_pris.set()
+                time.sleep(0.8)
+        except Exception as erreur:  # noqa: BLE001
+            erreurs.append(erreur)
+        finally:
+            connection.close()
+
+    fil = threading.Thread(target=tenir_le_solde)
+    fil.start()
+    assert verrou_pris.wait(10)
+    debut = time.monotonic()
+    credits.reserver(client.id, PRIX, campagne_id=uuid.uuid7())
+    attendu = time.monotonic() - debut
+    fil.join(10)
+
+    assert not erreurs
+    assert attendu >= 0.5, f"la réservation n'a attendu que {attendu:.2f} s"
+    assert _soldes(client)[0] == credits.Solde(SOLDE, PRIX)

@@ -5,10 +5,12 @@ client (`credits_compte`, SELECT ... FOR UPDATE), puis celui de la réservation
 concernée, toujours dans cet ordre : deux opérations concurrentes sur un même
 client s'attendent au lieu de se croiser, et deux clients ne se gênent pas.
 
-Une réservation, demandée par un client qui attend la réponse, n'attend le
-verrou que `ATTENTE_RESERVATION_MS` : au-delà, elle est refusée par
-SoldeOccupe plutôt que de laisser l'écran tourner. Les autres opérations
-(achat, règlement, libération) viennent des workers et attendent leur tour.
+Une réservation demandée par un client qui attend la réponse passe
+`attente_max_ms` (en pratique `ATTENTE_RESERVATION_MS`) : au-delà, elle est
+refusée par SoldeOccupe plutôt que de laisser l'écran tourner. Les opérations
+des workers (achat, règlement, libération, occurrence d'une campagne
+récurrente) attendent leur tour sans borne : un refus passager n'y aurait
+personne pour réessayer.
 """
 
 from dataclasses import dataclass
@@ -176,12 +178,13 @@ def reserver(
     campagne_id=None,
     message_id=None,
     message_date_reception=None,
+    attente_max_ms: int | None = None,
 ) -> Reservation:
     """Retient `montant` sur le solde disponible, pour une campagne entière ou un
     envoi unitaire. Lève SoldeInsuffisant si le solde ne couvre pas tout,
-    SoldeOccupe si le verrou du solde reste pris au-delà du délai d'attente."""
+    SoldeOccupe si le verrou du solde reste pris au-delà de `attente_max_ms`."""
     _montant_positif(montant)
-    compte = _compte_verrouille(client_id, ATTENTE_RESERVATION_MS)
+    compte = _compte_verrouille(client_id, attente_max_ms)
     if compte.solde_disponible < montant:
         raise SoldeInsuffisant(compte.solde_disponible, montant)
     compte.montant_reserve += montant
