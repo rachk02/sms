@@ -467,9 +467,12 @@ seul des deux, `campagne_id` ou `message_id`, soit renseigné. Unicité sur
 `campagne_id` et sur `message_id` quand ils sont renseignés. Index sur
 `(client_id, etat)`.
 
-**`credits_grille`** : `id`, `nom`, `client_id` nul pour la grille publique,
-`devise` défaut XOF, `cree_le`. Une seule grille publique (unicité de
-`client_id` nul).
+**`credits_grille`** : `id`, `nom`, `nature` parmi PUBLIQUE, NEGOCIEE et
+PROMOTION, `client_id`, `devise` défaut XOF, `cree_le`. La grille publique est
+unique et sans client ; une grille négociée a un client, une seule par client ;
+une promotion vise tous les clients (sans client) ou un client nommé, et ses
+versions publiées ont toujours une fin. Règle de priorité : voir
+`apps/credits/tarifs.py`.
 
 **`credits_grille_version`** : `id`, `grille_id`, `debut`, `fin`, `publiee`,
 `publiee_le`, `publiee_par`, `cree_le`. Période `[debut, fin)`, `fin` nulle pour
@@ -485,7 +488,8 @@ ne change plus, sinon pour recevoir sa `fin` quand la suivante est publiée.
 grand `volume_min` atteint par le volume mensuel du client.
 
 Ces trois tables se lisent par le rôle applicatif sans s'écrire : la grille
-publique par tous, une grille négociée par son seul client, et les versions et
+publique et les promotions ouvertes par tous, une grille négociée ou une
+promotion réservée par son seul client, et les versions et
 paliers suivent la ligne parente. Elles s'écrivent par le back-office.
 
 ## telecom

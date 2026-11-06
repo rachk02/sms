@@ -236,7 +236,7 @@ def test_une_grille_negociee_ne_se_lit_que_par_son_client(transactional_db):
     b = creer_client(raison_sociale="B SA", forme=Client.Forme.SOCIETE)
     worker = Grille.objects.using("worker")
     publique = worker.create(nom="Publique")
-    negociee = worker.create(nom="Négociée A", client_id=a.id)
+    negociee = worker.create(nom="Négociée A", nature=Grille.Nature.NEGOCIEE, client_id=a.id)
     for grille, prix in ((publique, 20), (negociee, 12)):
         version = VersionGrille.objects.using("worker").create(grille=grille)
         PalierGrille.objects.using("worker").create(
@@ -260,7 +260,7 @@ def test_une_grille_negociee_ne_se_lit_que_par_son_client(transactional_db):
         transaction.atomic(),
     ):
         poser_client(a.id)
-        Grille.objects.create(nom="Pirate", client_id=a.id)
+        Grille.objects.create(nom="Pirate", nature=Grille.Nature.PROMOTION, client_id=a.id)
     with connections["worker"].cursor() as curseur:
         curseur.execute("SELECT count(*) FROM credits_grille")
         assert curseur.fetchone()[0] == 2

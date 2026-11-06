@@ -209,11 +209,22 @@ class TsTzRange(Func):
 
 
 class Grille(Identifiable):
-    """Une grille de prix. Sans client, c'est la grille publique, unique ; avec
-    un client, une grille négociée (lot 7, T-83). Les prix vivent dans ses
-    versions datées : une grille sans version publiée n'est jamais appliquée."""
+    """Une grille de prix. La grille publique est unique et sans client ; une
+    grille négociée appartient à un client, une seule par client ; une
+    promotion vise tous les clients (sans client) ou un client nommé, et ses
+    versions ont toujours une fin. Les prix vivent dans les versions datées :
+    une grille sans version publiée n'est jamais appliquée. Priorité : voir
+    apps/credits/tarifs.py."""
+
+    class Nature(models.TextChoices):
+        PUBLIQUE = "PUBLIQUE", "Grille publique"
+        NEGOCIEE = "NEGOCIEE", "Grille négociée"
+        PROMOTION = "PROMOTION", "Promotion"
 
     nom = models.CharField(max_length=150)
+    nature = models.CharField(
+        max_length=10, choices=Nature, default=Nature.PUBLIQUE, db_default="PUBLIQUE"
+    )
     client = models.ForeignKey(
         "comptes.Client", on_delete=models.PROTECT, null=True, blank=True, related_name="+"
     )
@@ -223,11 +234,23 @@ class Grille(Identifiable):
     class Meta:
         db_table = "credits_grille"
         constraints = [
+            models.CheckConstraint(
+                condition=(
+                    Q(nature="PUBLIQUE", client__isnull=True)
+                    | Q(nature="NEGOCIEE", client__isnull=False)
+                    | Q(nature="PROMOTION")
+                ),
+                name="grille_nature_client",
+            ),
+            models.UniqueConstraint(
+                fields=["nature"],
+                condition=Q(nature="PUBLIQUE"),
+                name="grille_publique_unique",
+            ),
             models.UniqueConstraint(
                 fields=["client"],
-                condition=Q(client__isnull=True),
-                nulls_distinct=False,
-                name="grille_publique_unique",
+                condition=Q(nature="NEGOCIEE"),
+                name="grille_negociee_unique",
             ),
         ]
 
@@ -256,7 +279,9 @@ class VersionGrille(Identifiable):
         db_table = "credits_grille_version"
         constraints = [
             models.CheckConstraint(
-                condition=Q(fin__isnull=True) | Q(debut__isnull=False, fin__gt=models.F("debut")),
+                condition=Q(fin__isnull=True)
+                | Q(debut__isnull=True)
+                | Q(fin__gt=models.F("debut")),
                 name="version_fin_apres_debut",
             ),
             models.CheckConstraint(

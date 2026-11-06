@@ -244,7 +244,15 @@ def tarifer(client, reseaux, maintenant: datetime | None = None) -> dict:
         "le": maintenant.isoformat(),
         "version": str(versions.pop()) if len(versions) == 1 and None not in versions else None,
         "volume_mensuel": volume,
-        "reseaux": {r: {"prix": t.prix, "palier": t.palier} for r, t in detail.items()},
+        "reseaux": {
+            r: {
+                "prix": t.prix,
+                "palier": t.palier,
+                "grille": t.nature,
+                "version": str(t.version_id) if t.version_id else None,
+            }
+            for r, t in detail.items()
+        },
     }
 
 

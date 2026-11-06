@@ -125,6 +125,9 @@ def liberation(campagne: Campagne, maintenant: datetime | None = None) -> Libera
     return Liberation(prevue)
 
 
+GRILLES = {"NEGOCIEE": "grille négociée, ", "PROMOTION": "promotion, "}
+
+
 def explication_tarif(campagne: Campagne) -> list[str]:
     """Le tarif de la campagne, phrase par phrase, pour son rapport : figé à la
     confirmation, avec le volume du mois qui a fixé le palier. Vide pour une
@@ -143,7 +146,8 @@ def explication_tarif(campagne: Campagne) -> list[str]:
             if detail["palier"]
             else "premier palier"
         )
-        lignes.append(f"{reseau} : {detail['prix']} FCFA par SMS, {palier}.")
+        grille = GRILLES.get(detail.get("grille"), "")
+        lignes.append(f"{reseau} : {detail['prix']} FCFA par SMS, {grille}{palier}.")
     lignes.append(
         "Les SMS de cette campagne comptent dans le volume du mois des envois suivants ; "
         "un palier franchi ou une grille changée pendant sa diffusion ne change pas son prix."

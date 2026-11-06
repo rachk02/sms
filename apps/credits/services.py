@@ -374,22 +374,39 @@ def _prix_entier(valeur, nom: str, minimum: int) -> None:
 
 
 @transaction.atomic
-def creer_grille(nom: str, *, auteur, client_id=None) -> Grille:
-    """Crée une grille vide. Sans client, la grille publique, qui est unique."""
+def creer_grille(
+    nom: str, *, auteur, nature: str = Grille.Nature.PUBLIQUE, client_id=None
+) -> Grille:
+    """Crée une grille vide : la grille publique (unique, sans client), la grille
+    négociée d'un client (une par client), ou une promotion, ouverte à tous ou
+    réservée à un client."""
     from apps.core.audit import auditer
 
     if not nom or not nom.strip():
         raise TarifInvalide("Une grille porte un nom.")
-    grille = Grille.objects.create(nom=nom.strip(), client_id=client_id)
-    auditer("credits.grille.creation", grille, auteur=auteur, apres={"nom": grille.nom})
+    if nature not in Grille.Nature.values:
+        raise TarifInvalide(f"Nature de grille inconnue : {nature!r}")
+    if nature == Grille.Nature.PUBLIQUE and client_id:
+        raise TarifInvalide("La grille publique ne vise aucun client en particulier.")
+    if nature == Grille.Nature.NEGOCIEE and not client_id:
+        raise TarifInvalide("Une grille négociée appartient à un client.")
+    grille = Grille.objects.create(nom=nom.strip(), nature=nature, client_id=client_id)
+    auditer(
+        "credits.grille.creation",
+        grille,
+        auteur=auteur,
+        client=grille.client,
+        apres={"nom": grille.nom, "nature": nature},
+    )
     return grille
 
 
 @transaction.atomic
-def creer_version(grille: Grille, *, debut=None) -> VersionGrille:
+def creer_version(grille: Grille, *, debut=None, fin=None) -> VersionGrille:
     """Ouvre un brouillon de version. Sans `debut`, la version prendra effet à
-    sa publication."""
-    return VersionGrille.objects.create(grille=grille, debut=debut)
+    sa publication ; sans `fin`, elle court jusqu'à la suivante. Une promotion
+    a toujours une fin."""
+    return VersionGrille.objects.create(grille=grille, debut=debut, fin=fin)
 
 
 @transaction.atomic
@@ -429,14 +446,16 @@ def _prix_de(version: VersionGrille | None) -> list[dict]:
 
 def _verifier_complete(grille: Grille, paliers: list[PalierGrille]) -> None:
     """Chaque réseau tarifé a un prix dès le premier segment du mois ; la grille
-    publique couvre en plus chaque réseau connu des pays qu'elle tarifie."""
+    publique couvre en plus chaque réseau connu des pays qu'elle tarifie. Une
+    grille négociée ou une promotion peut ne tarifer que certains réseaux : les
+    autres suivent la règle de priorité (apps/credits/tarifs.py)."""
     from apps.telecom.models import Prefixe
 
     if not paliers:
         raise TarifInvalide("Une version sans prix ne se publie pas.")
     des_le_premier = {(p.pays, p.operateur) for p in paliers if p.volume_min == 0}
     attendus = {(p.pays, p.operateur) for p in paliers}
-    if grille.client_id is None:
+    if grille.nature == Grille.Nature.PUBLIQUE:
         pays = {p.pays for p in paliers}
         attendus |= set(
             Prefixe.objects.filter(pays__in=pays, actif=True)
@@ -465,6 +484,10 @@ def publier_version(version: VersionGrille, *, auteur, maintenant=None) -> Versi
     debut = version.debut or maintenant
     if debut < maintenant:
         raise TarifInvalide("Une version ne prend pas effet dans le passé.")
+    if version.fin is not None and version.fin <= debut:
+        raise TarifInvalide("Une version finit après avoir pris effet.")
+    if grille.nature == Grille.Nature.PROMOTION and version.fin is None:
+        raise TarifInvalide("Une promotion est à durée limitée : sa version porte une fin.")
     _verifier_complete(grille, list(version.paliers.all()))
     publiees = VersionGrille.objects.select_for_update().filter(grille=grille, publiee=True)
     ulterieure = publiees.filter(debut__gte=debut).order_by("debut").first()
@@ -488,6 +511,12 @@ def publier_version(version: VersionGrille, *, auteur, maintenant=None) -> Versi
         auteur=auteur,
         client=grille.client,
         avant={"version": str(precedente.id) if precedente else None, "prix": _prix_de(precedente)},
-        apres={"grille": grille.nom, "debut": debut.isoformat(), "prix": _prix_de(version)},
+        apres={
+            "grille": grille.nom,
+            "nature": grille.nature,
+            "debut": debut.isoformat(),
+            "fin": version.fin.isoformat() if version.fin else None,
+            "prix": _prix_de(version),
+        },
     )
     return version

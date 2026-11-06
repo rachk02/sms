@@ -61,6 +61,16 @@ confirmation valent pour tous les messages de la campagne. La réservation est
 exacte, et un changement de grille pendant une campagne lissée ou en pause ne
 la touche pas.
 
+Et en ouvrant T-83 :
+
+**Priorité entre grilles.** Réseau par réseau, quand la grille négociée du
+client ou une promotion qui le vise tarifie le réseau, le client paie le plus
+bas de ces prix. Sans l'une ni l'autre, la grille publique s'applique.
+
+**Promotions.** Une promotion est ouverte à tous les clients ou réservée à un
+client nommé. Elle est toujours à durée limitée, avec une date de fin
+obligatoire.
+
 ## Choix faits à l'ouverture, à confirmer
 
 Ces points n'ont pas été posés à l'utilisateur. Ce sont des choix techniques
@@ -222,6 +232,15 @@ Choix faits, à confirmer :
 **Produit** Les grilles propres à un client, les grilles à durée limitée, et la règle de priorité entre grille client, grille promotionnelle et grille publique.
 
 **Critères** La règle de priorité est écrite et testée sur les six combinaisons possibles. Un client sans grille négociée tombe sur la grille publique. La modification d'une grille laisse une écriture au journal d'audit avec l'ancien et le nouveau prix.
+
+**Fait.** Chaque grille porte sa nature : PUBLIQUE (unique, sans client), NEGOCIEE (une par client) ou PROMOTION (sans client pour tous, ou avec un client nommé), contrôlées par la base. Une promotion ne se publie qu'avec une fin. La règle, écrite en tête de `apps/credits/tarifs.py` : réseau par réseau, le plus bas de la grille négociée et des promotions qui visent le client ; sans elles, la grille publique ; sinon, refus. Les six combinaisons (négociée absente ou présente, promotion absente, plus basse ou plus haute) sont testées une à une, ainsi qu'un client sans grille négociée, une promotion réservée à un autre client, une promotion échue et une grille négociée qui ne tarifie qu'un réseau. La publication d'une nouvelle version d'une grille négociée va au journal d'audit avec l'ancien et le nouveau prix, le client et l'agent. Le tarif figé d'une campagne note, par réseau, la grille appliquée, et la page de la campagne la nomme.
+
+Choix faits, à confirmer :
+
+- la grille publique n'entre pas dans la comparaison : un prix négocié plus haut que le prix public reste le prix du client ;
+- à prix égal, la grille négociée l'emporte sur la promotion ;
+- une grille négociée ou une promotion peut ne tarifer que certains réseaux ; les autres suivent la grille publique ;
+- le palier de volume se lit dans chaque grille avec le même volume du mois.
 
 ## T-84 · Point d'entrée des rappels de paiement
 

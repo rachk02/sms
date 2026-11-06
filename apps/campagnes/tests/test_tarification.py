@@ -97,7 +97,8 @@ def test_le_palier_atteint_au_lancement_vaut_pour_toute_la_campagne(client, work
 
     premiere = _confirmee(client, 1, PALIER + 3)
     assert premiere.tarification["volume_mensuel"] == 0
-    assert premiere.tarification["reseaux"]["ORANGE"] == {"prix": PRIX_HAUT, "palier": 0}
+    orange = premiere.tarification["reseaux"]["ORANGE"]
+    assert (orange["prix"], orange["palier"], orange["grille"]) == (PRIX_HAUT, 0, "PUBLIQUE")
     assert premiere.cout_estime == (PALIER + 3) * PRIX_HAUT
 
     # Le palier est franchi au cinquième message : les suivants gardent le prix figé.
@@ -108,7 +109,8 @@ def test_le_palier_atteint_au_lancement_vaut_pour_toute_la_campagne(client, work
 
     seconde = _confirmee(client, 2, 2)
     assert seconde.tarification["volume_mensuel"] == PALIER + 3
-    assert seconde.tarification["reseaux"]["ORANGE"] == {"prix": PRIX_BAS, "palier": PALIER}
+    orange = seconde.tarification["reseaux"]["ORANGE"]
+    assert (orange["prix"], orange["palier"]) == (PRIX_BAS, PALIER)
     _diffuser(worker, seconde)
     assert _couts(seconde) == {PRIX_BAS}
     assert seconde.cout_reel == 2 * PRIX_BAS
