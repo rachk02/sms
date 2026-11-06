@@ -83,6 +83,22 @@ plus grand diviseur commun de 100 et du taux), et vaut 1 franc sans TVA.
 et le montant maximal sont des réglages vides tant qu'il ne les a pas choisis ;
 à fixer avec les plafonds des portefeuilles mobiles.
 
+Et en ouvrant T-89, le 6 novembre 2026 :
+
+**Ordre de consommation.** Les envois consomment d'abord les crédits offerts
+(recrédits), puis les crédits payés. À la clôture, la part remboursable est donc
+la plus grande possible : ce qui a été payé moins ce que les envois ont pris
+au-delà des crédits offerts.
+
+**Effacement des contacts.** Trente jours après la clôture, les contacts du
+compte sont effacés pour de bon. Le client garde ce mois pour exporter ses
+répertoires ou revenir sur sa décision.
+
+**Factures et administration fiscale.** L'utilisateur vérifie avec un comptable
+les mentions obligatoires et l'éventuelle certification des factures par la
+DGI. D'ici là, l'émission reste coupée : l'identité de l'émetteur n'est pas
+renseignée.
+
 ## Choix faits à l'ouverture, à confirmer
 
 Ces points n'ont pas été posés à l'utilisateur. Ce sont des choix techniques
@@ -100,9 +116,9 @@ pris pour avancer, à confirmer ou à corriger.
   (T-87 passe par l'achat, avec l'agent pour auteur, jamais par un ajustement
   positif) ; RECREDIT est un crédit offert, défaillance de la plateforme ou
   geste commercial ; AJUSTEMENT corrige une erreur, il n'offre jamais rien.
-- Reste à poser à l'utilisateur en ouvrant T-89 : quels crédits se consomment
-  en premier, les payés ou les offerts. La réponse fixe le montant remboursable
-  à la clôture ; les deux se calculent par sommes par type, sans colonne de plus.
+- Quels crédits se consomment en premier : tranché le 6 novembre 2026, les
+  offerts d'abord (voir les décisions en tête). Le montant remboursable se
+  calcule par sommes par type, sans colonne de plus.
 
 ## T-77 · Registre de crédits, écritures complètes
 
