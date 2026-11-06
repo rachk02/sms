@@ -23,12 +23,30 @@ def prendre_verrou(using: str = "default") -> bool:
         return curseur.fetchone()[0]
 
 
+def constater_sans_accuse(maintenant=None, lots_max: int = 20) -> int:
+    """Constate les messages restés sans accusé, lot par lot, jusqu'à épuisement
+    ou `lots_max` lots : le passage suivant reprend le reste. Renvoie le nombre
+    de messages constatés."""
+    from apps.journal import services
+
+    total = 0
+    for _ in range(lots_max):
+        lot = services.constater_sans_accuse(maintenant)
+        total += len(lot)
+        if len(lot) < services.TAILLE_SANS_ACCUSE:
+            break
+    if total:
+        journal.info("%s messages passés sans accusé.", total)
+    return total
+
+
 class Ordonnanceur(Worker):
     nom = "ordonnanceur"
     attente_verrou_s = 5.0
     periode_relais_s = 1.0
     periode_partitions_s = 3_600.0
     periode_supervision_s = 15.0
+    periode_sans_accuse_s = 60.0
 
     async def _attendre(self, secondes: float) -> None:
         try:
@@ -64,7 +82,7 @@ class Ordonnanceur(Worker):
                 canal = await connexion.channel()
                 # -inf : les deux tâches tournent dès le premier tour, quelle que soit
                 # l'origine arbitraire de time.monotonic().
-                derniere_partition = derniere_supervision = float("-inf")
+                derniere_partition = derniere_supervision = dernier_constat = float("-inf")
                 while not self.arret.is_set():
                     if time.monotonic() - derniere_partition >= self.periode_partitions_s:
                         await sync_to_async(creer_partitions_a_venir)()
@@ -74,6 +92,9 @@ class Ordonnanceur(Worker):
                         await sync_to_async(surveiller)()
                         await sync_to_async(publier_etat_liaisons)()
                         derniere_supervision = time.monotonic()
+                    if time.monotonic() - dernier_constat >= self.periode_sans_accuse_s:
+                        await sync_to_async(constater_sans_accuse)()
+                        dernier_constat = time.monotonic()
                     # Envois programmés et occurrences échues, puis quelques lots
                     # par campagne à chaque tour : le relais et les autres
                     # campagnes avancent aussi.

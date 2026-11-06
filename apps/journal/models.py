@@ -72,6 +72,12 @@ class Message(models.Model):
                 name="message_client_numero_date",
             ),
             models.Index(fields=["campagne_id", "etat"], name="message_campagne_etat"),
+            # Constat des messages restés sans accusé : seuls les SOUMIS comptent.
+            models.Index(
+                fields=["date_soumission"],
+                condition=models.Q(etat="SOUMIS"),
+                name="message_soumis_date",
+            ),
             # Rapprochement d'un STOP reçu sur le numéro court partagé, tous clients confondus.
             models.Index(
                 fields=["numero_normalise", "-date_reception"], name="message_numero_date"

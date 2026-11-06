@@ -2,7 +2,7 @@
 
 import logging
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.db import connection, connections, transaction
 from django.utils import timezone
@@ -526,6 +526,49 @@ def appliquer_accuse(accuse) -> bool:
         lambda: sante.enregistrer_accuse(accuse.connecteur_id, positif, delai, accuse.horodatage)
     )
     return True
+
+
+# Un message soumis sans accusé au terme de la validité de la corrélation passe
+# SANS_ACCUSE. La recherche borne sa date de réception, comme toute recherche
+# sur le journal : un message attend rarement plus de quelques jours entre sa
+# réception et sa soumission (pause, nuit, fin de semaine) ; quatre-vingt-dix
+# jours couvrent les pauses longues.
+ATTENTE_MAX_AVANT_SOUMISSION = timedelta(days=90)
+TAILLE_SANS_ACCUSE = 500
+
+
+@transaction.atomic
+def constater_sans_accuse(
+    maintenant: datetime | None = None, taille: int | None = None
+) -> list[tuple]:
+    """Fait passer SANS_ACCUSE un lot de messages restés SOUMIS au-delà de la
+    validité de la corrélation : passé ce terme, aucun accusé ne peut plus être
+    rattaché au message. Renvoie (id, date_reception) des messages constatés.
+
+    Les lignes déjà verrouillées, par un accusé en cours d'application, sont
+    sautées : le prochain passage les reprendra si l'accusé ne les a pas
+    conclues. Tous clients confondus : réservé aux workers.
+    """
+    limite = (maintenant or timezone.now()) - correlation.validite()
+    messages = list(
+        Message.objects.select_for_update(skip_locked=True)
+        .filter(
+            etat=Etat.SOUMIS,
+            date_soumission__lt=limite,
+            date_reception__lt=limite,
+            date_reception__gte=limite - ATTENTE_MAX_AVANT_SOUMISSION,
+        )
+        .order_by("date_soumission")[: taille or TAILLE_SANS_ACCUSE]
+    )
+    for message in messages:
+        changer_etat(
+            message,
+            Etat.SANS_ACCUSE,
+            source=Evenement.Source.WORKER,
+            horodatage=maintenant,
+            details={"validite_heures": int(correlation.validite().total_seconds() // 3600)},
+        )
+    return [(message.id, message.date_reception) for message in messages]
 
 
 def envoyer_unitaire(

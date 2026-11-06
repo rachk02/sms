@@ -92,6 +92,24 @@ ajoute la trace des écritures manuelles et automatiques :
   réservations, règlements et libérations, laissent le cache égal au solde
   recalculé, et chaque ligne porte le solde cumulé jusqu'à elle.
 
+## Préalable à T-78 · Constat des messages sans accusé
+
+Jusqu'ici, aucun code ne faisait passer un message en SANS_ACCUSE : l'état et sa
+colonne de compteur existaient, la transition jamais. Sans elle, une campagne
+réglée à la livraison ne pourrait jamais conclure.
+
+**Fait.** `journal.services.constater_sans_accuse` fait passer SANS_ACCUSE, par
+lots, les messages restés SOUMIS au-delà de la validité de la corrélation
+(`telecom.correlation.validite()`, 72 heures par défaut), jamais d'une durée
+écrite en dur : un seuil plus court refuserait un accusé légitime. La transition
+passe par `changer_etat`, qui écrit l'événement et le compteur du suivi. La
+recherche borne la date de réception (quatre-vingt-dix jours d'attente au plus
+entre réception et soumission) et s'appuie sur un index partiel des messages
+SOUMIS. Les lignes verrouillées par un accusé en cours sont sautées et reprises
+au passage suivant. L'ordonnanceur la lance chaque minute, jusqu'à vingt lots.
+Un accusé arrivé après le constat est refusé, comme toute sortie d'un état
+terminal.
+
 ## T-78 · Réservation et règlement
 
 **Produit** La réservation à la soumission, le règlement à l'accusé en mode pay-per-delivered, le règlement immédiat en pay-per-submitted, et la libération en cas d'échec.

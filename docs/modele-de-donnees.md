@@ -374,6 +374,10 @@ d'un STOP reçu sur le numéro court partagé, qui cherche tous les clients ayan
 création de la table, parce qu'ajouter un index sur toutes les partitions d'une
 table déjà volumineuse coûte cher.
 
+Un index partiel `(date_soumission) WHERE etat = 'SOUMIS'` sert au constat des
+messages restés sans accusé au terme de la validité de la corrélation (lot 7) :
+il ne porte que les messages en attente d'accusé, donc reste petit.
+
 Aucune contrainte d'unicité métier ne peut vivre sur cette table : PostgreSQL
 exige qu'elle inclue la clé de partitionnement, et un doublon tombé dans un
 autre mois passerait alors inaperçu. Les deux garanties vivent dans des tables
