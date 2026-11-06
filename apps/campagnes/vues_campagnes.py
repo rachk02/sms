@@ -14,7 +14,7 @@ from apps.core.encodage import table_pour_le_navigateur
 from apps.core.montants import en_lettres, francs_cfa
 from apps.expediteurs.models import Expediteur
 
-from . import fragments, modeles, services
+from . import fragments, modeles, selectors, services
 from .models import Campagne, Modele
 
 
@@ -158,6 +158,7 @@ def detail(request, pk):
         }
     else:
         contexte |= fragments.contexte_suivi(campagne) | {
+            "tarif": selectors.explication_tarif(campagne),
             "peut_piloter": autorise(request.user, "campagnes.lancer"),
             "pausable": campagne.etat in services.PAUSABLES,
             "annulable": campagne.etat in services.ANNULABLES,

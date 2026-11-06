@@ -70,6 +70,10 @@ class Campagne(BaseClient):
     destinataires_prevus = models.IntegerField(default=0)
     cout_estime = models.IntegerField(default=0)
     cout_reel = models.IntegerField(default=0)
+    # Tarif figé à la confirmation (T-82, décision du 6 novembre 2026) : version
+    # de grille, volume du mois au lancement, et par réseau le prix d'un segment
+    # et le palier retenu. Tous les messages de la campagne prennent ces prix.
+    tarification = models.JSONField(default=dict, blank=True)
     planifiee_pour = models.DateTimeField(null=True, blank=True)
     # Récurrence (T-65). Une campagne récurrente est un patron : elle ne fige
     # ni ne réserve rien ; chaque occurrence est une campagne fille, figée et

@@ -36,8 +36,9 @@ class Estimation:
     exemple: str
 
 
-def estimer(client, gabarit: Gabarit, contacts) -> Estimation:
-    """`contacts` : un queryset de contacts, lu en flux."""
+def estimer(client, gabarit: Gabarit, contacts, prix: dict | None = None) -> Estimation:
+    """`contacts` : un queryset de contacts, lu en flux. `prix` : le prix d'un
+    segment par réseau, figé par l'appelant ; à défaut, le prix du moment."""
     destinataires, unites_max, exemple = 0, 0, ""
     segments_max, ucs2 = 1, False
     par_operateur: dict[str, int] = {}
@@ -51,7 +52,7 @@ def estimer(client, gabarit: Gabarit, contacts) -> Estimation:
         if (analyse.segments, analyse.unites) > (segments_max, unites_max):
             segments_max, unites_max, exemple = analyse.segments, analyse.unites, texte
     cout = sum(
-        nombre * segments_max * prix_segment(client.id, operateur)
+        nombre * segments_max * ((prix or {}).get(operateur) or prix_segment(client.id, operateur))
         for operateur, nombre in par_operateur.items()
     )
     return Estimation(

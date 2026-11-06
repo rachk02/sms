@@ -209,6 +209,14 @@ Prérequis de production : l'extension PostgreSQL `btree_gist`, créée par la m
 
 **Critères** Un message soumis avant un changement de grille conserve son coût d'origine, y compris quand son accusé arrive après. Le passage d'un palier de volume en cours de campagne est traité de façon documentée et le rapport de campagne l'explique.
 
+**Fait.** À la confirmation, `campagnes.services.tarifer` lit le volume du mois (`journal.selectors.volume_mensuel`, sur les compteurs pré-agrégés, jamais sur `journal_message`) et, par réseau servi, le prix du palier atteint dans la version publiée en vigueur ; l'aperçu calcule son coût avec ces prix, et `_figer` les fige sur la campagne (`campagnes_campagne.tarification` : date, version, volume du mois, prix et palier par réseau). La diffusion prend ces prix pour chaque message, qui porte ensuite son coût figé jusqu'au règlement, accusé tardif compris (déjà vérifié par T-78). Un palier franchi pendant la diffusion ne change rien à la campagne en cours : ses SMS comptent pour les envois suivants. La page de la campagne confirmée l'explique en clair (`selectors.explication_tarif`). Un envoi de test prend le palier atteint au moment de l'envoi. Les tests franchissent le palier au cinquième message d'une campagne de huit, qui garde son prix, puis la campagne suivante prend le palier ; une grille changée après la confirmation ne touche pas la campagne.
+
+Choix faits, à confirmer :
+
+- le volume du mois compte des SMS soumis (`emis`), un message long comptant pour un, et pas encore les envois hors campagne, que `journal_compteur` ne porte pas ;
+- le mois civil suit l'heure de Ouagadougou ;
+- une campagne confirmée avant ce changement, sans tarif figé, prend le prix du moment à la diffusion.
+
 ## T-83 · Grilles négociées et promotionnelles
 
 **Produit** Les grilles propres à un client, les grilles à durée limitée, et la règle de priorité entre grille client, grille promotionnelle et grille publique.

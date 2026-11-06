@@ -123,3 +123,29 @@ def liberation(campagne: Campagne, maintenant: datetime | None = None) -> Libera
     if prevue == depart:
         return None
     return Liberation(prevue)
+
+
+def explication_tarif(campagne: Campagne) -> list[str]:
+    """Le tarif de la campagne, phrase par phrase, pour son rapport : figé à la
+    confirmation, avec le volume du mois qui a fixé le palier. Vide pour une
+    campagne confirmée avant le gel des tarifs."""
+    tarification = campagne.tarification
+    if not tarification:
+        return []
+    le = timezone.localtime(datetime.fromisoformat(tarification["le"]))
+    lignes = [
+        f"Tarif figé à la confirmation, le {le:%d/%m/%Y à %H:%M}, sur un volume de "
+        f"{tarification['volume_mensuel']} SMS soumis depuis le début du mois."
+    ]
+    for reseau, detail in tarification["reseaux"].items():
+        palier = (
+            f"palier à partir de {detail['palier']} SMS dans le mois"
+            if detail["palier"]
+            else "premier palier"
+        )
+        lignes.append(f"{reseau} : {detail['prix']} FCFA par SMS, {palier}.")
+    lignes.append(
+        "Les SMS de cette campagne comptent dans le volume du mois des envois suivants ; "
+        "un palier franchi ou une grille changée pendant sa diffusion ne change pas son prix."
+    )
+    return lignes

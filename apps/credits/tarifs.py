@@ -14,6 +14,8 @@ T-81 ne lit que la grille publique ; la priorité entre grille négociée, grill
 promotionnelle et grille publique vient avec T-83.
 """
 
+from dataclasses import dataclass
+
 from django.conf import settings
 from django.db.models import Q
 from django.utils import timezone
@@ -39,12 +41,22 @@ def version_en_vigueur(a=None) -> VersionGrille | None:
     )
 
 
-def prix_segment(client_id, operateur: str, *, a=None, volume: int = 0) -> int:
+@dataclass(frozen=True)
+class Tarif:
+    prix: int
+    # Version de grille appliquée ; None pour le prix de secours.
+    version_id: object
+    # Volume minimal du palier retenu.
+    palier: int
+
+
+def tarif(client_id, operateur: str, *, a=None, volume: int = 0) -> Tarif:
+    """Le prix d'un segment et d'où il vient : version et palier."""
     pays = Client.objects.values_list("pays", flat=True).get(id=client_id)
     version = version_en_vigueur(a)
     if version is None:
         if settings.SMS_PRIX_SEGMENT_PROVISOIRE is not None:
-            return settings.SMS_PRIX_SEGMENT_PROVISOIRE
+            return Tarif(settings.SMS_PRIX_SEGMENT_PROVISOIRE, None, 0)
         raise AucunTarif(operateur, pays)
     palier = (
         PalierGrille.objects.filter(
@@ -55,4 +67,8 @@ def prix_segment(client_id, operateur: str, *, a=None, volume: int = 0) -> int:
     )
     if palier is None:
         raise AucunTarif(operateur, pays)
-    return palier.prix_unitaire
+    return Tarif(palier.prix_unitaire, version.id, palier.volume_min)
+
+
+def prix_segment(client_id, operateur: str, *, a=None, volume: int = 0) -> int:
+    return tarif(client_id, operateur, a=a, volume=volume).prix

@@ -32,9 +32,10 @@ from apps.contacts.models import Contact, Liste, ListeContact, Segment
 from apps.core.audit import auditer
 from apps.core.numeros import NumeroInvalide, normaliser
 from apps.credits import services as credits
-from apps.credits.tarifs import AucunTarif, prix_segment
+from apps.credits.tarifs import AucunTarif, prix_segment, tarif
 from apps.expediteurs.controle import Action, Choix, choisir
 from apps.expediteurs.models import OPERATEURS, Expediteur
+from apps.journal.selectors import volume_mensuel
 from apps.journal.services import enregistrer_message, mettre_en_file
 from apps.telecom.numero_court import numero_court
 from apps.telecom.prefixes import classer
@@ -211,6 +212,8 @@ class Apercu:
     estimation: Estimation
     disponible: int
     choix: dict = field(repr=False)
+    # Ce que `_figer` copie sur la campagne : voir Campagne.tarification.
+    tarification: dict = field(default_factory=dict, repr=False)
 
     @property
     def cout(self) -> int:
@@ -225,6 +228,26 @@ class Apercu:
         return max(0, self.cout - self.disponible)
 
 
+def tarifer(client, reseaux, maintenant: datetime | None = None) -> dict:
+    """Le tarif d'une campagne lancée maintenant : la version de grille en
+    vigueur et, par réseau servi, le prix d'un segment au palier atteint par le
+    volume du mois. Figé sur la campagne à sa confirmation, il vaut pour tous
+    ses messages, même si un palier est franchi ou la grille changée pendant
+    la diffusion (décision du 6 novembre 2026). Lève AucunTarif."""
+    maintenant = maintenant or timezone.now()
+    volume = volume_mensuel(client.id, maintenant)
+    detail = {
+        reseau: tarif(client.id, reseau, a=maintenant, volume=volume) for reseau in sorted(reseaux)
+    }
+    versions = {t.version_id for t in detail.values()}
+    return {
+        "le": maintenant.isoformat(),
+        "version": str(versions.pop()) if len(versions) == 1 and None not in versions else None,
+        "volume_mensuel": volume,
+        "reseaux": {r: {"prix": t.prix, "palier": t.palier} for r, t in detail.items()},
+    }
+
+
 def apercu(campagne: Campagne) -> Apercu:
     client = campagne.client
     vises = contacts(campagne)
@@ -236,7 +259,9 @@ def apercu(campagne: Campagne) -> Apercu:
     )
     gabarit = modeles.gabarit(client, campagne.modele_texte)
     try:
-        estimation = estimer(client, gabarit, vises.filter(condition))
+        tarification = tarifer(client, servis)
+        prix = {reseau: t["prix"] for reseau, t in tarification["reseaux"].items()}
+        estimation = estimer(client, gabarit, vises.filter(condition), prix)
     except AucunTarif as refus:
         raise CampagneRefusee(str(refus)) from None
     par_expediteur = Counter()
@@ -252,6 +277,7 @@ def apercu(campagne: Campagne) -> Apercu:
         estimation=estimation,
         disponible=credits.solde(client.id).disponible,
         choix=choix,
+        tarification=tarification,
     )
 
 
@@ -275,7 +301,7 @@ def envoyer_test(campagne: Campagne, *, numero: str, auteur) -> object:
     expediteur = choix.expediteur if choix.action == Action.ENVOYER else numero_court()
     try:
         exemple = estimer(client, gabarit, contacts(campagne)).exemple
-        prix = prix_segment(client.id, reseau)
+        prix = prix_segment(client.id, reseau, volume=volume_mensuel(client.id))
     except AucunTarif as refus:
         raise CampagneRefusee(str(refus)) from None
     texte = exemple or gabarit.rendre(Contact(numero_normalise=numero, champs={}))
@@ -364,6 +390,7 @@ def _figer(campagne: Campagne, vu: Apercu, *, auteur, attente_max_ms=None) -> Ca
         campagne.lissage_par_minute = math.ceil(vu.destinataires / campagne.lissage_duree_minutes)
     campagne.destinataires_prevus = vu.destinataires
     campagne.cout_estime = vu.cout
+    campagne.tarification = vu.tarification
     campagne.segments_prevus = vu.estimation.segments
     campagne.encodage_prevu = str(vu.estimation.encodage)
     campagne.confirmee_le = timezone.now()

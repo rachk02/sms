@@ -64,6 +64,13 @@ PALIER = timedelta(minutes=1)
 A_PUBLIER = (Destinataire.Action.ENVOYER, Destinataire.Action.REPLI)
 
 
+def _prix(campagne, operateur: str) -> int:
+    """Le prix d'un segment figé à la confirmation. Une campagne confirmée avant
+    le gel des tarifs (T-82) n'en porte pas : elle prend le prix du moment."""
+    fige = campagne.tarification.get("reseaux", {}).get(operateur)
+    return fige["prix"] if fige else prix_segment(campagne.client_id, operateur)
+
+
 def _reevaluer(campagne: Campagne) -> None:
     """Remet à jour l'expéditeur des destinataires non encore servis."""
     libelle = campagne.expediteur.libelle if campagne.expediteur else numero_court()
@@ -150,7 +157,7 @@ def publier_lot(campagne_id, taille: int = TAILLE_LOT, maintenant: datetime | No
             operateur=destinataire.operateur,
             expediteur_libelle=destinataire.expediteur,
             texte=gabarit.rendre(contact),
-            cout_unitaire=prix_segment(client.id, destinataire.operateur),
+            cout_unitaire=_prix(campagne, destinataire.operateur),
             campagne_id=campagne.id,
             contact_id=destinataire.contact_id,
             source=Evenement.Source.WORKER,

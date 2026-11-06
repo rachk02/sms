@@ -2,7 +2,10 @@
 
 from datetime import datetime, timedelta
 
-from .models import Message
+from django.db.models import Sum
+from django.utils import timezone
+
+from .models import Compteur, Message
 
 # Fenêtre du rapprochement d'un STOP avec ses émetteurs (T-70).
 FENETRE_DESINSCRIPTION = timedelta(hours=72)
@@ -38,3 +41,20 @@ def clients_touches(numero_normalise: str, jusqu_a: datetime) -> dict:
         .values_list("client_id", "expediteur_libelle")
     )
     return dict(messages)
+
+
+def debut_du_mois(maintenant: datetime | None = None) -> datetime:
+    """Premier instant du mois civil, à l'heure de Ouagadougou."""
+    local = timezone.localtime(maintenant or timezone.now())
+    return local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+def volume_mensuel(client_id, maintenant: datetime | None = None) -> int:
+    """SMS soumis par le client depuis le début du mois civil, lus sur les
+    compteurs pré-agrégés des campagnes, jamais sur `journal_message`. Sert au
+    palier de volume des grilles tarifaires (T-82). Les envois hors campagne n'y
+    sont pas encore comptés, comme dans `journal_compteur`."""
+    total = Compteur.objects.filter(
+        client_id=client_id, heure__gte=debut_du_mois(maintenant)
+    ).aggregate(total=Sum("emis"))["total"]
+    return total or 0
