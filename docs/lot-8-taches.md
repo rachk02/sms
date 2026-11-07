@@ -44,13 +44,23 @@ existante, le portail sur des gabarits simples.
 Choix faits, à confirmer :
 
 - un écart se signale (erreur au journal applicatif, commande en échec) mais ne se corrige que sur demande, avec `--corriger` : une anomalie ne disparaît pas sans avoir été vue ;
-- les envois hors campagne (envois unitaires, API au lot 9) n'ont pas encore de compteurs ; le tableau de bord de T-92 les demandera.
+- les envois hors campagne (envois unitaires, API au lot 9) n'avaient pas de compteurs ; T-92 les ajoute.
 
 ## T-92 · Tableau de bord client
 
 **Produit** Les cinq indicateurs retenus, volume émis, taux de livraison effectif, latence moyenne, répartition par opérateur, désinscriptions, avec sélecteur de période et rafraîchissement par fragment.
 
 **Critères** Le tableau se charge en moins d'une seconde sur un compte ayant émis un million de messages. Le rafraîchissement met à jour toutes les zones en une requête. Une période sans données affiche un état vide explicite et non des zéros.
+
+**Fait.** Écran minimal `/tableau-de-bord` (permission `tableau.consulter`, administrateur et utilisateur), lié depuis l'accueil, avec son fragment `/tableau-de-bord/fragments/indicateurs` : une sonde l'interroge toutes les dix secondes tant que l'onglet est visible, et la réponse remplace toutes les zones d'un coup, par échange hors bande. Périodes : 24 heures, 7 jours (par défaut), 30 et 90 jours, en heures entières. `campagnes.selectors.tableau_de_bord` fait deux requêtes bornées : une sur `journal_compteur`, groupée par réseau, par l'index `(client_id, heure)` ajouté ; une sur la liste noire du compte (origine STOP_SMS) pour les désinscriptions. Les compteurs portent désormais la latence (cumul en millisecondes et nombre de livraisons, écrits avec le passage à LIVRE, repris par le recalcul et par la requête de contrôle de T-91), et comptent les envois hors campagne sous une campagne nulle. Une période sans envoi ni désinscription affiche un état vide explicite ; une zone sans accusé ou sans livraison le dit aussi, au lieu d'un zéro. Les tests vérifient les cinq indicateurs, l'état vide, le fragment unique, l'envoi hors campagne, et la lecture en moins d'une seconde d'un an d'envois sur trois réseaux (26 280 lignes, 1 051 200 messages) sans aucune requête sur `journal_message`.
+
+Choix faits, à confirmer :
+
+- taux de livraison effectif : livrés sur les messages dont le sort est connu (livrés, non livrés, sans accusé), pour qu'une campagne en cours de diffusion ne paraisse pas mauvaise ; les compteurs étant rangés à l'heure de la transition, le taux porte sur les accusés reçus dans la période, quelle que soit l'heure d'envoi ;
+- latence moyenne : de la soumission au réseau à l'accusé de livraison, sur les messages livrés ; les livraisons antérieures à T-92 n'ont pas de latence tant qu'elles ne sont pas recomptées ;
+- désinscriptions : les STOP reçus par SMS, sans les ajouts manuels, les imports ni les réclamations ;
+- les envois hors campagne entrent au tableau de bord mais pas encore au palier de volume des grilles (T-82) : les y compter changerait le prix ;
+- rafraîchissement toutes les dix secondes, comme le prévoit l'architecture pour un tableau de bord ordinaire.
 
 ## T-93 · Journal des messages, recherche
 

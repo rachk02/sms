@@ -139,12 +139,19 @@ class Destinataire(models.Model):
         return f"{self.campagne_id} {self.contact_id}"
 
 
+# Les envois du client hors campagne (envoi unitaire, envoi de test, API) sont
+# comptés sous cet identifiant de campagne, nul : le tableau de bord les voit,
+# le suivi d'une campagne non (T-92). Les messages système, gratuits, ne sont
+# pas comptés.
+HORS_CAMPAGNE = uuid.UUID(int=0)
+
+
 class Compteur(models.Model):
     """Agrégats d'une campagne par réseau, expéditeur et heure, écrits dans la
     transaction de chaque changement d'état d'un message (`changer_etat`).
     C'est ce que lisent le suivi en direct et les tableaux de bord, jamais
     `journal_message`. Chaque transition n'arrive qu'une fois par message : les
-    compteurs sont exacts, rejeux compris."""
+    compteurs sont exacts, rejeux compris. L'heure est celle de la transition."""
 
     pk = models.CompositePrimaryKey(
         "client", "campagne_id", "operateur", "expediteur_libelle", "heure"
@@ -166,9 +173,15 @@ class Compteur(models.Model):
     # Somme des coûts des messages émis. Le coût facturé, plafonné à la
     # réservation, se lit sur la réservation de la campagne.
     cout = models.BigIntegerField(default=0)
+    # Délai entre la soumission et l'accusé de livraison, en millisecondes,
+    # cumulé sur `latences` messages livrés (T-92). Un délai négatif, quand
+    # l'horloge de l'opérateur retarde sur la nôtre, compte pour zéro.
+    latence_cumulee_ms = models.BigIntegerField(default=0, db_default=0)
+    latences = models.IntegerField(default=0, db_default=0)
 
     class Meta:
         db_table = "journal_compteur"
+        indexes = [models.Index(fields=["client", "heure"], name="compteur_client_heure")]
 
     def __str__(self):
         return f"{self.campagne_id} {self.operateur} {self.heure}"

@@ -8,7 +8,7 @@ from django.db import connection
 from django.db.models import Q, Sum
 from django.utils import timezone
 
-from .models import Compteur, Message
+from .models import HORS_CAMPAGNE, Compteur, Message
 
 # Fenêtre du rapprochement d'un STOP avec ses émetteurs (T-70).
 FENETRE_DESINSCRIPTION = timedelta(hours=72)
@@ -56,10 +56,13 @@ def volume_mensuel(client_id, maintenant: datetime | None = None) -> int:
     """SMS soumis par le client depuis le début du mois civil, lus sur les
     compteurs pré-agrégés des campagnes, jamais sur `journal_message`. Sert au
     palier de volume des grilles tarifaires (T-82). Les envois hors campagne n'y
-    sont pas encore comptés, comme dans `journal_compteur`."""
-    total = Compteur.objects.filter(
-        client_id=client_id, heure__gte=debut_du_mois(maintenant)
-    ).aggregate(total=Sum("emis"))["total"]
+    sont pas comptés : ils ont leurs compteurs depuis T-92, mais les inclure
+    changerait le prix, ce qui reste à trancher."""
+    total = (
+        Compteur.objects.filter(client_id=client_id, heure__gte=debut_du_mois(maintenant))
+        .exclude(campagne_id=HORS_CAMPAGNE)
+        .aggregate(total=Sum("emis"))["total"]
+    )
     return total or 0
 
 
@@ -164,11 +167,25 @@ SELECT
     count(*) FILTER (WHERE etat = 'SANS_ACCUSE'),
     count(*) FILTER (WHERE etat = 'REJETE' AND date_soumission IS NULL),
     count(*) FILTER (WHERE etat = 'ANNULE'),
-    coalesce(sum(cout_total) FILTER (WHERE date_soumission IS NOT NULL), 0)
+    coalesce(sum(cout_total) FILTER (WHERE date_soumission IS NOT NULL), 0),
+    coalesce(sum(
+        greatest(0, floor(extract(epoch FROM date_accuse - date_soumission) * 1000))
+    ) FILTER (WHERE etat = 'LIVRE' AND date_soumission IS NOT NULL), 0),
+    count(*) FILTER (WHERE etat = 'LIVRE' AND date_soumission IS NOT NULL)
 FROM journal_message
 WHERE client_id = %s AND campagne_id = %s AND date_reception >= %s AND date_reception < %s
 """
-COLONNES_CONTROLE = ("emis", "livres", "echecs", "sans_accuse", "refuses", "annules", "cout")
+COLONNES_CONTROLE = (
+    "emis",
+    "livres",
+    "echecs",
+    "sans_accuse",
+    "refuses",
+    "annules",
+    "cout",
+    "latence_cumulee_ms",
+    "latences",
+)
 
 
 def compte_journal(client_id, campagne_id, depuis: datetime, jusqu_a: datetime) -> dict:

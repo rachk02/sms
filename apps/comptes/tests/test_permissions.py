@@ -60,6 +60,8 @@ ATTENDUS = {
     "campagne-reprendre": ("post", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
     "campagne-annuler": ("post", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
     "campagne-suivi": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
+    "tableau-de-bord": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
+    "tableau-de-bord-indicateurs": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "campagnes-modeles": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "campagnes-modele": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
     "contacts-repertoire": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),

@@ -400,9 +400,11 @@ Partitionnée par mois sur `horodatage`, clé primaire composée
 **`journal_compteur`** porte les agrégats que lisent les tableaux de bord :
 `client_id`, `campagne_id` UUID simple et non nul, `operateur`,
 `expediteur_libelle`, `heure`, `emis`, `livres`, `echecs`, `sans_accuse`,
-`refuses`, `annules` en entiers, `cout` en bigint. Clé primaire composée
-`(client_id, campagne_id, operateur, expediteur_libelle, heure)`. C'est cette
-table que les rafraîchissements interrogent, jamais `journal_message`.
+`refuses`, `annules` en entiers, `cout` en bigint, `latence_cumulee_ms` en
+bigint et `latences` en entier (T-92). Clé primaire composée
+`(client_id, campagne_id, operateur, expediteur_libelle, heure)`, index
+`(client_id, heure)` pour les périodes du tableau de bord. C'est cette table
+que les rafraîchissements interrogent, jamais `journal_message`.
 
 Une ligne s'incrémente dans la transaction de chaque changement d'état d'un
 message de campagne, par `journal.services.changer_etat` ou par lot pour une
@@ -410,8 +412,17 @@ pause, une reprise ou une annulation : un rejeu, refusé par la table des
 transitions, ne compte donc jamais deux fois. Passage à SOUMIS : `emis` et
 `cout` ; LIVRE : `livres` ; NON_LIVRE, EXPIRE, ou REJETE après soumission :
 `echecs` ; REJETE avant soumission (liste noire, expéditeur, passerelle) :
-`refuses` ; SANS_ACCUSE : `sans_accuse` ; ANNULE : `annules`. Les envois hors
-campagne n'y sont pas encore comptés. Table cloisonnée par client.
+`refuses` ; SANS_ACCUSE : `sans_accuse` ; ANNULE : `annules`. Un passage à
+LIVRE ajoute aussi le délai depuis la soumission, en millisecondes, à
+`latence_cumulee_ms` et un à `latences` ; un délai négatif compte pour zéro.
+L'heure d'une ligne est celle de la transition. Les envois du client hors
+campagne (envoi unitaire, envoi de test, API) sont comptés sous la campagne
+nulle `00000000-0000-0000-0000-000000000000` ; les messages système ne le sont
+pas. Table cloisonnée par client.
+
+`journal.services.recompter` reconstruit les lignes d'une campagne depuis
+`journal_evenement`, et `journal.selectors.compte_journal` les recompte depuis
+l'état final des messages : c'est la requête de contrôle (T-91).
 
 ## credits
 

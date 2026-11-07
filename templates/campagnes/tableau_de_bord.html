@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block contenu %}
+<div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+  <h1 class="text-2xl font-semibold">Tableau de bord</h1>
+  <form method="get" action="{% url 'tableau-de-bord' %}" class="flex items-center gap-2 text-sm">
+    <label for="periode">Période</label>
+    <select id="periode" name="periode" class="rounded border border-slate-300 px-2 py-1"
+            hx-get="{% url 'tableau-de-bord-indicateurs' %}" hx-target="#tableau-sonde" hx-swap="outerHTML"
+            hx-trigger="change">
+      {% for code, valeur in periodes.items %}
+        <option value="{{ code }}"{% if code == tableau.periode %} selected{% endif %}>{{ valeur.0 }}</option>
+      {% endfor %}
+    </select>
+    <noscript><button type="submit" class="rounded bg-slate-900 px-3 py-1 text-white">Afficher</button></noscript>
+  </form>
+</div>
+{% include "campagnes/_indicateurs.html" %}
+{% endblock %}

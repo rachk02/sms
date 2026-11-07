@@ -1,0 +1,56 @@
+{# Tableau de bord (T-92). La sonde, invisible, interroge le fragment toutes les dix secondes tant que l'onglet est visible ; la réponse remplace toutes les zones en une fois, par échange hors bande. #}
+<div id="tableau-sonde" hidden hx-get="{% url 'tableau-de-bord-indicateurs' %}?periode={{ tableau.periode }}" hx-trigger="every 10s [document.visibilityState === 'visible']" hx-swap="outerHTML"></div>
+
+<div id="tableau-zones"{% if hors_bande %} hx-swap-oob="true"{% endif %}>
+  <p class="mb-4 text-sm text-slate-600">{{ tableau.libelle }}, du {{ tableau.debut|date:"d/m/Y à H:i" }} au {{ tableau.fin|date:"d/m/Y à H:i" }}.</p>
+  {% if tableau.vide %}
+    <div class="rounded border border-slate-200 bg-white p-6 text-sm text-slate-700" role="status">
+      Aucun envoi ni aucune désinscription sur cette période. Choisissez une période plus longue, ou lancez une campagne.
+    </div>
+  {% else %}
+    <dl class="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div id="tableau-volume" class="rounded border border-slate-200 bg-white p-4">
+        <dt class="text-sm text-slate-500">Volume émis</dt>
+        <dd class="text-2xl font-semibold">{{ tableau.emis }}</dd>
+        {% if tableau.refuses %}<dd class="text-xs text-slate-500">{{ tableau.refuses }} refusé(s) avant le réseau, sans frais</dd>{% endif %}
+      </div>
+      <div id="tableau-taux" class="rounded border border-slate-200 bg-white p-4">
+        <dt class="text-sm text-slate-500">Taux de livraison effectif</dt>
+        {% if tableau.taux_livraison is not None %}
+          <dd class="text-2xl font-semibold">{{ tableau.taux_livraison|floatformat:1 }} %</dd>
+          <dd class="text-xs text-slate-500">{{ tableau.livres }} livré(s), {{ tableau.echecs }} non livré(s), {{ tableau.sans_accuse }} sans accusé</dd>
+        {% else %}
+          <dd class="text-sm text-slate-700">Aucun accusé reçu sur la période.</dd>
+        {% endif %}
+      </div>
+      <div id="tableau-latence" class="rounded border border-slate-200 bg-white p-4">
+        <dt class="text-sm text-slate-500">Latence moyenne</dt>
+        {% if tableau.latence_moyenne_s is not None %}
+          <dd class="text-2xl font-semibold">{{ tableau.latence_moyenne_s|floatformat:1 }} s</dd>
+          <dd class="text-xs text-slate-500">de la soumission au réseau à l'accusé de livraison</dd>
+        {% else %}
+          <dd class="text-sm text-slate-700">Aucune livraison confirmée sur la période.</dd>
+        {% endif %}
+      </div>
+      <div id="tableau-desinscriptions" class="rounded border border-slate-200 bg-white p-4">
+        <dt class="text-sm text-slate-500">Désinscriptions</dt>
+        <dd class="text-2xl font-semibold">{{ tableau.desinscriptions }}</dd>
+        <dd class="text-xs text-slate-500">numéros qui ont répondu STOP</dd>
+      </div>
+    </dl>
+
+    <div id="tableau-reseaux" class="overflow-x-auto rounded border border-slate-200 bg-white">
+      <table class="w-full text-left text-sm">
+        <caption class="px-3 pt-3 text-left text-sm text-slate-500">Répartition par réseau</caption>
+        <thead class="text-slate-600"><tr><th class="px-3 py-2">Réseau</th><th class="px-3 py-2">Émis</th><th class="px-3 py-2">Part</th></tr></thead>
+        <tbody>
+          {% for reseau in tableau.reseaux %}
+            <tr class="border-t border-slate-200"><td class="px-3 py-2">{{ reseau.operateur }}</td><td class="px-3 py-2">{{ reseau.emis }}</td><td class="px-3 py-2">{{ reseau.part }} %</td></tr>
+          {% empty %}
+            <tr class="border-t border-slate-200"><td class="px-3 py-2 text-slate-500" colspan="3">Aucun message émis sur la période.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</div>

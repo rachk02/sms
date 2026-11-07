@@ -1,12 +1,13 @@
 """Lectures des campagnes."""
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.db.models import Sum
 from django.utils import timezone
 
 from apps.conformite import fenetre
+from apps.contacts.models import ListeNoire
 from apps.credits.models import Reservation
 from apps.journal.models import Compteur
 
@@ -158,3 +159,125 @@ def explication_tarif(campagne: Campagne) -> list[str]:
         "un palier franchi ou une grille changée pendant sa diffusion ne change pas son prix."
     )
     return lignes
+
+
+# Tableau de bord du client (T-92)
+
+# Périodes proposées, des plus courtes aux plus longues ; la première est celle
+# par défaut. Elles se comptent en heures entières, comme les compteurs.
+PERIODES = {
+    "7j": ("7 derniers jours", timedelta(days=7)),
+    "24h": ("24 dernières heures", timedelta(hours=24)),
+    "30j": ("30 derniers jours", timedelta(days=30)),
+    "90j": ("90 derniers jours", timedelta(days=90)),
+}
+PERIODE_PAR_DEFAUT = "7j"
+COLONNES_TABLEAU = (
+    "emis",
+    "livres",
+    "echecs",
+    "sans_accuse",
+    "refuses",
+    "latence_cumulee_ms",
+    "latences",
+)
+
+
+@dataclass(frozen=True)
+class Reseau:
+    operateur: str
+    emis: int
+    # Part du volume émis, en pourcentage entier.
+    part: int
+
+
+@dataclass(frozen=True)
+class TableauDeBord:
+    periode: str
+    libelle: str
+    debut: datetime
+    fin: datetime
+    emis: int
+    livres: int
+    echecs: int
+    sans_accuse: int
+    refuses: int
+    # Livrés sur les messages dont le sort est connu (livrés, non livrés, sans
+    # accusé), en pourcentage à une décimale ; None sans aucun sort connu.
+    taux_livraison: float | None
+    # Moyenne du délai entre soumission et accusé de livraison, en secondes.
+    latence_moyenne_s: float | None
+    reseaux: list
+    desinscriptions: int
+
+    @property
+    def vide(self) -> bool:
+        """Rien ne s'est passé sur la période : la page le dit, au lieu
+        d'aligner des zéros."""
+        return not (self.emis or self.refuses or self.desinscriptions)
+
+
+def periode(code: str | None, maintenant: datetime | None = None):
+    """(code, libellé, début, fin) d'une période du tableau de bord ; un code
+    inconnu vaut la période par défaut. La fin est l'heure entamée, comprise."""
+    if code not in PERIODES:
+        code = PERIODE_PAR_DEFAUT
+    libelle, duree = PERIODES[code]
+    maintenant = maintenant or timezone.now()
+    fin = maintenant.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+    return code, libelle, fin - duree, fin
+
+
+def tableau_de_bord(
+    client_id, code: str | None = None, maintenant: datetime | None = None
+) -> TableauDeBord:
+    """Les cinq indicateurs du client sur une période : volume émis, taux de
+    livraison, latence moyenne, répartition par réseau, désinscriptions.
+
+    Deux requêtes bornées, l'une sur les compteurs pré-agrégés, campagnes et
+    envois hors campagne confondus, l'autre sur la liste noire du compte ;
+    jamais de lecture de `journal_message`. Le taux et la latence portent sur
+    les accusés reçus dans la période, quelle que soit l'heure d'envoi."""
+    code, libelle, debut, fin = periode(code, maintenant)
+    lignes = list(
+        Compteur.objects.filter(client_id=client_id, heure__gte=debut, heure__lt=fin)
+        .values("operateur")
+        .annotate(**{c: Sum(c) for c in COLONNES_TABLEAU})
+        .order_by("operateur")
+    )
+    totaux = {c: sum(ligne[c] for ligne in lignes) for c in COLONNES_TABLEAU}
+    connus = totaux["livres"] + totaux["echecs"] + totaux["sans_accuse"]
+    emis = totaux["emis"]
+    reseaux = sorted(
+        (
+            Reseau(ligne["operateur"], ligne["emis"], round(100 * ligne["emis"] / emis))
+            for ligne in lignes
+            if ligne["emis"]
+        ),
+        key=lambda r: (-r.emis, r.operateur),
+    )
+    desinscriptions = ListeNoire.objects.filter(
+        client_id=client_id,
+        origine=ListeNoire.Origine.STOP_SMS,
+        ajoute_le__gte=debut,
+        ajoute_le__lt=fin,
+    ).count()
+    return TableauDeBord(
+        periode=code,
+        libelle=libelle,
+        debut=debut,
+        fin=fin,
+        emis=emis,
+        livres=totaux["livres"],
+        echecs=totaux["echecs"],
+        sans_accuse=totaux["sans_accuse"],
+        refuses=totaux["refuses"],
+        taux_livraison=round(100 * totaux["livres"] / connus, 1) if connus else None,
+        latence_moyenne_s=(
+            round(totaux["latence_cumulee_ms"] / totaux["latences"] / 1000, 1)
+            if totaux["latences"]
+            else None
+        ),
+        reseaux=reseaux,
+        desinscriptions=desinscriptions,
+    )

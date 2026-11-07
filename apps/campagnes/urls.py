@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import fragments, views, vues_campagnes
+from . import fragments, views, vues_campagnes, vues_tableau
 
 urlpatterns = [
     path("campagnes", vues_campagnes.liste, name="campagnes"),
@@ -14,4 +14,10 @@ urlpatterns = [
     path("campagnes/<uuid:pk>/reprendre", vues_campagnes.reprendre, name="campagne-reprendre"),
     path("campagnes/<uuid:pk>/annuler", vues_campagnes.annuler, name="campagne-annuler"),
     path("campagnes/<uuid:pk>/fragments/suivi", fragments.suivi, name="campagne-suivi"),
+    path("tableau-de-bord", vues_tableau.tableau_de_bord, name="tableau-de-bord"),
+    path(
+        "tableau-de-bord/fragments/indicateurs",
+        fragments.indicateurs,
+        name="tableau-de-bord-indicateurs",
+    ),
 ]

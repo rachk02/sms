@@ -20,7 +20,7 @@ from apps.telecom.numero_court import numero_court
 from apps.telecom.passerelles import SortSoumission, Soumission
 from apps.telecom.services import marquer_rapproche
 
-from .models import Compteur, Destinataire, Evenement, Message
+from .models import HORS_CAMPAGNE, Compteur, Destinataire, Evenement, Message
 from .selectors import clients_touches
 
 journal = logging.getLogger(__name__)
@@ -112,9 +112,11 @@ def creer_partitions_a_venir(mois_d_avance: int = 2) -> list[str]:
 COMPTER = """
 INSERT INTO journal_compteur (
     client_id, campagne_id, operateur, expediteur_libelle, heure,
-    emis, livres, echecs, sans_accuse, refuses, annules, cout
+    emis, livres, echecs, sans_accuse, refuses, annules, cout, latence_cumulee_ms, latences
 )
-VALUES (%s, %s, %s, %s, date_trunc('hour', %s::timestamptz), %s, %s, %s, %s, %s, %s, %s)
+VALUES (
+    %s, %s, %s, %s, date_trunc('hour', %s::timestamptz), %s, %s, %s, %s, %s, %s, %s, %s, %s
+)
 ON CONFLICT (client_id, campagne_id, operateur, expediteur_libelle, heure) DO UPDATE SET
     emis = journal_compteur.emis + EXCLUDED.emis,
     livres = journal_compteur.livres + EXCLUDED.livres,
@@ -122,7 +124,9 @@ ON CONFLICT (client_id, campagne_id, operateur, expediteur_libelle, heure) DO UP
     sans_accuse = journal_compteur.sans_accuse + EXCLUDED.sans_accuse,
     refuses = journal_compteur.refuses + EXCLUDED.refuses,
     annules = journal_compteur.annules + EXCLUDED.annules,
-    cout = journal_compteur.cout + EXCLUDED.cout
+    cout = journal_compteur.cout + EXCLUDED.cout,
+    latence_cumulee_ms = journal_compteur.latence_cumulee_ms + EXCLUDED.latence_cumulee_ms,
+    latences = journal_compteur.latences + EXCLUDED.latences
 """
 COLONNES = ("emis", "livres", "echecs", "sans_accuse", "refuses", "annules")
 
@@ -146,14 +150,32 @@ def _colonne(depuis: str, vers: str) -> str | None:
 
 
 def _compter(
-    *, client_id, campagne_id, operateur, expediteur, horodatage, colonne, nombre=1, cout=0
+    *,
+    client_id,
+    campagne_id,
+    operateur,
+    expediteur,
+    horodatage,
+    colonne,
+    nombre=1,
+    cout=0,
+    latence=None,
 ):
     valeurs = [nombre if c == colonne else 0 for c in COLONNES]
+    latences = [latence, 1] if latence is not None else [0, 0]
     with connection.cursor() as curseur:
         curseur.execute(
             COMPTER,
-            [client_id, campagne_id, operateur, expediteur, horodatage, *valeurs, cout],
+            [client_id, campagne_id, operateur, expediteur, horodatage, *valeurs, cout, *latences],
         )
+
+
+def latence_ms(soumis_le: datetime | None, livre_le: datetime) -> int | None:
+    """Délai d'acheminement d'un message livré, en millisecondes entières,
+    arrondi vers le bas ; zéro si l'opérateur date l'accusé avant la soumission."""
+    if soumis_le is None:
+        return None
+    return max(0, (livre_le - soumis_le) // timedelta(milliseconds=1))
 
 
 class TransitionInterdite(Exception):
@@ -200,15 +222,16 @@ def changer_etat(
         details=details or {},
     )
     colonne = _colonne(message.etat, vers)
-    if colonne and message.campagne_id:
+    if colonne and (message.campagne_id or message.nature == Message.Nature.CLIENT):
         _compter(
             client_id=message.client_id,
-            campagne_id=message.campagne_id,
+            campagne_id=message.campagne_id or HORS_CAMPAGNE,
             operateur=message.operateur,
             expediteur=message.expediteur_libelle,
             horodatage=horodatage,
             colonne=colonne,
             cout=message.cout_total if colonne == "emis" else 0,
+            latence=latence_ms(message.date_soumission, horodatage) if vers == Etat.LIVRE else None,
         )
     message.etat = vers
 
@@ -731,7 +754,7 @@ def confirmer_desinscription(
 RECOMPTER = """
 INSERT INTO journal_compteur (
     client_id, campagne_id, operateur, expediteur_libelle, heure,
-    emis, livres, echecs, sans_accuse, refuses, annules, cout
+    emis, livres, echecs, sans_accuse, refuses, annules, cout, latence_cumulee_ms, latences
 )
 SELECT
     m.client_id, m.campagne_id, m.operateur, m.expediteur_libelle,
@@ -745,7 +768,11 @@ SELECT
     count(*) FILTER (WHERE e.etat = 'SANS_ACCUSE'),
     count(*) FILTER (WHERE e.etat = 'REJETE' AND m.date_soumission IS NULL),
     count(*) FILTER (WHERE e.etat = 'ANNULE'),
-    coalesce(sum(m.cout_total) FILTER (WHERE e.etat = 'SOUMIS'), 0)
+    coalesce(sum(m.cout_total) FILTER (WHERE e.etat = 'SOUMIS'), 0),
+    coalesce(sum(
+        greatest(0, floor(extract(epoch FROM e.horodatage - m.date_soumission) * 1000))
+    ) FILTER (WHERE e.etat = 'LIVRE' AND m.date_soumission IS NOT NULL), 0),
+    count(*) FILTER (WHERE e.etat = 'LIVRE' AND m.date_soumission IS NOT NULL)
 FROM journal_message AS m
 JOIN journal_evenement AS e ON e.message_id = m.id AND e.horodatage >= %s
 WHERE m.client_id = %s AND m.campagne_id = %s AND m.date_reception >= %s
