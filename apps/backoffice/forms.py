@@ -2,6 +2,8 @@ from django import forms
 
 from apps.comptes.models import Client, Piece, pieces_attendues
 from apps.paiements.services import MANUELS
+from apps.telecom.models import Connecteur
+from apps.telecom.services import ConfigurationRefusee, verifier_parametres
 
 
 class EnregistrementClientForm(forms.Form):
@@ -105,3 +107,40 @@ class CreditForm(forms.Form):
         help_text="Geste commercial, réparation d'un incident : il figurera au registre et à "
         "l'audit.",
     )
+
+
+class ConnecteurForm(forms.ModelForm):
+    """Le secret se saisit, ne se relit jamais : champ vide à chaque
+    affichage, et vide à l'envoi, il garde le secret en place."""
+
+    secret = forms.CharField(
+        required=False,
+        strip=False,
+        widget=forms.PasswordInput(render_value=False, attrs={"autocomplete": "new-password"}),
+        help_text="Mot de passe de la liaison. Laisser vide pour garder celui qui est enregistré.",
+    )
+
+    class Meta:
+        model = Connecteur
+        fields = (
+            "nom",
+            "operateur",
+            "type",
+            "hote",
+            "port",
+            "identifiant",
+            "secret",
+            "debit_max",
+            "sessions_max",
+            "fenetre",
+            "parametres",
+            "actif",
+        )
+
+    def clean_parametres(self):
+        parametres = self.cleaned_data.get("parametres") or {}
+        try:
+            verifier_parametres(parametres)
+        except ConfigurationRefusee as refus:
+            raise forms.ValidationError(str(refus)) from None
+        return parametres

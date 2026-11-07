@@ -1,5 +1,6 @@
 """Connecteurs vers les passerelles. Voir docs/modele-de-donnees.md, section telecom."""
 
+from django.core.validators import MaxValueValidator
 from django.db import models
 
 from apps.core.models import Base, Identifiable
@@ -49,6 +50,36 @@ class Connecteur(Base):
 
     def __str__(self):
         return self.nom
+
+
+class Route(Identifiable):
+    """Route des messages d'un opérateur destinataire vers un connecteur (T-97).
+
+    La plus petite priorité passe d'abord ; une route suivante sert quand la
+    liaison de la précédente est tombée ou son connecteur inactif. Le
+    connecteur peut être celui d'un autre opérateur, en secours. La bascule au
+    taux d'accusés positifs (`seuil_bascule`, en pour cent) arrive avec le
+    routage dynamique (T-118). Réservée aux workers et au back-office."""
+
+    operateur = models.CharField(max_length=20, choices=Operateur)
+    connecteur = models.ForeignKey(Connecteur, on_delete=models.PROTECT, related_name="routes")
+    priorite = models.PositiveSmallIntegerField()
+    seuil_bascule = models.PositiveSmallIntegerField(
+        default=85, validators=[MaxValueValidator(100)]
+    )
+    actif = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "telecom_route"
+        constraints = [
+            models.UniqueConstraint(fields=["operateur", "priorite"], name="route_priorite_unique"),
+            models.UniqueConstraint(
+                fields=["operateur", "connecteur"], name="route_connecteur_unique"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.operateur} {self.priorite} {self.connecteur}"
 
 
 class IncidentLiaison(Identifiable):

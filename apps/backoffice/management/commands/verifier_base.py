@@ -60,6 +60,8 @@ RESERVEES_AUX_WORKERS = (
     "telecom_connecteur",
     "telecom_correlation",
     "telecom_accuse_orphelin",
+    "telecom_incident_liaison",
+    "telecom_route",
     "core_evenement_sortant",
     "core_audit",
     "comptes_connexion",

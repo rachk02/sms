@@ -36,6 +36,8 @@ ROLES = {
         "conformite.fenetre": _TOUT,
         "conformite.jourferie": _TOUT,
         "telecom.incidentliaison": _VOIR,
+        "telecom.connecteur": ("view", "add", "change"),
+        "telecom.route": _TOUT,
     },
     FINANCE: {
         "comptes.client": _VOIR,

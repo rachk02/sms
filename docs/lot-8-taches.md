@@ -141,6 +141,14 @@ Choix faits, à confirmer : seuil de supervision muette à une minute ; fenêtre
 
 **Critères** Un secret saisi n'est jamais réaffiché en clair. Une modification de débit prend effet sans redémarrage des workers. Toute modification laisse une écriture au journal d'audit avec l'ancienne et la nouvelle valeur.
 
+**Fait.** Écrans « Connecteurs » et « Routes » du back-office (rôle exploitation : consulter, créer et modifier les connecteurs ; tout sur les routes). Toute écriture passe par `telecom.services` (`enregistrer_connecteur`, `enregistrer_route`, `supprimer_route`) et laisse au journal d'audit l'ancienne et la nouvelle valeur. Le secret de la liaison se saisit dans un champ de mot de passe jamais prérempli, est chiffré en base (`core.chiffrement`) et n'apparaît ni sur l'écran ni dans l'audit, qui dit seulement « présent », « absent » ou « remplacé » ; laissé vide, il reste en place. Un réglage d'adaptateur dont la clé ressemble à un secret est refusé. L'état de la liaison reste à la supervision. Un connecteur ne se supprime pas, il se désactive. Nouvelle table `telecom_route` (opérateur destinataire, connecteur, priorité, seuil de bascule, actif ; une priorité et un connecteur au plus une fois par opérateur), réservée aux workers et au back-office (`core` 0034). Le choix du connecteur (`connecteur_pour`) suit les routes quand l'opérateur en a : la première route active, par priorité, dont le connecteur est actif et la liaison pas tombée ; sans route, la règle d'avant. Il est relu à chaque message, et le worker d'envoi refait sa passerelle quand le connecteur a changé : débit, réglages ou identifiants valent sans redémarrage.
+
+Choix faits, à confirmer :
+
+- l'hôte, l'identifiant et le secret saisis ici sont rangés en base, mais la configuration des sessions SMPP dans Jasmin reste celle du script `scripts/configurer_jasmin.py` : la recopie automatique vers Jasmin est à décider (lot 10 ou mise en production) ;
+- `seuil_bascule` est en pour cent d'accusés positifs, 85 par défaut comme le seuil de santé ; il ne sert qu'avec la bascule de T-118 ;
+- un opérateur qui a des routes n'utilise plus que celles-ci : un connecteur sans route n'est jamais pris en secours implicite.
+
 ## T-98 · Back-office, grilles tarifaires
 
 **Produit** L'écran de gestion des grilles, la création d'une version datée, la publication, et la double validation si elle est retenue.

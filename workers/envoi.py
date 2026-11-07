@@ -41,9 +41,13 @@ class WorkerEnvoi(Worker):
     def _passerelle(self, connecteur):
         from apps.telecom.passerelles import passerelle_pour
 
-        if connecteur.id not in self.passerelles:
-            self.passerelles[connecteur.id] = passerelle_pour(connecteur)
-        return self.passerelles[connecteur.id]
+        # Refaite quand le connecteur a été modifié au back-office (T-97) :
+        # hôte, identifiants ou réglages pris en compte sans redémarrage.
+        version, passerelle = self.passerelles.get(connecteur.id, (None, None))
+        if passerelle is None or version != connecteur.modifie_le:
+            passerelle = passerelle_pour(connecteur)
+            self.passerelles[connecteur.id] = (connecteur.modifie_le, passerelle)
+        return passerelle
 
     def _soumettre(self, donnees: dict, avec_creneau: bool = False) -> None:
         """Soumet le message de file. Avec le créneau de débit, le créneau est

@@ -28,12 +28,14 @@ from apps.fichiers.models import Fichier
 from apps.fichiers.services import lien
 from apps.paiements import services as paiements
 from apps.paiements.models import Facture, Reglage, Transaction
-from apps.telecom.models import IncidentLiaison
+from apps.telecom import services as telecom
+from apps.telecom.models import Connecteur, IncidentLiaison, Route
 
 from . import selectors
 from .forms import (
     AvoirForm,
     ClotureForm,
+    ConnecteurForm,
     CreditForm,
     EnregistrementClientForm,
     PaiementManuelForm,
@@ -965,3 +967,80 @@ class IncidentLiaisonAdmin(admin.ModelAdmin):
         return TemplateResponse(
             request, "admin/backoffice/_supervision.html", self._contexte(request)
         )
+
+
+@admin.register(Connecteur)
+class ConnecteurAdmin(admin.ModelAdmin):
+    """Configuration des connecteurs (T-97). Le secret est chiffré en base et
+    jamais réaffiché ; l'état de la liaison appartient à la supervision. Un
+    changement de débit vaut dès le message suivant, sans redémarrage. Un
+    connecteur ne se supprime pas : il se désactive, son historique reste."""
+
+    form = ConnecteurForm
+    list_display = (
+        "nom",
+        "operateur",
+        "type",
+        "etat_liaison",
+        "debit_max",
+        "sessions_max",
+        "fenetre",
+        "actif",
+    )
+    list_filter = ("operateur", "type", "actif", "etat_liaison")
+    search_fields = ("nom", "hote")
+    readonly_fields = (
+        "etat_liaison",
+        "derniere_connexion_le",
+        "secret_enregistre",
+        "routes_servies",
+    )
+
+    @admin.display(description="Secret")
+    def secret_enregistre(self, connecteur):
+        return "Enregistré, chiffré" if connecteur.secret_chiffre else "Aucun"
+
+    @admin.display(description="Routes")
+    def routes_servies(self, connecteur):
+        routes = connecteur.routes.order_by("operateur", "priorite") if connecteur.pk else []
+        return (
+            ", ".join(
+                f"{r.get_operateur_display()} en priorité {r.priorite}"
+                f"{'' if r.actif else ' (inactive)'}"
+                for r in routes
+            )
+            or "aucune"
+        )
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def save_model(self, request, obj, form, change):
+        telecom.enregistrer_connecteur(
+            obj,
+            agent=request.user,
+            secret=form.cleaned_data.get("secret", ""),
+            adresse_ip=adresse_ip(request),
+        )
+
+
+@admin.register(Route)
+class RouteAdmin(admin.ModelAdmin):
+    """Routes et priorités (T-97) : pour chaque opérateur destinataire, les
+    connecteurs dans l'ordre où ils servent. La plus petite priorité passe
+    d'abord ; la suivante sert quand la liaison de la précédente est tombée."""
+
+    list_display = ("operateur", "priorite", "connecteur", "seuil_bascule", "actif")
+    list_filter = ("operateur", "actif")
+    list_select_related = ("connecteur",)
+    ordering = ("operateur", "priorite")
+
+    def save_model(self, request, obj, form, change):
+        telecom.enregistrer_route(obj, agent=request.user, adresse_ip=adresse_ip(request))
+
+    def delete_model(self, request, obj):
+        telecom.supprimer_route(obj, agent=request.user, adresse_ip=adresse_ip(request))
+
+    def delete_queryset(self, request, queryset):
+        for route in queryset.select_related("connecteur"):
+            self.delete_model(request, route)

@@ -515,8 +515,19 @@ Cette table porte les identifiants des liaisons SMPP. Le rôle applicatif n'en
 lit ni n'en écrit aucune ligne : sécurité par ligne forcée, sans politique.
 Seuls les workers la voient.
 
-**`telecom_route`** : `id`, `operateur`, `connecteur_id`, `priorite`,
-`seuil_bascule`, `actif`.
+**`telecom_route`** : `id`, `operateur` (l'opérateur destinataire),
+`connecteur_id`, `priorite` (la plus petite passe d'abord), `seuil_bascule` en
+pour cent d'accusés positifs, 85 par défaut, `actif`. Unicité sur
+`(operateur, priorite)` et sur `(operateur, connecteur_id)`. Le connecteur peut
+être celui d'un autre opérateur, en secours. Écrite par le back-office, lue
+par le worker d'envoi : sécurité par ligne forcée sans politique.
+
+**`telecom_incident_liaison`** : `id`, `connecteur_id`, `etat` (DEGRADE ou
+DECONNECTE), `motif`, `debut`, `fin` nulle tant que l'incident dure, `mesures`
+en jsonb (taux, nombre d'accusés et délai moyen à l'ouverture). Tenue par la
+supervision à chaque changement d'état ; un seul incident ouvert par
+connecteur. Réservée aux workers et au back-office : sécurité par ligne forcée
+sans politique.
 
 **`telecom_prefixe`** : `id`, `pays`, `prefixe`, `operateur`, `actif`. Chargée
 en base et modifiable sans redéploiement : le plan de numérotation évolue.
