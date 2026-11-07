@@ -5,6 +5,7 @@ journal, panne d'un worker et rejeux compris. Un écart se voit au contrôle et
 se corrige par un recalcul qui remplace et n'ajoute pas.
 """
 
+import threading
 import uuid
 from unittest import mock
 
@@ -59,8 +60,9 @@ def compte(en_tant_que_worker):
     Prefixe.objects.filter(pays="BF").delete()
 
 
-def _terminee(client):
-    """Une campagne envoyée jusqu'au bout, avec une panne pendant les accusés."""
+def _terminee(client, garder: int = 0):
+    """Une campagne envoyée jusqu'au bout, avec une panne pendant les accusés.
+    Les `garder` derniers accusés ne sont pas appliqués : ils sont rendus."""
     numeros = [f"70{n:06d}" for n in range(6)] + [f"60{n:06d}" for n in range(4)]
     liste = listes.creer(client=client, nom="Clients")
     listes.ajouter(
@@ -88,11 +90,14 @@ def _terminee(client):
     with mock.patch("apps.journal.services._compter", side_effect=RuntimeError("panne")):
         with pytest.raises(RuntimeError):
             appliquer_accuse(accuses[0])
-    for accuse in accuses + accuses:
+    appliques = accuses[: len(accuses) - garder]
+    for accuse in appliques + appliques:
         appliquer_accuse(accuse)
     diffusion.publier()
     campagne.refresh_from_db()
     assert campagne.terminee_le
+    if garder:
+        return campagne, accuses[len(accuses) - garder :]
     return campagne
 
 
@@ -151,3 +156,35 @@ def test_les_tableaux_de_bord_ne_lisent_pas_le_journal_des_messages(compte):
     assert suivi.partis == volume == 10
     requetes = [q["sql"] for q in defaut.captured_queries + worker.captured_queries]
     assert requetes and not any("journal_message" in sql for sql in requetes)
+
+
+def test_un_accuse_tardif_pendant_le_controle_ne_fait_pas_d_ecart(compte):
+    campagne, (tardif,) = _terminee(compte, garder=1)
+    lire_journal = journal_lectures.compte_journal
+
+    def puis_un_accuse(*args):
+        lu = lire_journal(*args)
+
+        # Validé par un autre processus entre la lecture du journal et celle
+        # des compteurs.
+        def appliquer():
+            try:
+                applique.append(appliquer_accuse(tardif))
+            finally:
+                connections.close_all()
+
+        fil = threading.Thread(target=appliquer)
+        fil.start()
+        fil.join()
+        return lu
+
+    applique = []
+
+    with mock.patch.object(journal_lectures, "compte_journal", side_effect=puis_un_accuse):
+        assert controle.controler(campagne) is None
+    assert applique == [True]
+    reel = journal_lectures.compte_journal(
+        compte.id, campagne.id, campagne.confirmee_le, campagne.terminee_le
+    )
+    assert reel["livres"] + reel["echecs"] == 10
+    assert controle.controler(campagne) is None
