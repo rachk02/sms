@@ -146,8 +146,7 @@ def test_une_session_tombee_apparait_avec_son_heure_de_chute(client, exploitatio
     assert timezone.localtime(incident.debut).strftime("%H:%M:%S") in ligne
     assert client.get("/admin/telecom/incidentliaison/").status_code == 200
 
-    connecteur.parametres = {}
-    connecteur.save()
+    Connecteur.objects.filter(id=connecteur.id).update(parametres={})
     sante.surveiller()
     incident.refresh_from_db()
     assert incident.fin is not None
@@ -156,8 +155,7 @@ def test_une_session_tombee_apparait_avec_son_heure_de_chute(client, exploitatio
 
 def test_une_route_degradee_puis_coupee_change_d_incident(exploitation):
     _, connecteur = exploitation
-    connecteur.parametres = {}
-    connecteur.save()
+    Connecteur.objects.filter(id=connecteur.id).update(parametres={})
     maintenant = sante.timezone.now()
     for _ in range(30):
         sante.enregistrer_accuse(connecteur.id, False, 2.0, maintenant)
@@ -166,8 +164,7 @@ def test_une_route_degradee_puis_coupee_change_d_incident(exploitation):
     assert degrade.etat == Connecteur.EtatLiaison.DEGRADE
     assert degrade.mesures["accuses"] == 30 and degrade.mesures["taux"] == 0
 
-    connecteur.parametres = {"coupe": True}
-    connecteur.save()
+    Connecteur.objects.filter(id=connecteur.id).update(parametres={"coupe": True})
     sante.surveiller(maintenant)
     degrade.refresh_from_db()
     assert degrade.fin is not None

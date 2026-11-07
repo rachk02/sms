@@ -205,3 +205,4 @@ Règles, reprises de `~/.claude/CLAUDE.md` :
 [2026-11-07 20:13:47] Suivi - T-99 : dictionnaire anti-spam (table modifiable au back-office, normalisation contre les contournements, blocage nommant l'expression, avertissement dans l'aperçu)
 [2026-11-07 20:14:08] Correction - CI rouge sur T-95 : le test du message système vérifiait tous les contrôles de soumission, dont celui de l'expéditeur ; il vérifie désormais le seul contrôle du compte suspendu
 [2026-11-07 20:20:49] Suivi - T-100 : détection de trafic artificiel (numéros contigus à la confirmation, pics de codes vers une plage inhabituelle, livraison basse sur une plage), seuils en base, alertes au back-office, blocage au seuil critique jusqu'au traitement
+[2026-11-07 20:21:19] Correction - CI rouge sur T-96 : le test de supervision sauvegardait un connecteur périmé et réécrivait l'état posé par la supervision ; mise à jour ciblée des réglages
