@@ -1,8 +1,9 @@
 from django import forms
 
 from apps.comptes.models import Client, Piece, pieces_attendues
+from apps.credits.models import Grille
 from apps.paiements.services import MANUELS
-from apps.telecom.models import Connecteur
+from apps.telecom.models import Connecteur, Operateur
 from apps.telecom.services import ConfigurationRefusee, verifier_parametres
 
 
@@ -144,3 +145,40 @@ class ConnecteurForm(forms.ModelForm):
         except ConfigurationRefusee as refus:
             raise forms.ValidationError(str(refus)) from None
         return parametres
+
+
+def _date_et_heure(**options):
+    return forms.DateTimeField(
+        widget=forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
+        input_formats=["%Y-%m-%dT%H:%M", "%d/%m/%Y %H:%M"],
+        **options,
+    )
+
+
+class GrilleForm(forms.Form):
+    nom = forms.CharField(max_length=150)
+    nature = forms.ChoiceField(choices=Grille.Nature.choices)
+    client = forms.ModelChoiceField(
+        queryset=Client.objects.order_by("raison_sociale"),
+        required=False,
+        help_text="Obligatoire pour une grille négociée ; une promotion peut viser un client.",
+    )
+
+
+class VersionForm(forms.Form):
+    debut = _date_et_heure(label="Prise d'effet", help_text="Heure de Ouagadougou.")
+    fin = _date_et_heure(label="Fin", required=False, help_text="Obligatoire pour une promotion.")
+    copier = forms.BooleanField(
+        required=False, initial=True, label="Reprendre les prix de la version en vigueur"
+    )
+
+
+class PalierForm(forms.Form):
+    pays = forms.CharField(max_length=2, initial="BF")
+    operateur = forms.ChoiceField(choices=Operateur.choices, label="Réseau")
+    volume_min = forms.IntegerField(min_value=0, initial=0, label="À partir de (segments par mois)")
+    prix_unitaire = forms.IntegerField(min_value=1, label="Prix d'un segment (FCFA)")
+
+
+class ConfirmationForm(forms.Form):
+    pass

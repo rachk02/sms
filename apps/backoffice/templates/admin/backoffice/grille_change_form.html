@@ -1,0 +1,29 @@
+{% extends "admin/change_form.html" %}
+{% block object-tools-items %}
+  {% if original %}<li><a href="{% url 'admin:credits_grille_version_ajouter' original.pk %}">Nouvelle version</a></li>{% endif %}
+  {{ block.super }}
+{% endblock %}
+{% block after_field_sets %}
+{% if original %}
+<div class="module">
+  <h2>Versions</h2>
+  <table>
+    <thead><tr><th>État</th><th>Prise d'effet</th><th>Fin</th><th>Prix</th><th>Publiée par</th><th></th></tr></thead>
+    <tbody>
+      {% for v in versions %}
+      <tr>
+        <td>{% if v.publiee %}Publiée le {{ v.publiee_le|date:"d/m/Y H:i" }}{% else %}Brouillon{% endif %}</td>
+        <td>{% if v.debut %}{{ v.debut|date:"d/m/Y H:i" }}{% else %}à la publication{% endif %}</td>
+        <td>{% if v.fin %}{{ v.fin|date:"d/m/Y H:i" }}{% else %}sans terme{% endif %}</td>
+        <td>{{ v.paliers.count }}</td>
+        <td>{{ v.publiee_par|default:"" }}</td>
+        <td><a href="{% url 'admin:credits_grille_version' v.pk %}">{% if v.publiee %}Voir{% else %}Modifier les prix{% endif %}</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6">Aucune version : la grille n'est pas appliquée.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

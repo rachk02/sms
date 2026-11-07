@@ -7,6 +7,7 @@ from datetime import datetime, time
 
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
+from django.db import IntegrityError
 from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
 from django.urls import path
@@ -22,6 +23,7 @@ from apps.conformite.models import Fenetre, JourFerie
 from apps.core.models import Audit
 from apps.core.numeros import NumeroInvalide, normaliser
 from apps.credits import services as credits
+from apps.credits.models import Grille, PalierGrille, VersionGrille
 from apps.expediteurs import services as expediteurs
 from apps.expediteurs.models import Expediteur, ExpediteurReseau, Reserve
 from apps.fichiers.models import Fichier
@@ -35,13 +37,17 @@ from . import selectors
 from .forms import (
     AvoirForm,
     ClotureForm,
+    ConfirmationForm,
     ConnecteurForm,
     CreditForm,
     EnregistrementClientForm,
+    GrilleForm,
     PaiementManuelForm,
+    PalierForm,
     RemboursementForm,
     RolesForm,
     SuspensionForm,
+    VersionForm,
 )
 from .models import DossierPreuve
 from .roles import exiger
@@ -58,6 +64,8 @@ from .services import (
     attribuer_roles,
     cloturer_compte,
     enregistrer_client,
+    preparer_version,
+    publier_grille_version,
     reactiver_compte,
     rejeter_dossier,
     suspendre_compte,
@@ -1044,3 +1052,195 @@ class RouteAdmin(admin.ModelAdmin):
     def delete_queryset(self, request, queryset):
         for route in queryset.select_related("connecteur"):
             self.delete_model(request, route)
+
+
+def _super(request) -> bool:
+    return request.user.is_active and request.user.is_superuser
+
+
+@admin.register(Grille)
+class GrilleAdmin(admin.ModelAdmin):
+    """Grilles tarifaires (T-98), au super-administrateur seul. Une grille se
+    crée vide ; ses prix vivent dans des versions datées, préparées en
+    brouillon puis publiées. Une version publiée ne change plus : seule une
+    nouvelle version la remplace, à sa date de prise d'effet."""
+
+    list_display = ("nom", "nature", "client", "en_vigueur")
+    list_filter = ("nature",)
+    search_fields = ("nom", "client__raison_sociale")
+    list_select_related = ("client",)
+    change_form_template = "admin/backoffice/grille_change_form.html"
+    readonly_fields = ("nom", "nature", "client", "devise", "cree_le")
+
+    @admin.display(description="Version en vigueur")
+    def en_vigueur(self, grille):
+        version = credits.version_en_vigueur_de(grille)
+        if version is None:
+            return "aucune"
+        return f"depuis le {timezone.localtime(version.debut):%d/%m/%Y %H:%M}"
+
+    def has_view_permission(self, request, obj=None):
+        return _super(request)
+
+    def has_add_permission(self, request):
+        return _super(request)
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_urls(self):
+        propres = [
+            path(
+                "<uuid:pk>/versions/ajouter/",
+                self.admin_site.admin_view(self.ajouter_version),
+                name="credits_grille_version_ajouter",
+            ),
+            path(
+                "versions/<uuid:pk>/",
+                self.admin_site.admin_view(self.version),
+                name="credits_grille_version",
+            ),
+            path(
+                "versions/<uuid:pk>/publier/",
+                self.admin_site.admin_view(self.publier),
+                name="credits_grille_version_publier",
+            ),
+        ]
+        return propres + super().get_urls()
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        _autorise(_super(request))
+        versions = VersionGrille.objects.filter(grille_id=object_id).order_by("-cree_le")
+        return super().change_view(
+            request, object_id, form_url, {**(extra_context or {}), "versions": versions}
+        )
+
+    def add_view(self, request, form_url="", extra_context=None):
+        _autorise(_super(request))
+        formulaire = GrilleForm(request.POST or None)
+        if request.method == "POST" and formulaire.is_valid():
+            donnees = formulaire.cleaned_data
+            try:
+                grille = credits.creer_grille(
+                    donnees["nom"],
+                    auteur=request.user,
+                    nature=donnees["nature"],
+                    client_id=donnees["client"].id if donnees["client"] else None,
+                )
+            except (credits.TarifInvalide, credits.PublicationNonAutorisee) as refus:
+                formulaire.add_error(None, str(refus))
+            except IntegrityError:
+                formulaire.add_error(None, "Cette grille existe déjà pour ce client.")
+            else:
+                messages.success(request, f"Grille {grille.nom} créée, sans prix.")
+                return redirect("admin:credits_grille_change", grille.id)
+        return self._page(
+            request,
+            "Nouvelle grille",
+            "Une grille se crée vide : ses prix se posent dans une version datée.",
+            "Créer la grille",
+            formulaire,
+        )
+
+    def ajouter_version(self, request, pk):
+        _autorise(_super(request))
+        grille = get_object_or_404(Grille, pk=pk)
+        formulaire = VersionForm(request.POST or None)
+        if request.method == "POST" and formulaire.is_valid():
+            donnees = formulaire.cleaned_data
+            try:
+                version = preparer_version(
+                    grille,
+                    agent=request.user,
+                    debut=donnees["debut"],
+                    fin=donnees["fin"],
+                    copier=donnees["copier"],
+                )
+            except (credits.TarifInvalide, credits.PublicationNonAutorisee) as refus:
+                formulaire.add_error(None, str(refus))
+            else:
+                return redirect("admin:credits_grille_version", version.id)
+        return self._page(
+            request,
+            f"Nouvelle version de {grille.nom}",
+            "Un brouillon daté : rien ne change pour les clients avant sa publication, "
+            "puis il prend effet à sa date.",
+            "Préparer la version",
+            formulaire,
+        )
+
+    def version(self, request, pk):
+        _autorise(_super(request))
+        version = get_object_or_404(VersionGrille.objects.select_related("grille"), pk=pk)
+        formulaire = PalierForm(request.POST if request.POST.get("action") == "fixer" else None)
+        if request.method == "POST" and not version.publiee:
+            try:
+                if request.POST.get("action") == "retirer":
+                    credits.retirer_palier(
+                        get_object_or_404(
+                            PalierGrille, pk=request.POST.get("palier"), version=version
+                        )
+                    )
+                    return redirect("admin:credits_grille_version", version.id)
+                if formulaire.is_valid():
+                    credits.fixer_palier(version, **formulaire.cleaned_data)
+                    return redirect("admin:credits_grille_version", version.id)
+            except credits.TarifInvalide as refus:
+                formulaire.add_error(None, str(refus))
+        contexte = {
+            **self.admin_site.each_context(request),
+            "title": f"{version.grille.nom}, version du "
+            + (
+                f"{timezone.localtime(version.debut):%d/%m/%Y %H:%M}"
+                if version.debut
+                else "jour de sa publication"
+            ),
+            "opts": self.model._meta,
+            "version": version,
+            "paliers": version.paliers.order_by("pays", "operateur", "volume_min"),
+            "formulaire": formulaire,
+        }
+        return TemplateResponse(request, "admin/backoffice/grille_version.html", contexte)
+
+    def publier(self, request, pk):
+        _autorise(_super(request))
+        version = get_object_or_404(VersionGrille.objects.select_related("grille"), pk=pk)
+        formulaire = ConfirmationForm(request.POST or None)
+        if request.method == "POST" and formulaire.is_valid():
+            try:
+                publier_grille_version(version, agent=request.user)
+            except (credits.TarifInvalide, credits.PublicationNonAutorisee) as refus:
+                formulaire.add_error(None, str(refus))
+            else:
+                messages.success(request, f"Version publiée : {version.grille.nom}.")
+                return redirect("admin:credits_grille_change", version.grille_id)
+        debut = (
+            f"le {timezone.localtime(version.debut):%d/%m/%Y à %H:%M}"
+            if version.debut
+            else "sans date"
+        )
+        return self._page(
+            request,
+            f"Publier la version de {version.grille.nom}",
+            f"Prise d'effet {debut}. Une fois publiée, la version ne change plus ; "
+            "la version en vigueur à cette date s'arrête là. La publication est tracée "
+            "avec les anciens et les nouveaux prix.",
+            "Publier",
+            formulaire,
+            elements=[str(p) for p in version.paliers.order_by("pays", "operateur", "volume_min")],
+        )
+
+    def _page(self, request, titre, introduction, bouton, formulaire, elements=()):
+        contexte = {
+            **self.admin_site.each_context(request),
+            "title": titre,
+            "introduction": introduction,
+            "elements": list(elements),
+            "bouton": bouton,
+            "formulaire": formulaire,
+            "opts": self.model._meta,
+        }
+        return TemplateResponse(request, "admin/backoffice/formulaire.html", contexte)

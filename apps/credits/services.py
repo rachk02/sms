@@ -449,6 +449,25 @@ def fixer_palier(
     return palier
 
 
+@transaction.atomic
+def retirer_palier(palier: PalierGrille) -> None:
+    """Retire un prix d'une version en brouillon."""
+    version = VersionGrille.objects.select_for_update().get(id=palier.version_id)
+    if version.publiee:
+        raise TarifInvalide("Une version publiée ne change plus : préparez une nouvelle version.")
+    palier.delete()
+
+
+def version_en_vigueur_de(grille: Grille, a=None) -> VersionGrille | None:
+    """La version publiée d'une grille en vigueur à cet instant."""
+    a = a or timezone.now()
+    return (
+        VersionGrille.objects.filter(grille=grille, publiee=True, debut__lte=a)
+        .filter(Q(fin__isnull=True) | Q(fin__gt=a))
+        .first()
+    )
+
+
 def _prix_de(version: VersionGrille | None) -> list[dict]:
     if version is None:
         return []

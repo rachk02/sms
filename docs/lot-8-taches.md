@@ -155,6 +155,10 @@ Choix faits, à confirmer :
 
 **Critères** Une version publiée n'est plus modifiable, seule une nouvelle version la remplace. La publication laisse une écriture au journal d'audit. Un changement de prix sans date de prise d'effet est refusé.
 
+**Fait.** Écran « Grilles » du back-office, au super-administrateur seul, sans double validation (décision du 6 novembre 2026). Une grille se crée vide (publique, négociée pour un client, promotion) ; sa fiche liste ses versions, brouillons et publiées, avec leur prise d'effet, leur fin et l'auteur de la publication. Une nouvelle version se prépare en brouillon avec sa date de prise d'effet, obligatoire et jamais passée (`backoffice.services.preparer_version`), en reprenant au besoin les prix de la version en vigueur pour ne saisir que ce qui change ; ses prix se posent ou se retirent tant qu'elle n'est pas publiée (`credits.services.fixer_palier`, `retirer_palier`). La publication passe par une page qui dit la date et les prix avant de confirmer, puis par la règle existante (`credits.services.publier_version` : version complète, jamais dans le passé, la précédente reçoit sa fin, trace avec les anciens et les nouveaux prix). Une version publiée refuse toute modification, à l'écran comme au service. Une version sans date est refusée à la publication par l'écran (`publier_grille_version`).
+
+Choix fait, à confirmer : la commande `publier_grille` garde la publication sans date, qui prend effet tout de suite, pour le premier chargement d'une grille ; l'écran, lui, exige toujours la date.
+
 ## T-99 · Dictionnaire anti-spam
 
 **Produit** La table des mots-clés proscrits, modifiable en base, et le filtrage à la composition avec avertissement puis blocage selon la gravité.

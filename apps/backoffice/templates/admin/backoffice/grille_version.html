@@ -1,0 +1,41 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<p>
+  <a href="{% url 'admin:credits_grille_change' version.grille_id %}">Retour à la grille</a>.
+  {% if version.publiee %}
+    Publiée le {{ version.publiee_le|date:"d/m/Y H:i" }} par {{ version.publiee_par }} : elle ne change plus, seule une nouvelle version la remplace.
+  {% else %}
+    Brouillon : rien ne s'applique avant la publication.
+  {% endif %}
+  {% if version.fin %}Fin le {{ version.fin|date:"d/m/Y H:i" }}.{% endif %}
+</p>
+<div class="module">
+  <h2>Prix d'un segment</h2>
+  <table>
+    <thead><tr><th>Pays</th><th>Réseau</th><th>À partir de</th><th>Prix (FCFA)</th>{% if not version.publiee %}<th></th>{% endif %}</tr></thead>
+    <tbody>
+      {% for p in paliers %}
+      <tr>
+        <td>{{ p.pays }}</td><td>{{ p.operateur }}</td><td>{{ p.volume_min }} segments</td><td>{{ p.prix_unitaire }}</td>
+        {% if not version.publiee %}
+        <td><form method="post">{% csrf_token %}<input type="hidden" name="action" value="retirer"><input type="hidden" name="palier" value="{{ p.pk }}"><input type="submit" value="Retirer"></form></td>
+        {% endif %}
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">Aucun prix.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if not version.publiee %}
+<form method="post" class="module">
+  {% csrf_token %}
+  <h2>Poser ou remplacer un prix</h2>
+  {{ formulaire.non_field_errors }}
+  {{ formulaire.as_p }}
+  <input type="hidden" name="action" value="fixer">
+  <input type="submit" class="default" value="Enregistrer le prix">
+</form>
+<p><a class="button" href="{% url 'admin:credits_grille_version_publier' version.pk %}">Publier cette version</a></p>
+{% endif %}
+{% endblock %}

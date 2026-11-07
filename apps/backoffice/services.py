@@ -13,6 +13,8 @@ from apps.comptes.models import Client, Dossier, Piece, Utilisateur, pieces_atte
 from apps.comptes.services import creer_client, creer_utilisateur, envoyer_invitation
 from apps.core.audit import auditer
 from apps.core.models import Audit
+from apps.credits import services as credits_services
+from apps.credits.models import Grille, VersionGrille
 from apps.fichiers.models import Fichier
 from apps.fichiers.services import FichierRefuse, deposer
 
@@ -411,3 +413,47 @@ def attribuer_credits(client, montant: int, *, agent, motif: str, adresse_ip=Non
         adresse_ip=adresse_ip,
     )
     return ecriture
+
+
+# Grilles tarifaires (T-98). Seul un super-administrateur crée, prépare et
+# publie (décision du 6 novembre 2026, sans double validation).
+
+
+@transaction.atomic
+def preparer_version(
+    grille: Grille, *, agent, debut, fin=None, copier: bool = True, maintenant=None
+) -> VersionGrille:
+    """Ouvre une version en brouillon, datée : un changement de prix sans date
+    de prise d'effet est refusé. Reprend, si demandé, les prix de la version
+    en vigueur, pour n'avoir à saisir que ce qui change."""
+    credits_services._super_administrateur(agent)
+    maintenant = maintenant or timezone.now()
+    if debut is None:
+        raise credits_services.TarifInvalide(
+            "Un changement de prix porte sa date de prise d'effet."
+        )
+    if debut < maintenant:
+        raise credits_services.TarifInvalide("Une version ne prend pas effet dans le passé.")
+    version = credits_services.creer_version(grille, debut=debut, fin=fin)
+    en_vigueur = credits_services.version_en_vigueur_de(grille, maintenant)
+    if copier and en_vigueur:
+        for palier in en_vigueur.paliers.all():
+            credits_services.fixer_palier(
+                version,
+                pays=palier.pays,
+                operateur=palier.operateur,
+                volume_min=palier.volume_min,
+                prix_unitaire=palier.prix_unitaire,
+            )
+    return version
+
+
+def publier_grille_version(version: VersionGrille, *, agent, maintenant=None) -> VersionGrille:
+    """Publication depuis l'écran : la version porte sa date, puis la règle de
+    `credits.services.publier_version` (complète, jamais dans le passé, la
+    précédente reçoit sa fin, trace avec anciens et nouveaux prix)."""
+    if version.debut is None:
+        raise credits_services.TarifInvalide(
+            "Un changement de prix porte sa date de prise d'effet."
+        )
+    return credits_services.publier_version(version, auteur=agent, maintenant=maintenant)

@@ -39,6 +39,9 @@ PERSONNALISEES = {
     "comptes_utilisateur_roles": (SUPER, True),
     "paiements_facture_avoir": ("backoffice.emettre_avoir", True),
     "backoffice_dossierpreuve_client": ("backoffice.view_dossierpreuve", False),
+    "credits_grille_version_ajouter": (SUPER, True),
+    "credits_grille_version": (SUPER, True),
+    "credits_grille_version_publier": (SUPER, True),
     "telecom_incidentliaison_supervision": ("telecom.view_incidentliaison", False),
     "telecom_incidentliaison_supervision_fragment": ("telecom.view_incidentliaison", False),
 }
