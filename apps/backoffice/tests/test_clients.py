@@ -28,6 +28,7 @@ from apps.comptes.models import Client
 from apps.comptes.services import (
     MOTIF_COMPTE_NON_ACTIF,
     SuspensionRefusee,
+    controle_compte_actif,
     creer_client,
     creer_utilisateur,
 )
@@ -127,7 +128,7 @@ def test_la_suspension_retient_les_envois_et_la_reactivation_ne_reprend_que_les_
     )
     assert controles.refus(unitaire) == MOTIF_COMPTE_NON_ACTIF
     unitaire.nature = Message.Nature.SYSTEME
-    assert controles.refus(unitaire) is None
+    assert controle_compte_actif(unitaire) is None
     # Le client ne reprend rien, ne confirme rien.
     with pytest.raises(services.CampagneRefusee, match="suspendu"):
         services.reprendre(diffusee, auteur=None)

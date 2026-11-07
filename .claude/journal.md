@@ -203,3 +203,4 @@ Règles, reprises de `~/.claude/CLAUDE.md` :
 [2026-11-07 20:07:32] Suivi - T-97 : configuration des connecteurs et des routes au back-office (secret chiffré jamais réaffiché, audit avant et après, routes par priorité, débit et réglages pris en compte sans redémarrage)
 [2026-11-07 20:10:24] Suivi - T-98 : grilles tarifaires au back-office (versions datées en brouillon, reprise des prix en vigueur, publication confirmée et tracée, version publiée non modifiable, date de prise d'effet obligatoire), super-administrateur seul sans double validation
 [2026-11-07 20:13:47] Suivi - T-99 : dictionnaire anti-spam (table modifiable au back-office, normalisation contre les contournements, blocage nommant l'expression, avertissement dans l'aperçu)
+[2026-11-07 20:14:08] Correction - CI rouge sur T-95 : le test du message système vérifiait tous les contrôles de soumission, dont celui de l'expéditeur ; il vérifie désormais le seul contrôle du compte suspendu
