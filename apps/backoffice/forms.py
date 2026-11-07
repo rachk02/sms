@@ -72,3 +72,20 @@ class RemboursementForm(forms.Form):
     reference = forms.CharField(
         max_length=100, label="Référence du virement", help_text="Le virement fait au client."
     )
+
+
+class RolesForm(forms.Form):
+    roles = forms.MultipleChoiceField(
+        choices=[],
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        label="Rôles",
+        help_text="Cumulables. Aucun : l'agent se connecte et ne voit rien.",
+    )
+    motif = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}))
+
+    def __init__(self, *args, **kwargs):
+        from .roles import ROLES
+
+        super().__init__(*args, **kwargs)
+        self.fields["roles"].choices = [(role, role) for role in ROLES]

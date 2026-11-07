@@ -260,3 +260,45 @@ def cloturer_compte(client, *, agent, motif: str, adresse_ip=None) -> list:
     for campagne in en_cours.order_by("cree_le"):
         annulees.append(campagnes.annuler(campagne, auteur=agent))
     return annulees
+
+
+# Rôles des agents (T-95)
+
+
+class AttributionRefusee(ValueError):
+    pass
+
+
+@transaction.atomic
+def attribuer_roles(agent, roles: list[str], *, auteur, motif: str, adresse_ip=None) -> list:
+    """Donne à un agent exactement ces rôles, parmi Support, Exploitation et
+    Finance. Seul un super-administrateur attribue des rôles, jamais à lui-même,
+    et toujours avec un motif ; la trace porte les rôles avant et après."""
+    from django.contrib.auth.models import Group
+
+    from .roles import ROLES
+
+    if not getattr(auteur, "is_superuser", False):
+        raise AttributionRefusee("Seul un super-administrateur attribue des rôles.")
+    if agent.pk == auteur.pk:
+        raise AttributionRefusee("Un agent ne change pas ses propres rôles.")
+    if not agent.is_staff or agent.client_id:
+        raise AttributionRefusee("Les rôles ne se donnent qu'aux agents EL-IMMEKA.")
+    if not motif or not motif.strip():
+        raise AttributionRefusee("Indiquez le motif du changement.")
+    inconnus = set(roles) - set(ROLES)
+    if inconnus:
+        raise AttributionRefusee(f"Rôle inconnu : {', '.join(sorted(inconnus))}.")
+    avant = sorted(agent.groups.filter(name__in=ROLES).values_list("name", flat=True))
+    agent.groups.set(Group.objects.filter(name__in=roles))
+    apres = sorted(roles)
+    auditer(
+        "backoffice.roles",
+        agent,
+        auteur=auteur,
+        avant={"roles": avant},
+        apres={"roles": apres},
+        motif=motif.strip(),
+        adresse_ip=adresse_ip,
+    )
+    return apres

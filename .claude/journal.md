@@ -197,3 +197,4 @@ Règles, reprises de `~/.claude/CLAUDE.md` :
 [2026-11-07 19:31:45] Suivi - T-93 : recherche dans le journal des messages (dates obligatoires, filtres état, campagne, numéro normalisé, pagination par curseur avec borne simple pour l index, bascule en export au-delà de 31 jours ; export aux mêmes filtres).
 [2026-11-07 19:46:45] Correction - T-93 : l écran de recherche échouait sans paramètres (argument de filtre de gabarit absent) ; la saisie est passée complète.
 [2026-11-07 19:46:45] Suivi - T-94 : fiche message (historique daté, liaison publiée, diagnostic par état, contexte de ticket), lue par sa clé exacte.
+[2026-11-07 19:46:54] Suivi - T-95, première partie : rôles d agent (groupes Support, Exploitation, Finance synchronisés après migration, droits sans table), contrôle explicite du droit dans chaque vue réécrite du back-office, attribution des rôles par le super-administrateur seul, test en matrice.

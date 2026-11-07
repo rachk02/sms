@@ -33,6 +33,24 @@ mécanisme au lot 9, avec les clés de l'API.
 la refonte de l'interface : le back-office s'appuie sur l'administration
 existante, le portail sur des gabarits simples.
 
+## Rôles d'agent, mise en place
+
+Les trois rôles sont des groupes Django, réécrits après chaque migration depuis la table de `apps/backoffice/roles.py`, qui seule fait foi ; le super-administrateur est le drapeau `is_superuser`. Les actions sensibles qui ne sont pas l'écriture d'une table ont leurs droits sur un modèle sans table (`backoffice.Droit`). Chaque vue réécrite du back-office vérifie elle-même le droit exigé : l'enveloppe de l'administration ne vérifie que le statut d'agent. Les rôles s'attribuent depuis la fiche d'un agent (`/admin/comptes/utilisateur/<id>/roles/`), par un super-administrateur seulement, jamais sur lui-même, avec un motif, et la trace porte les rôles avant et après. Un test parcourt chaque liste et chaque vue réécrite avec un agent de chaque rôle, aucun n'étant super-administrateur, et échoue si une vue réécrite n'y est pas déclarée.
+
+| Rôle | Droits |
+| --- | --- |
+| Support | clients (voir, enregistrer, modifier), dossiers d'ouverture (revue), utilisateurs (voir), expéditeurs (revue), noms réservés, dossier de preuve, journal d'audit (voir) ; suspendre et réactiver, clore un compte, réinitialiser un second facteur |
+| Exploitation | clients et journal d'audit (voir), fenêtres légales et jours fériés |
+| Finance | clients et journal d'audit (voir), paiements (voir, saisir un paiement manuel), factures (voir), réglages des paiements ; attribuer des crédits, rembourser, émettre un avoir |
+| Super-administrateur | tout, dont les grilles tarifaires et l'attribution des rôles |
+
+Choix faits, à confirmer :
+
+- la suspension d'un compte revient au support ; l'exploitation y viendra par la suspension automatique (T-101) ;
+- la finance et l'exploitation voient les fiches clients, en lecture ;
+- la clôture d'un compte revient au support, le remboursement à la finance ;
+- le rôle de super-administrateur ne se donne pas par l'écran des rôles.
+
 ## T-91 · Compteurs pré-agrégés
 
 **Produit** La table des compteurs par client, campagne, opérateur et heure, alimentée par les workers au fil de l'eau, et le traitement de rattrapage en cas de trou.

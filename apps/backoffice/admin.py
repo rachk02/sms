@@ -6,7 +6,8 @@ Servie dans l'espace du back-office seulement (voir config/urls.py).
 from datetime import datetime, time
 
 from django.contrib import admin, messages
-from django.shortcuts import redirect
+from django.core.exceptions import PermissionDenied
+from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
 from django.urls import path
 from django.utils import timezone
@@ -34,14 +35,18 @@ from .forms import (
     EnregistrementClientForm,
     PaiementManuelForm,
     RemboursementForm,
+    RolesForm,
 )
 from .models import DossierPreuve
+from .roles import exiger
 from .services import (
     CONTROLES_DE_REVUE,
+    AttributionRefusee,
     DecisionRefusee,
     EnregistrementRefuse,
     PieceDeposee,
     approuver_dossier,
+    attribuer_roles,
     cloturer_compte,
     enregistrer_client,
     rejeter_dossier,
@@ -50,6 +55,13 @@ from .services import (
 
 def adresse_ip(request) -> str | None:
     return request.META.get("REMOTE_ADDR")
+
+
+def _autorise(autorisation: bool) -> None:
+    """Les vues réécrites ne passent plus par le contrôle standard de
+    l'administration : chacune vérifie elle-même le droit du rôle (T-95)."""
+    if not autorisation:
+        raise PermissionDenied
 
 
 @admin.register(Client)
@@ -86,7 +98,8 @@ class ClientAdmin(admin.ModelAdmin):
 
     def cloturer(self, request, pk):
         """Clôture sur demande écrite du client (T-89)."""
-        client = Client.objects.get(pk=pk)
+        exiger(request, "backoffice.cloturer_client")
+        client = get_object_or_404(Client, pk=pk)
         formulaire = ClotureForm(request.POST or None)
         if request.method == "POST" and formulaire.is_valid():
             try:
@@ -117,7 +130,8 @@ class ClientAdmin(admin.ModelAdmin):
 
     def rembourser(self, request, pk):
         """Remboursement de la part payée et non consommée, compte clos (T-89)."""
-        client = Client.objects.get(pk=pk)
+        exiger(request, "backoffice.rembourser_client")
+        client = get_object_or_404(Client, pk=pk)
         part = credits.part_remboursable(client.id)
         formulaire = RemboursementForm(request.POST or None)
         if request.method == "POST" and formulaire.is_valid():
@@ -151,6 +165,7 @@ class ClientAdmin(admin.ModelAdmin):
 
     def add_view(self, request, form_url="", extra_context=None):
         """Enregistrer un client signé : identité, représentant, pièces."""
+        _autorise(self.has_add_permission(request))
         formulaire = EnregistrementClientForm(request.POST or None, request.FILES or None)
         if request.method == "POST" and formulaire.is_valid():
             donnees = formulaire.cleaned_data
@@ -199,10 +214,12 @@ class DossierAdmin(admin.ModelAdmin):
 
     def change_view(self, request, object_id, form_url="", extra_context=None):
         """Fiche de revue : pièces par liens signés, cinq contrôles, décision."""
+        _autorise(self.has_view_or_change_permission(request))
         dossier = self.get_object(request, object_id)
         if dossier is None:
             return self._get_obj_does_not_exist_redirect(request, self.model._meta, object_id)
         if request.method == "POST":
+            _autorise(self.has_change_permission(request, dossier))
             try:
                 if "approuver" in request.POST:
                     approuver_dossier(
@@ -260,14 +277,57 @@ class UtilisateurAdmin(admin.ModelAdmin):
                 "<uuid:pk>/reinitialiser-second-facteur/",
                 self.admin_site.admin_view(self.reinitialiser_second_facteur),
                 name="comptes_utilisateur_reinitialiser_second_facteur",
-            )
+            ),
+            path(
+                "<uuid:pk>/roles/",
+                self.admin_site.admin_view(self.roles),
+                name="comptes_utilisateur_roles",
+            ),
         ]
         return propres + super().get_urls()
+
+    def roles(self, request, pk):
+        """Rôles d'un agent (T-95) : super-administrateur seulement, jamais sur
+        soi-même, motif obligatoire, trace au journal d'audit."""
+        _autorise(request.user.is_superuser)
+        agent = get_object_or_404(Utilisateur, pk=pk, is_staff=True, client__isnull=True)
+        actuels = list(agent.groups.values_list("name", flat=True))
+        formulaire = RolesForm(request.POST or None, initial={"roles": actuels})
+        if request.method == "POST" and formulaire.is_valid():
+            try:
+                roles = attribuer_roles(
+                    agent,
+                    formulaire.cleaned_data["roles"],
+                    auteur=request.user,
+                    motif=formulaire.cleaned_data["motif"],
+                    adresse_ip=adresse_ip(request),
+                )
+            except AttributionRefusee as refus:
+                formulaire.add_error(None, str(refus))
+            else:
+                messages.success(request, f"Rôles de {agent} : {', '.join(roles) or 'aucun'}.")
+                return redirect("admin:comptes_utilisateur_change", agent.pk)
+        return TemplateResponse(
+            request,
+            "admin/backoffice/formulaire.html",
+            {
+                **self.admin_site.each_context(request),
+                "title": f"Rôles de {agent}",
+                "introduction": "Support : clients, dossiers, expéditeurs, tickets. "
+                "Exploitation : liaisons, connecteurs, fenêtres, page d'état, anti-fraude. "
+                "Finance : paiements, factures, crédits, remboursements. Le "
+                "super-administrateur a tout et ne se donne pas par cet écran.",
+                "bouton": "Enregistrer les rôles",
+                "formulaire": formulaire,
+                "opts": self.model._meta,
+            },
+        )
 
     def reinitialiser_second_facteur(self, request, pk):
         """Pour un utilisateur qui a perdu son second facteur : identité vérifiée
         par un canal indépendant, motif obligatoire, trace au journal d'audit."""
-        utilisateur = Utilisateur.objects.get(pk=pk)
+        exiger(request, "backoffice.reinitialiser_second_facteur")
+        utilisateur = get_object_or_404(Utilisateur, pk=pk)
         if request.method == "POST":
             try:
                 second_facteur.reinitialiser(
@@ -340,10 +400,12 @@ class ExpediteurAdmin(admin.ModelAdmin):
         return False
 
     def change_view(self, request, object_id, form_url="", extra_context=None):
+        _autorise(self.has_view_or_change_permission(request))
         expediteur = self.get_object(request, object_id)
         if expediteur is None:
             return self._get_obj_does_not_exist_redirect(request, self.model._meta, object_id)
         if request.method == "POST":
+            _autorise(self.has_change_permission(request, expediteur))
             operateur = request.POST.get("operateur", "")
             try:
                 if "lever_revue" in request.POST:
@@ -465,6 +527,7 @@ class TransactionAdmin(admin.ModelAdmin):
         return False
 
     def add_view(self, request, form_url="", extra_context=None):
+        _autorise(self.has_add_permission(request))
         formulaire = PaiementManuelForm(request.POST or None, request.FILES or None)
         if request.method == "POST" and formulaire.is_valid():
             donnees = formulaire.cleaned_data
@@ -529,7 +592,8 @@ class FactureAdmin(admin.ModelAdmin):
         return propres + super().get_urls()
 
     def avoir(self, request, pk):
-        facture = Facture.objects.get(pk=pk, type=Facture.Type.FACTURE)
+        exiger(request, "backoffice.emettre_avoir")
+        facture = get_object_or_404(Facture, pk=pk, type=Facture.Type.FACTURE)
         formulaire = AvoirForm(request.POST or None)
         if request.method == "POST" and formulaire.is_valid():
             try:
@@ -612,6 +676,7 @@ class DossierPreuveAdmin(admin.ModelAdmin):
             return saisi, None, f"Numéro invalide : {refus.cause}."
 
     def changelist_view(self, request, extra_context=None):
+        _autorise(self.has_view_permission(request))
         saisi, numero, erreur = self._numero(request)
         contexte = {
             **self.admin_site.each_context(request),
@@ -624,6 +689,7 @@ class DossierPreuveAdmin(admin.ModelAdmin):
         return TemplateResponse(request, "admin/backoffice/dossier_preuve.html", contexte)
 
     def client_view(self, request):
+        _autorise(self.has_view_permission(request))
         _, numero, erreur = self._numero(request)
         client = Client.objects.filter(id=request.GET.get("client") or None).first()
         if not numero or client is None:
