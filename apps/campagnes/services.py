@@ -28,7 +28,9 @@ from django.db.models.functions import Coalesce, NullIf
 from django.utils import timezone
 
 from apps.comptes.models import Client
+from apps.conformite import fraude
 from apps.conformite.antispam import TexteProscrit, exiger_admis
+from apps.conformite.models import RegleFraude
 from apps.contacts import liste_noire, segments
 from apps.contacts.models import Contact, Liste, ListeContact, Segment
 from apps.core.audit import auditer
@@ -462,10 +464,68 @@ def _armer(campagne: Campagne, vu: Apercu, *, auteur) -> Campagne:
     return campagne
 
 
-@transaction.atomic
+# La plus longue série de numéros consécutifs d'une cible (T-100) : les
+# numéros, sans leur +, rangés ; une série garde le même écart entre le numéro
+# et son rang.
+CONTIGUS = r"""
+SELECT count(*) AS longueur, min(v) AS premier FROM (
+    SELECT v, v - row_number() OVER (ORDER BY v) AS serie FROM (
+        SELECT DISTINCT substr(c.numero_normalise, 2)::bigint AS v
+        FROM ({requete}) AS c
+        WHERE c.numero_normalise ~ '^\+[0-9]{{6,15}}$'
+    ) AS numeros
+) AS rangs
+GROUP BY serie ORDER BY longueur DESC LIMIT 1
+"""
+
+
+def surveiller_contigus(campagne: Campagne) -> None:
+    """Numéros contigus (T-100). Au seuil d'alerte, l'exploitation est
+    prévenue et la campagne part ; au seuil critique, elle est refusée.
+    L'alerte s'écrit dans son propre point de sauvegarde, avant le refus : elle
+    reste même quand la confirmation échoue."""
+    regle = fraude.regle(RegleFraude.Code.CONTIGUS)
+    if regle is None:
+        return
+    requete, parametres = contacts(campagne).values("numero_normalise").query.sql_with_params()
+    with connection.cursor() as curseur:
+        curseur.execute(CONTIGUS.format(requete=requete), parametres)
+        ligne = curseur.fetchone()
+    if ligne is None:
+        return
+    longueur, premier = ligne
+    gravite = fraude.gravite(longueur, regle)
+    if gravite is None:
+        return
+    serie = {"premier": f"+{premier}", "dernier": f"+{premier + longueur - 1}"}
+    fraude.signaler(
+        campagne.client_id,
+        RegleFraude.Code.CONTIGUS,
+        gravite=gravite,
+        valeur=longueur,
+        campagne_id=campagne.id,
+        details={**serie, "campagne": campagne.nom},
+    )
+    if gravite == fraude.AlerteFraude.Gravite.CRITIQUE:
+        raise CampagneRefusee(
+            f"Envoi refusé : {longueur} numéros consécutifs, de {serie['premier']} à "
+            f"{serie['dernier']}. L'exploitation est prévenue."
+        )
+
+
 def confirmer(campagne: Campagne, *, auteur, destinataires_lus: int, cout_lu: int) -> Campagne:
     """Confirmation par le client des chiffres qu'il a lus : fige et réserve,
-    ou, pour une campagne récurrente, arme sa récurrence."""
+    ou, pour une campagne récurrente, arme sa récurrence. Les numéros
+    contigus se vérifient avant, hors de la transaction de la confirmation,
+    pour que l'alerte survive au refus ; chaque occurrence d'une récurrence
+    est vérifiée à son tour."""
+    if not campagne.recurrente and campagne.etat == Campagne.Etat.BROUILLON:
+        surveiller_contigus(campagne)
+    return _confirmer(campagne, auteur=auteur, destinataires_lus=destinataires_lus, cout_lu=cout_lu)
+
+
+@transaction.atomic
+def _confirmer(campagne: Campagne, *, auteur, destinataires_lus: int, cout_lu: int) -> Campagne:
     campagne = Campagne.objects.select_for_update().get(id=campagne.id)
     if campagne.etat != Campagne.Etat.BROUILLON:
         raise CampagneRefusee("Cette campagne est déjà confirmée.")
@@ -532,6 +592,10 @@ def confirmer_occurrence(occurrence: Campagne, plafond: int) -> str | None:
         return f"Cible introuvable : {refus}"
     if vu.cout > plafond:
         return f"Coût de {vu.cout} FCFA au-dessus du plafond de {plafond} FCFA."
+    try:
+        surveiller_contigus(occurrence)
+    except CampagneRefusee as refus:
+        return str(refus)
     try:
         with transaction.atomic():
             _figer(occurrence, vu, auteur=None)

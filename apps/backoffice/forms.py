@@ -182,3 +182,12 @@ class PalierForm(forms.Form):
 
 class ConfirmationForm(forms.Form):
     pass
+
+
+class TraitementForm(forms.Form):
+    traitement = forms.CharField(
+        widget=forms.Textarea(attrs={"rows": 3}),
+        label="Constat",
+        help_text="Ce qui a été vérifié et décidé : il figurera au journal d'audit. Une alerte "
+        "critique traitée débloque la plage.",
+    )

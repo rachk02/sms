@@ -149,3 +149,68 @@ def supprimer_mot_proscrit(mot, *, agent, adresse_ip=None) -> None:
         adresse_ip=adresse_ip,
     )
     mot.delete()
+
+
+# Anti-fraude (T-100)
+
+
+class TraitementRefuse(ValueError):
+    pass
+
+
+def _regle(regle) -> dict:
+    return {
+        "seuil_alerte": regle.seuil_alerte,
+        "seuil_critique": regle.seuil_critique,
+        "fenetre_minutes": regle.fenetre_minutes,
+        "echantillon_min": regle.echantillon_min,
+        "actif": regle.actif,
+    }
+
+
+@transaction.atomic
+def regler_fraude(regle, *, agent, adresse_ip=None):
+    from .models import RegleFraude
+
+    avant = _regle(RegleFraude.objects.get(id=regle.id))
+    regle.save()
+    auditer(
+        "conformite.fraude.regle",
+        regle,
+        auteur=agent,
+        avant=avant,
+        apres=_regle(regle),
+        adresse_ip=adresse_ip,
+    )
+    return regle
+
+
+@transaction.atomic
+def traiter_alerte(alerte, *, agent, traitement: str, adresse_ip=None):
+    """Clôt une alerte avec le constat de l'agent. Une alerte critique traitée
+    débloque la plage ; une nouvelle détection rouvrira une alerte."""
+    from django.utils import timezone
+
+    from .models import AlerteFraude
+
+    traitement = (traitement or "").strip()
+    if not traitement:
+        raise TraitementRefuse("Le traitement d'une alerte dit ce qui a été constaté.")
+    alerte = AlerteFraude.objects.select_for_update().get(id=alerte.id)
+    if alerte.traitee_le:
+        raise TraitementRefuse("Cette alerte est déjà traitée.")
+    alerte.traitee_le = timezone.now()
+    alerte.traitee_par = agent
+    alerte.traitement = traitement
+    alerte.save(update_fields=["traitee_le", "traitee_par", "traitement", "modifie_le"])
+    auditer(
+        "conformite.fraude.traitement",
+        alerte,
+        auteur=agent,
+        client=alerte.client,
+        avant={"gravite": alerte.gravite, "plage": alerte.plage, "valeur": alerte.valeur},
+        apres={"traitee": True},
+        motif=traitement,
+        adresse_ip=adresse_ip,
+    )
+    return alerte

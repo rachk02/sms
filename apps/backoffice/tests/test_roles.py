@@ -39,6 +39,7 @@ PERSONNALISEES = {
     "comptes_utilisateur_roles": (SUPER, True),
     "paiements_facture_avoir": ("backoffice.emettre_avoir", True),
     "backoffice_dossierpreuve_client": ("backoffice.view_dossierpreuve", False),
+    "conformite_alertefraude_traiter": ("conformite.change_alertefraude", True),
     "credits_grille_version_ajouter": (SUPER, True),
     "credits_grille_version": (SUPER, True),
     "credits_grille_version_publier": (SUPER, True),

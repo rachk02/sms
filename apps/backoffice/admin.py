@@ -21,7 +21,13 @@ from apps.comptes.models import Client, Dossier, Piece, Utilisateur
 from apps.comptes.services import ClotureRefusee, SuspensionRefusee
 from apps.conformite import antispam
 from apps.conformite import services as conformite
-from apps.conformite.models import Fenetre, JourFerie, MotProscrit
+from apps.conformite.models import (
+    AlerteFraude,
+    Fenetre,
+    JourFerie,
+    MotProscrit,
+    RegleFraude,
+)
 from apps.core.models import Audit
 from apps.core.numeros import NumeroInvalide, normaliser
 from apps.credits import services as credits
@@ -49,6 +55,7 @@ from .forms import (
     RemboursementForm,
     RolesForm,
     SuspensionForm,
+    TraitementForm,
     VersionForm,
 )
 from .models import DossierPreuve
@@ -1289,3 +1296,113 @@ class MotProscritAdmin(admin.ModelAdmin):
                 return donnees
 
         return AvecControle
+
+
+@admin.register(RegleFraude)
+class RegleFraudeAdmin(admin.ModelAdmin):
+    """Seuils des règles anti-fraude (T-100), modifiables sans redéploiement.
+    Les trois règles sont fixées par le code : ni ajout ni suppression."""
+
+    list_display = (
+        "code",
+        "seuil_alerte",
+        "seuil_critique",
+        "fenetre_minutes",
+        "echantillon_min",
+        "actif",
+        "modifie_le",
+    )
+    readonly_fields = ("code",)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def save_model(self, request, obj, form, change):
+        conformite.regler_fraude(obj, agent=request.user, adresse_ip=adresse_ip(request))
+
+
+@admin.register(AlerteFraude)
+class AlerteFraudeAdmin(admin.ModelAdmin):
+    """Alertes anti-fraude (T-100). Une alerte prévient ; critique, elle bloque
+    jusqu'à son traitement. Le traitement se fait par la page dédiée, avec le
+    constat de l'agent, et se trace."""
+
+    list_display = (
+        "cree_le",
+        "client",
+        "regle",
+        "gravite",
+        "plage",
+        "valeur",
+        "modifie_le",
+        "traitee_le",
+    )
+    list_filter = ("regle", "gravite", ("traitee_le", admin.EmptyFieldListFilter))
+    search_fields = ("client__raison_sociale", "plage")
+    list_select_related = ("client",)
+    date_hierarchy = "cree_le"
+    change_form_template = "admin/backoffice/alerte_fraude_change_form.html"
+    readonly_fields = [champ.name for champ in AlerteFraude._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_urls(self):
+        propres = [
+            path(
+                "<uuid:pk>/traiter/",
+                self.admin_site.admin_view(self.traiter),
+                name="conformite_alertefraude_traiter",
+            )
+        ]
+        return propres + super().get_urls()
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        contexte = {
+            **(extra_context or {}),
+            "peut_traiter": request.user.has_perm("conformite.change_alertefraude"),
+        }
+        return super().change_view(request, object_id, form_url, contexte)
+
+    def traiter(self, request, pk):
+        exiger(request, "conformite.change_alertefraude")
+        alerte = get_object_or_404(AlerteFraude.objects.select_related("client"), pk=pk)
+        formulaire = TraitementForm(request.POST or None)
+        if request.method == "POST" and formulaire.is_valid():
+            try:
+                conformite.traiter_alerte(
+                    alerte,
+                    agent=request.user,
+                    traitement=formulaire.cleaned_data["traitement"],
+                    adresse_ip=adresse_ip(request),
+                )
+            except conformite.TraitementRefuse as refus:
+                formulaire.add_error(None, str(refus))
+            else:
+                messages.success(request, "Alerte traitée.")
+                return redirect("admin:conformite_alertefraude_changelist")
+        contexte = {
+            **self.admin_site.each_context(request),
+            "title": f"Traiter l'alerte {alerte.get_regle_display().lower()} de {alerte.client}",
+            "introduction": (
+                f"{alerte.get_gravite_display()} : valeur {alerte.valeur}"
+                + (f", plage {alerte.plage}" if alerte.plage else "")
+                + ". "
+                + (
+                    "Les envois de ce client vers cette plage sont bloqués jusqu'au traitement."
+                    if alerte.gravite == AlerteFraude.Gravite.CRITIQUE and alerte.plage
+                    else "Rien n'est bloqué."
+                )
+            ),
+            "elements": [f"{cle} : {valeur}" for cle, valeur in alerte.details.items()],
+            "bouton": "Clore l'alerte",
+            "formulaire": formulaire,
+            "opts": self.model._meta,
+        }
+        return TemplateResponse(request, "admin/backoffice/formulaire.html", contexte)

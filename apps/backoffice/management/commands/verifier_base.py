@@ -15,6 +15,7 @@ from django.db.migrations.executor import MigrationExecutor
 
 CLOISONNEES = (
     "comptes_client",
+    "conformite_alerte_fraude",
     "journal_message",
     "journal_evenement",
     "journal_destinataire",
@@ -48,6 +49,7 @@ CLOISONNEES = (
     "conformite_fenetre",
     "conformite_jour_ferie",
     "conformite_mot_proscrit",
+    "conformite_regle_fraude",
     # Grille publique pour tous, grille négociée pour son client, en lecture seule.
     "credits_grille",
     "credits_grille_version",

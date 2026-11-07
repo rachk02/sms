@@ -39,6 +39,8 @@ ROLES = {
         "telecom.connecteur": ("view", "add", "change"),
         "telecom.route": _TOUT,
         "conformite.motproscrit": _TOUT,
+        "conformite.reglefraude": ("view", "change"),
+        "conformite.alertefraude": ("view", "change"),
     },
     FINANCE: {
         "comptes.client": _VOIR,

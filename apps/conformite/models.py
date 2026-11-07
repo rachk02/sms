@@ -94,3 +94,87 @@ class MotProscrit(Identifiable):
 
     def __str__(self):
         return self.expression
+
+
+class RegleFraude(Identifiable):
+    """Une règle de détection de trafic artificiel (T-100) et ses seuils, tenus
+    en base. Au seuil d'alerte, un humain est prévenu ; au seuil critique,
+    l'envoi est en plus bloqué. Sens des seuils selon la règle :
+
+    - CONTIGUS : longueur de la plus longue série de numéros consécutifs d'une
+      campagne ;
+    - CODES_PLAGE : codes envoyés hors campagne vers une même plage, sur la
+      fenêtre, quand le client n'y avait rien envoyé depuis trente jours ;
+    - LIVRAISON_PLAGE : taux de livraison sur une plage, en pour cent, sur la
+      fenêtre et au moins `echantillon_min` accusés ; l'alerte part sous le
+      seuil, et non au-dessus."""
+
+    class Code(models.TextChoices):
+        CONTIGUS = "CONTIGUS", "Numéros contigus"
+        CODES_PLAGE = "CODES_PLAGE", "Codes vers une plage inhabituelle"
+        LIVRAISON_PLAGE = "LIVRAISON_PLAGE", "Livraison basse sur une plage"
+
+    code = models.CharField(max_length=20, choices=Code, unique=True)
+    seuil_alerte = models.PositiveIntegerField()
+    seuil_critique = models.PositiveIntegerField()
+    fenetre_minutes = models.PositiveIntegerField(default=60)
+    echantillon_min = models.PositiveIntegerField(default=0)
+    actif = models.BooleanField(default=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "conformite_regle_fraude"
+        verbose_name = "règle anti-fraude"
+        verbose_name_plural = "règles anti-fraude"
+
+    def __str__(self):
+        return self.get_code_display()
+
+
+class AlerteFraude(Identifiable):
+    """Une alerte de trafic artificiel, ouverte jusqu'à son traitement par un
+    agent. Une seule alerte ouverte par client, règle, plage et campagne : une
+    détection répétée la met à jour. Critique, elle bloque les envois du client
+    vers la plage tant qu'elle n'est pas traitée."""
+
+    class Gravite(models.TextChoices):
+        ALERTE = "ALERTE", "Alerte"
+        CRITIQUE = "CRITIQUE", "Critique"
+
+    client = models.ForeignKey("comptes.Client", on_delete=models.PROTECT, related_name="+")
+    regle = models.CharField(max_length=20, choices=RegleFraude.Code)
+    gravite = models.CharField(max_length=10, choices=Gravite)
+    plage = models.CharField(max_length=20, blank=True)
+    campagne_id = models.UUIDField(null=True, blank=True)
+    valeur = models.IntegerField()
+    details = models.JSONField(default=dict, blank=True)
+    cree_le = models.DateTimeField(auto_now_add=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+    traitee_le = models.DateTimeField(null=True, blank=True)
+    traitee_par = models.ForeignKey(
+        "comptes.Utilisateur", on_delete=models.PROTECT, null=True, blank=True, related_name="+"
+    )
+    traitement = models.TextField(blank=True)
+
+    class Meta:
+        db_table = "conformite_alerte_fraude"
+        verbose_name = "alerte anti-fraude"
+        verbose_name_plural = "alertes anti-fraude"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["client", "regle", "plage", "campagne_id"],
+                condition=models.Q(traitee_le__isnull=True),
+                nulls_distinct=False,
+                name="alerte_fraude_une_ouverte",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["client", "plage"],
+                condition=models.Q(traitee_le__isnull=True),
+                name="alerte_fraude_ouverte",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.get_regle_display()} {self.plage or self.campagne_id}"

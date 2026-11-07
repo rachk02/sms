@@ -86,6 +86,10 @@ def enregistrer_message(
         horodatage=date_reception,
         source=source,
     )
+    # Pic de codes vers une plage inhabituelle (T-100).
+    from .fraude import noter_code
+
+    noter_code(message)
     return message
 
 
@@ -233,6 +237,10 @@ def changer_etat(
             cout=message.cout_total if colonne == "emis" else 0,
             latence=latence_ms(message.date_soumission, horodatage) if vers == Etat.LIVRE else None,
         )
+    # Taux de livraison sur la plage du numéro (T-100).
+    from .fraude import noter_issue
+
+    noter_issue(message, vers, horodatage)
     message.etat = vers
 
 

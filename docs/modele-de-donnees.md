@@ -631,6 +631,25 @@ le back-office, chaque changement tracé au journal d'audit.
 **`conformite_consentement`** : `id`, `client_id`, `contact_id` UUID simple,
 `source`, `preuve` en jsonb, `obtenu_le`.
 
+**`conformite_mot_proscrit`** : `id`, `expression`, `forme` (l'expression
+normalisée, unique), `gravite` parmi AVERTISSEMENT, BLOCAGE, `motif`, `actif`,
+`modifie_le`. Dictionnaire anti-spam ; rien n'est semé. Lue par tous, écrite
+par le back-office, chaque changement tracé.
+
+**`conformite_regle_fraude`** : `id`, `code` unique parmi CONTIGUS,
+CODES_PLAGE, LIVRAISON_PLAGE, `seuil_alerte`, `seuil_critique`,
+`fenetre_minutes`, `echantillon_min`, `actif`, `modifie_le`. Les trois règles
+sont semées avec leurs seuils initiaux. Lue par tous, écrite par le
+back-office.
+
+**`conformite_alerte_fraude`** : `id`, `client_id`, `regle`, `gravite` parmi
+ALERTE, CRITIQUE, `plage` (le numéro sans ses quatre derniers chiffres),
+`campagne_id` UUID simple, `valeur`, `details` en jsonb, `cree_le`,
+`modifie_le`, `traitee_le`, `traitee_par`, `traitement`. Une seule alerte
+ouverte par client, règle, plage et campagne. Cloisonnée par client ; traitée
+au back-office. Une alerte critique ouverte bloque les envois du client vers sa
+plage.
+
 Le journal d'audit est passé dans `core` (voir `core_audit`).
 
 ## notifications

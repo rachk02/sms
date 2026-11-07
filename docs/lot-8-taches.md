@@ -179,6 +179,15 @@ Choix faits, à confirmer :
 
 **Critères** Un envoi vers mille numéros consécutifs déclenche l'alerte. Chaque règle a un seuil configurable en base. Une alerte ne bloque pas automatiquement, elle prévient un humain, sauf dépassement du seuil critique.
 
+**Fait.** Trois règles, leurs seuils dans `conformite_regle_fraude`, modifiables au back-office (rôle exploitation) avec trace au journal d'audit. Numéros contigus : à la confirmation d'une campagne et de chaque occurrence d'une récurrence, la plus longue série de numéros consécutifs de la cible est mesurée en une requête ; l'alerte part à mille, la campagne est refusée au seuil critique, et l'alerte s'écrit avant le refus pour lui survivre. Codes vers une plage inhabituelle : chaque message hors campagne qui porte un code (quatre à huit chiffres d'affilée) entre dans une fenêtre glissante par client et par plage (bloc de dix mille numéros) ; au seuil, la plage est déclarée inhabituelle si le client n'y a rien envoyé dans les trente jours qui précèdent la fenêtre. Livraison basse : chaque accusé final (livré, non livré, expiré) d'un message de client entre dans une fenêtre glissante par plage ; l'alerte part sous le seuil, à partir d'un échantillon minimal. Les fenêtres vivent dans Redis (`journal.fraude`), les alertes en base (`conformite_alerte_fraude`, cloisonnée par client, une seule ouverte par client, règle, plage et campagne). Une alerte publie l'événement `conformite.fraude.alerte` et apparaît à l'écran « Alertes anti-fraude » du back-office, sans rien bloquer. Critique, elle bloque : la campagne est refusée, ou les envois du client vers la plage sont refusés avant le réseau, sans frais (contrôle de soumission `PLAGE_BLOQUEE`), jusqu'à ce qu'un agent de l'exploitation la traite avec son constat, tracé.
+
+Choix faits, à confirmer :
+
+- seuils initiaux : contigus, alerte à 1 000 et critique à 10 000 ; codes, alerte à 20 et critique à 100 sur 60 minutes ; livraison, alerte sous 50 % et critique sous 20 %, sur 60 minutes et au moins 50 accusés ;
+- une plage est un bloc de dix mille numéros, un code quatre à huit chiffres d'affilée dans un message hors campagne ;
+- l'exploitation est prévenue par l'écran et par l'événement publié ; l'envoi d'un courriel ou d'une notification à partir de cet événement reste à brancher (notifications) ;
+- les messages déjà en file vers une plage bloquée sont refusés sans frais, pas retenus.
+
 ## T-101 · Plafonnement et suspension automatique
 
 **Produit** Les plafonds par clé et par compte en application effective, la suspension automatique d'une clé au-delà du seuil critique, et l'alerte à l'exploitation.
