@@ -4,6 +4,7 @@ import csv
 import io
 from datetime import datetime, time, timedelta
 
+from django.db import connection
 from django.db.models import Q, Sum
 from django.utils import timezone
 
@@ -144,3 +145,44 @@ def export_csv(client_id, debut: datetime, fin: datetime):
         for recu, *milieu, soumis, accuse, campagne, _id in lot:
             yield _ligne([_date(recu), *milieu, _date(soumis), _date(accuse), campagne or ""])
         curseur = (lot[-1][0], lot[-1][-1])
+
+
+# Contrôle des compteurs pré-agrégés (T-91)
+
+# Ce que chaque colonne de `journal_compteur` compte, relu sur l'état final des
+# messages. Un message ne passe qu'une fois par SOUMIS (qui pose la date de
+# soumission) et ne finit que dans un seul état terminal : l'état final et la
+# date de soumission suffisent à retrouver les transitions comptées.
+CONTROLE = """
+SELECT
+    count(*) FILTER (WHERE date_soumission IS NOT NULL),
+    count(*) FILTER (WHERE etat = 'LIVRE'),
+    count(*) FILTER (
+        WHERE etat IN ('NON_LIVRE', 'EXPIRE')
+           OR (etat = 'REJETE' AND date_soumission IS NOT NULL)
+    ),
+    count(*) FILTER (WHERE etat = 'SANS_ACCUSE'),
+    count(*) FILTER (WHERE etat = 'REJETE' AND date_soumission IS NULL),
+    count(*) FILTER (WHERE etat = 'ANNULE'),
+    coalesce(sum(cout_total) FILTER (WHERE date_soumission IS NOT NULL), 0)
+FROM journal_message
+WHERE client_id = %s AND campagne_id = %s AND date_reception >= %s AND date_reception < %s
+"""
+COLONNES_CONTROLE = ("emis", "livres", "echecs", "sans_accuse", "refuses", "annules", "cout")
+
+
+def compte_journal(client_id, campagne_id, depuis: datetime, jusqu_a: datetime) -> dict:
+    """Les chiffres d'une campagne recomptés dans le journal, bornés sur la date
+    de réception : la requête de contrôle, réservée aux vérifications, jamais
+    aux écrans."""
+    with connection.cursor() as curseur:
+        curseur.execute(CONTROLE, [client_id, campagne_id, depuis, jusqu_a])
+        return dict(zip(COLONNES_CONTROLE, curseur.fetchone(), strict=True))
+
+
+def compte_compteurs(client_id, campagne_id) -> dict:
+    """Les mêmes chiffres, lus sur les compteurs pré-agrégés."""
+    totaux = Compteur.objects.filter(client_id=client_id, campagne_id=campagne_id).aggregate(
+        **{c: Sum(c) for c in COLONNES_CONTROLE}
+    )
+    return {c: totaux[c] or 0 for c in COLONNES_CONTROLE}

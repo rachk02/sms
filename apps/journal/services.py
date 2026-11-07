@@ -20,7 +20,7 @@ from apps.telecom.numero_court import numero_court
 from apps.telecom.passerelles import SortSoumission, Soumission
 from apps.telecom.services import marquer_rapproche
 
-from .models import Destinataire, Evenement, Message
+from .models import Compteur, Destinataire, Evenement, Message
 from .selectors import clients_touches
 
 journal = logging.getLogger(__name__)
@@ -720,3 +720,60 @@ def confirmer_desinscription(
         )
         mettre_en_file(message, prioritaire=True)
     return message
+
+
+# Recalcul des compteurs d'une campagne (T-91)
+
+# Les compteurs reconstruits depuis les événements, heure par heure, comme
+# `changer_etat` les écrit : l'heure est celle de la transition. Un REJETE après
+# soumission est un échec, avant, un refus ; la date de soumission le dit, car
+# SOUMIS précède toujours un rejet de l'opérateur.
+RECOMPTER = """
+INSERT INTO journal_compteur (
+    client_id, campagne_id, operateur, expediteur_libelle, heure,
+    emis, livres, echecs, sans_accuse, refuses, annules, cout
+)
+SELECT
+    m.client_id, m.campagne_id, m.operateur, m.expediteur_libelle,
+    date_trunc('hour', e.horodatage),
+    count(*) FILTER (WHERE e.etat = 'SOUMIS'),
+    count(*) FILTER (WHERE e.etat = 'LIVRE'),
+    count(*) FILTER (
+        WHERE e.etat IN ('NON_LIVRE', 'EXPIRE')
+           OR (e.etat = 'REJETE' AND m.date_soumission IS NOT NULL)
+    ),
+    count(*) FILTER (WHERE e.etat = 'SANS_ACCUSE'),
+    count(*) FILTER (WHERE e.etat = 'REJETE' AND m.date_soumission IS NULL),
+    count(*) FILTER (WHERE e.etat = 'ANNULE'),
+    coalesce(sum(m.cout_total) FILTER (WHERE e.etat = 'SOUMIS'), 0)
+FROM journal_message AS m
+JOIN journal_evenement AS e ON e.message_id = m.id AND e.horodatage >= %s
+WHERE m.client_id = %s AND m.campagne_id = %s AND m.date_reception >= %s
+  AND e.etat IN ('SOUMIS', 'LIVRE', 'NON_LIVRE', 'EXPIRE', 'REJETE', 'SANS_ACCUSE', 'ANNULE')
+GROUP BY 1, 2, 3, 4, 5
+"""
+VERROUILLER_CAMPAGNE = """
+SELECT 1 FROM journal_message
+WHERE client_id = %s AND campagne_id = %s AND date_reception >= %s
+FOR UPDATE
+"""
+# Marge sur l'horodatage des événements : un accusé porte l'heure annoncée par
+# l'opérateur, qui peut précéder de peu celle de nos serveurs.
+MARGE_EVENEMENTS = timedelta(days=1)
+
+
+@transaction.atomic
+def recompter(client_id, campagne_id, depuis: datetime) -> int:
+    """Réécrit les compteurs d'une campagne depuis le journal. `depuis` borne
+    les partitions lues : la confirmation de la campagne, avant laquelle aucun
+    de ses messages n'est reçu.
+
+    Remplace, n'ajoute pas : rejoué, le recalcul rend les mêmes lignes, sans
+    double comptage. Les messages de la campagne sont verrouillés le temps du
+    recalcul ; un changement d'état concurrent, qui verrouille son message
+    avant d'écrire, attend la fin. Renvoie le nombre de lignes écrites."""
+    with connection.cursor() as curseur:
+        curseur.execute(VERROUILLER_CAMPAGNE, [client_id, campagne_id, depuis])
+        Compteur.objects.filter(client_id=client_id, campagne_id=campagne_id).delete()
+        curseur.execute(RECOMPTER, [depuis - MARGE_EVENEMENTS, client_id, campagne_id, depuis])
+        return curseur.rowcount

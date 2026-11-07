@@ -39,6 +39,13 @@ existante, le portail sur des gabarits simples.
 
 **Critères** Le compteur d'une campagne terminée égale le compte réel dans le journal, vérifié par une requête de contrôle. Une panne de worker pendant dix minutes se rattrape sans double comptage. Aucun tableau de bord ne lit le journal des messages.
 
+**Fait.** Les compteurs `journal_compteur` (client, campagne, réseau, expéditeur, heure) existaient depuis T-67 : ils s'écrivent dans la transaction même de chaque changement d'état d'un message. Un worker qui tombe annule donc ensemble l'état et le compteur, et la reprise les réécrit ensemble, une seule fois ; il n'y a pas de trou à combler. Ajouts : la requête de contrôle (`journal.selectors.compte_journal`), qui recompte une campagne dans le journal, bornée sur la date de réception, à partir de l'état final et de la date de soumission ; le recalcul (`journal.services.recompter`), qui reconstruit les compteurs d'une campagne heure par heure depuis les événements, sous verrou de ses messages, et remplace au lieu d'ajouter ; `campagnes.controle`, qui compare les deux pour les campagnes terminées ; la commande `controler_compteurs` (`--jours`, `--campagne`, `--corriger`) ; un contrôle quotidien de l'ordonnanceur sur les campagnes terminées la veille. Les tests couvrent une panne au milieu d'un accusé suivie du rejeu de la file et des accusés, un écart signalé puis recompté à l'identique, et l'absence de toute lecture de `journal_message` par le suivi et le volume mensuel.
+
+Choix faits, à confirmer :
+
+- un écart se signale (erreur au journal applicatif, commande en échec) mais ne se corrige que sur demande, avec `--corriger` : une anomalie ne disparaît pas sans avoir été vue ;
+- les envois hors campagne (envois unitaires, API au lot 9) n'ont pas encore de compteurs ; le tableau de bord de T-92 les demandera.
+
 ## T-92 · Tableau de bord client
 
 **Produit** Les cinq indicateurs retenus, volume émis, taux de livraison effectif, latence moyenne, répartition par opérateur, désinscriptions, avec sélecteur de période et rafraîchissement par fragment.
