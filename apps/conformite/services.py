@@ -86,3 +86,66 @@ def fermer_jour(fenetre: Fenetre, *, agent, adresse_ip=None) -> None:
         adresse_ip=adresse_ip,
     )
     fenetre.delete()
+
+
+# Dictionnaire anti-spam (T-99)
+
+
+class MotRefuse(ValueError):
+    pass
+
+
+def _mot(mot) -> dict:
+    return {
+        "expression": mot.expression,
+        "forme": mot.forme,
+        "gravite": mot.gravite,
+        "motif": mot.motif,
+        "actif": mot.actif,
+    }
+
+
+@transaction.atomic
+def enregistrer_mot_proscrit(mot, *, agent, adresse_ip=None):
+    from .antispam import LETTRES_MIN, normaliser
+    from .models import MotProscrit
+
+    mot.expression = (mot.expression or "").strip()
+    mot.forme = normaliser(mot.expression)
+    if len(mot.forme) < LETTRES_MIN:
+        raise MotRefuse(
+            f"« {mot.expression} » se lit « {mot.forme} » une fois normalisé : il faut au "
+            f"moins {LETTRES_MIN} lettres, sinon il se retrouverait partout."
+        )
+    doublon = MotProscrit.objects.filter(forme=mot.forme).exclude(id=mot.id).first()
+    if doublon:
+        raise MotRefuse(
+            f"« {mot.expression} » se lit comme « {doublon.expression} », déjà présent."
+        )
+    avant = None
+    if not mot._state.adding:
+        avant = _mot(MotProscrit.objects.get(id=mot.id))
+    mot.save()
+    auditer(
+        "conformite.mot_proscrit.creation"
+        if avant is None
+        else "conformite.mot_proscrit.modification",
+        mot,
+        auteur=agent,
+        avant=avant,
+        apres=_mot(mot),
+        adresse_ip=adresse_ip,
+    )
+    return mot
+
+
+@transaction.atomic
+def supprimer_mot_proscrit(mot, *, agent, adresse_ip=None) -> None:
+    auditer(
+        "conformite.mot_proscrit.suppression",
+        mot,
+        auteur=agent,
+        avant=_mot(mot),
+        adresse_ip=adresse_ip,
+    )
+    mot.delete()

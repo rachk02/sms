@@ -28,6 +28,7 @@ from django.db.models.functions import Coalesce, NullIf
 from django.utils import timezone
 
 from apps.comptes.models import Client
+from apps.conformite.antispam import TexteProscrit, exiger_admis
 from apps.contacts import liste_noire, segments
 from apps.contacts.models import Contact, Liste, ListeContact, Segment
 from apps.core.audit import auditer
@@ -136,6 +137,7 @@ def creer(
         modeles.gabarit(client, texte)
     except ModeleInvalide as refus:
         raise CampagneRefusee(str(refus)) from None
+    _texte_admis(texte)
     expediteur = None
     if expediteur_id:
         expediteur = Expediteur.objects.filter(client=client, id=expediteur_id).first()
@@ -201,6 +203,15 @@ def _choix_par_reseau(campagne: Campagne, reseaux) -> dict:
     }
 
 
+def _texte_admis(texte: str) -> list:
+    """Dictionnaire anti-spam (T-99) : une expression bloquante refuse la
+    campagne et se nomme ; rend les avertissements."""
+    try:
+        return exiger_admis(texte)
+    except TexteProscrit as refus:
+        raise CampagneRefusee(str(refus)) from None
+
+
 @dataclass(frozen=True)
 class Apercu:
     destinataires: int
@@ -215,6 +226,8 @@ class Apercu:
     choix: dict = field(repr=False)
     # Ce que `_figer` copie sur la campagne : voir Campagne.tarification.
     tarification: dict = field(default_factory=dict, repr=False)
+    # Expressions du dictionnaire anti-spam qui avertissent sans bloquer.
+    avertissements: list = field(default_factory=list)
 
     @property
     def cout(self) -> int:
@@ -266,6 +279,7 @@ def apercu(campagne: Campagne) -> Apercu:
     condition = Q(operateur_confirme__in=servis) | Q(
         operateur_confirme="", operateur_presume__in=servis
     )
+    avertissements = _texte_admis(campagne.modele_texte)
     gabarit = modeles.gabarit(client, campagne.modele_texte)
     try:
         tarification = tarifer(client, servis)
@@ -287,6 +301,7 @@ def apercu(campagne: Campagne) -> Apercu:
         disponible=credits.solde(client.id).disponible,
         choix=choix,
         tarification=tarification,
+        avertissements=avertissements,
     )
 
 
@@ -312,6 +327,7 @@ def envoyer_test(campagne: Campagne, *, numero: str, auteur) -> object:
     reseau = classer(numero, client.pays)
     if not reseau:
         raise CampagneRefusee("Réseau du numéro de test inconnu.")
+    _texte_admis(campagne.modele_texte)
     gabarit = modeles.gabarit(client, campagne.modele_texte)
     choix = choisir(client.id, _libelle(campagne), reseau, campagne.politique_expediteur)
     expediteur = choix.expediteur if choix.action == Action.ENVOYER else numero_court()
@@ -506,6 +522,10 @@ def confirmer_occurrence(occurrence: Campagne, plafond: int) -> str | None:
     occurrence = Campagne.objects.select_for_update().get(id=occurrence.id)
     if occurrence.etat != Campagne.Etat.BROUILLON:
         return None
+    try:
+        _texte_admis(occurrence.modele_texte)
+    except CampagneRefusee as refus:
+        return str(refus)
     try:
         vu = apercu(occurrence)
     except (Segment.DoesNotExist, CampagneRefusee) as refus:

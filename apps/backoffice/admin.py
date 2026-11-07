@@ -5,6 +5,7 @@ Servie dans l'espace du back-office seulement (voir config/urls.py).
 
 from datetime import datetime, time
 
+from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError
@@ -18,8 +19,9 @@ from apps.campagnes.services import CampagneRefusee
 from apps.comptes import second_facteur
 from apps.comptes.models import Client, Dossier, Piece, Utilisateur
 from apps.comptes.services import ClotureRefusee, SuspensionRefusee
+from apps.conformite import antispam
 from apps.conformite import services as conformite
-from apps.conformite.models import Fenetre, JourFerie
+from apps.conformite.models import Fenetre, JourFerie, MotProscrit
 from apps.core.models import Audit
 from apps.core.numeros import NumeroInvalide, normaliser
 from apps.credits import services as credits
@@ -1244,3 +1246,46 @@ class GrilleAdmin(admin.ModelAdmin):
             "opts": self.model._meta,
         }
         return TemplateResponse(request, "admin/backoffice/formulaire.html", contexte)
+
+
+@admin.register(MotProscrit)
+class MotProscritAdmin(admin.ModelAdmin):
+    """Dictionnaire anti-spam (T-99). Une expression vaut dès son
+    enregistrement, sans redéploiement, pour toute composition et toute
+    confirmation qui suit. Chaque changement laisse sa trace."""
+
+    list_display = ("expression", "forme", "gravite", "motif", "actif", "modifie_le")
+    list_filter = ("gravite", "actif")
+    search_fields = ("expression", "forme", "motif")
+    readonly_fields = ("forme",)
+
+    def save_model(self, request, obj, form, change):
+        conformite.enregistrer_mot_proscrit(obj, agent=request.user, adresse_ip=adresse_ip(request))
+
+    def delete_model(self, request, obj):
+        conformite.supprimer_mot_proscrit(obj, agent=request.user, adresse_ip=adresse_ip(request))
+
+    def delete_queryset(self, request, queryset):
+        for mot in queryset:
+            self.delete_model(request, mot)
+
+    def get_form(self, request, obj=None, change=False, **kwargs):
+        formulaire = super().get_form(request, obj, change, **kwargs)
+
+        class AvecControle(formulaire):
+            def clean(self):
+                donnees = super().clean()
+                forme = antispam.normaliser(donnees.get("expression", ""))
+                if len(forme) < antispam.LETTRES_MIN:
+                    raise forms.ValidationError(
+                        f"Une fois normalisée, l'expression se lit « {forme} » : il faut au "
+                        f"moins {antispam.LETTRES_MIN} lettres."
+                    )
+                doublon = MotProscrit.objects.filter(forme=forme).exclude(id=self.instance.id)
+                if doublon.exists():
+                    raise forms.ValidationError(
+                        f"Cette expression se lit « {forme} », comme une autre déjà présente."
+                    )
+                return donnees
+
+        return AvecControle

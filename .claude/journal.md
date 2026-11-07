@@ -202,3 +202,4 @@ Règles, reprises de `~/.claude/CLAUDE.md` :
 [2026-11-07 20:03:23] Suivi - T-96 : supervision des liaisons au back-office (incidents de liaison tenus par la supervision, files lues au courtier avec tendance, battements des workers dans Redis)
 [2026-11-07 20:07:32] Suivi - T-97 : configuration des connecteurs et des routes au back-office (secret chiffré jamais réaffiché, audit avant et après, routes par priorité, débit et réglages pris en compte sans redémarrage)
 [2026-11-07 20:10:24] Suivi - T-98 : grilles tarifaires au back-office (versions datées en brouillon, reprise des prix en vigueur, publication confirmée et tracée, version publiée non modifiable, date de prise d'effet obligatoire), super-administrateur seul sans double validation
+[2026-11-07 20:13:47] Suivi - T-99 : dictionnaire anti-spam (table modifiable au back-office, normalisation contre les contournements, blocage nommant l'expression, avertissement dans l'aperçu)

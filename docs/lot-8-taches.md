@@ -165,6 +165,14 @@ Choix fait, à confirmer : la commande `publier_grille` garde la publication san
 
 **Critères** Un mot de la liste bloque la campagne et nomme le mot en cause. La liste se modifie sans redéploiement. Le filtrage ne se contourne pas par des espaces ou des substitutions de caractères évidentes.
 
+**Fait.** Nouvelle table `conformite_mot_proscrit` (expression, forme normalisée unique, gravité avertissement ou blocage, motif montré au client, actif), lue par tous et écrite par le back-office (`core` 0035). Aucune expression n'est semée : la liste se remplit à l'écran « Mots proscrits » du back-office (rôle exploitation), chaque changement tracé au journal d'audit, et vaut dès l'examen suivant. L'examen (`conformite.antispam`) normalise le texte et chaque expression de la même façon : casse et accents, substitutions évidentes (0 pour o ; 1, l, ! et | pour i ; 3 et € pour e ; 4 et @ pour a ; 5 et $ pour s ; 7 pour t ; 8 pour b), séparateurs et chiffres restants retirés, lettres répétées réduites ; une expression doit compter au moins trois lettres normalisées. Une expression bloquante refuse la campagne à sa création, à son aperçu, à l'envoi de test, à la confirmation et à chaque occurrence d'une récurrence, et le refus nomme l'expression et son motif. Un avertissement s'affiche dans l'aperçu de la campagne sans bloquer.
+
+Choix faits, à confirmer :
+
+- le dictionnaire revient à l'exploitation, avec l'anti-fraude ;
+- les séparateurs étant retirés, une expression peut se trouver à cheval sur deux mots ; c'est le prix du refus des contournements par espaces ;
+- les envois unitaires et ceux de l'API ne passent pas au dictionnaire, qui porte sur la composition des campagnes.
+
 ## T-100 · Détection de trafic artificiel
 
 **Produit** Les trois règles de détection : séries de numéros contigus, pics de codes à usage unique vers des plages inhabituelles, taux de livraison anormalement bas sur une plage.

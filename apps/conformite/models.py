@@ -64,3 +64,33 @@ class JourFerie(Identifiable):
 
     def __str__(self):
         return f"{self.pays} {self.date:%d/%m/%Y} {self.libelle}"
+
+
+class MotProscrit(Identifiable):
+    """Dictionnaire anti-spam (T-99) : une expression proscrite dans le texte
+    des campagnes. Un avertissement prévient le client à la composition ; un
+    blocage refuse la campagne et nomme l'expression. `forme` est l'expression
+    normalisée (`conformite.antispam.normaliser`), sur laquelle porte la
+    comparaison. Commune à tous les clients, lue par chacun, écrite par le
+    back-office ; elle se modifie sans redéploiement."""
+
+    class Gravite(models.TextChoices):
+        AVERTISSEMENT = "AVERTISSEMENT", "Avertissement"
+        BLOCAGE = "BLOCAGE", "Blocage"
+
+    expression = models.CharField(max_length=100)
+    forme = models.CharField(max_length=100, unique=True, editable=False)
+    gravite = models.CharField(max_length=15, choices=Gravite, default=Gravite.BLOCAGE)
+    motif = models.CharField(
+        max_length=255, blank=True, help_text="Montré au client avec l'expression en cause."
+    )
+    actif = models.BooleanField(default=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "conformite_mot_proscrit"
+        verbose_name = "mot proscrit"
+        verbose_name_plural = "mots proscrits"
+
+    def __str__(self):
+        return self.expression
