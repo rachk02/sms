@@ -39,6 +39,8 @@ PERSONNALISEES = {
     "comptes_utilisateur_roles": (SUPER, True),
     "paiements_facture_avoir": ("backoffice.emettre_avoir", True),
     "backoffice_dossierpreuve_client": ("backoffice.view_dossierpreuve", False),
+    "telecom_incidentliaison_supervision": ("telecom.view_incidentliaison", False),
+    "telecom_incidentliaison_supervision_fragment": ("telecom.view_incidentliaison", False),
 }
 STANDARD = ("_changelist", "_add", "_change", "_delete", "_history")
 

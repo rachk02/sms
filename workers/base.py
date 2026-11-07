@@ -9,9 +9,11 @@ traitements fait le reste.
 """
 
 import asyncio
+import contextlib
 import logging
 import os
 import signal
+import time
 
 journal = logging.getLogger("workers")
 
@@ -25,6 +27,40 @@ def preparer_django() -> None:
     import django
 
     django.setup()
+
+
+async def battre(worker) -> None:
+    """Battement du worker toutes les quinze secondes, jusqu'à son annulation
+    (T-96), puis effacement de sa clé. Une panne de Redis ne fait pas tomber le
+    worker : le battement manque, et le back-office le dit."""
+    from apps.core import battements
+
+    ident, demarre_le = battements.exemplaire(), time.time()
+    try:
+        while True:
+            try:
+                await asyncio.to_thread(
+                    battements.battre,
+                    worker.nom,
+                    ident,
+                    demarre_le=demarre_le,
+                    etat=worker.etat,
+                    en_cours=len(worker.en_cours),
+                )
+            except Exception:
+                journal.warning("%s : battement impossible.", worker.nom, exc_info=True)
+            await asyncio.sleep(battements.PERIODE_S)
+    finally:
+        with contextlib.suppress(Exception):
+            await asyncio.to_thread(battements.oublier, worker.nom, ident)
+
+
+async def arreter_battement(tache: asyncio.Task | None) -> None:
+    if tache is None:
+        return
+    tache.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await tache
 
 
 def installer_arret(boucle: asyncio.AbstractEventLoop, arret: asyncio.Event) -> None:
@@ -43,6 +79,9 @@ class Worker:
     """Consomme ses files et délègue chaque message à `traiter`."""
 
     nom = "worker"
+    # Publié dans le battement : ACTIF, ou EN_VEILLE pour l'ordonnanceur qui
+    # attend le verrou.
+    etat = "ACTIF"
     files: tuple[str, ...] = ()
     prefetch = 1
     delai_grace_s = DELAI_GRACE_S
@@ -80,6 +119,7 @@ class Worker:
         if installer_signaux:
             installer_arret(asyncio.get_running_loop(), self.arret)
         connexion = await bus.connecter()
+        battement = None
         try:
             canal = await connexion.channel()
             await canal.set_qos(prefetch_count=self.prefetch)
@@ -91,6 +131,7 @@ class Worker:
                 abonnements.append((file, etiquette))
             journal.info("%s à l'écoute de %s.", self.nom, ", ".join(self.files))
             self.pret.set()
+            battement = asyncio.create_task(battre(self))
 
             await self.arret.wait()
 
@@ -104,6 +145,7 @@ class Worker:
                         "%s sort avec %d message(s) interrompu(s).", self.nom, len(restants)
                     )
         finally:
+            await arreter_battement(battement)
             await connexion.close()
             await sync_to_async(connections.close_all)()
         journal.info("%s arrêté.", self.nom)

@@ -35,6 +35,7 @@ ROLES = {
         "core.audit": _VOIR,
         "conformite.fenetre": _TOUT,
         "conformite.jourferie": _TOUT,
+        "telecom.incidentliaison": _VOIR,
     },
     FINANCE: {
         "comptes.client": _VOIR,

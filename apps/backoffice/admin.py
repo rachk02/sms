@@ -28,6 +28,7 @@ from apps.fichiers.models import Fichier
 from apps.fichiers.services import lien
 from apps.paiements import services as paiements
 from apps.paiements.models import Facture, Reglage, Transaction
+from apps.telecom.models import IncidentLiaison
 
 from . import selectors
 from .forms import (
@@ -896,3 +897,71 @@ class DossierPreuveAdmin(admin.ModelAdmin):
             "plafond": selectors.MESSAGES_AFFICHES,
         }
         return TemplateResponse(request, "admin/backoffice/dossier_preuve_client.html", contexte)
+
+
+@admin.register(IncidentLiaison)
+class IncidentLiaisonAdmin(admin.ModelAdmin):
+    """Supervision des liaisons (T-96). La liste est l'historique des incidents,
+    tenu par la supervision ; l'écran de supervision montre l'état présent des
+    connecteurs, des files et des workers, rafraîchi toutes les dix secondes.
+    Consultation seule."""
+
+    list_display = ("connecteur", "etat", "debut", "fin", "duree", "motif")
+    list_filter = ("etat", "connecteur")
+    date_hierarchy = "debut"
+    list_select_related = ("connecteur",)
+    change_list_template = "admin/backoffice/incidents_liaison.html"
+    readonly_fields = ("connecteur", "etat", "motif", "debut", "fin", "mesures")
+
+    @admin.display(description="Durée")
+    def duree(self, incident):
+        fin = incident.fin or timezone.now()
+        minutes = int((fin - incident.debut).total_seconds() // 60)
+        heures, minutes = divmod(minutes, 60)
+        texte = f"{heures} h {minutes:02d} min" if heures else f"{minutes} min"
+        return texte if incident.fin else f"{texte}, en cours"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_urls(self):
+        propres = [
+            path(
+                "supervision/",
+                self.admin_site.admin_view(self.supervision),
+                name="telecom_incidentliaison_supervision",
+            ),
+            path(
+                "supervision/fragment/",
+                self.admin_site.admin_view(self.supervision_fragment),
+                name="telecom_incidentliaison_supervision_fragment",
+            ),
+        ]
+        return propres + super().get_urls()
+
+    def _contexte(self, request):
+        return {
+            **self.admin_site.each_context(request),
+            "title": "Supervision des liaisons",
+            "opts": self.model._meta,
+            "supervision": selectors.supervision(),
+            "muette_au_dela_s": selectors.SUPERVISION_MUETTE_S,
+        }
+
+    def supervision(self, request):
+        _autorise(self.has_view_permission(request))
+        return TemplateResponse(
+            request, "admin/backoffice/supervision.html", self._contexte(request)
+        )
+
+    def supervision_fragment(self, request):
+        _autorise(self.has_view_permission(request))
+        return TemplateResponse(
+            request, "admin/backoffice/_supervision.html", self._contexte(request)
+        )

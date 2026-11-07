@@ -1,0 +1,99 @@
+{% with s=supervision %}
+<p>Lu à {{ s.maintenant|date:"H:i:s" }}.
+{% if s.publiee_il_y_a_s is None %}
+  <strong class="errornote">Supervision muette : l'ordonnanceur ne publie plus l'état des liaisons. L'état ci-dessous peut être ancien.</strong>
+{% elif s.muette %}
+  <strong class="errornote">Supervision muette depuis {{ s.publiee_il_y_a_s }} s (au-delà de {{ muette_au_dela_s }} s) : l'ordonnanceur ne tourne plus. L'état ci-dessous peut être ancien.</strong>
+{% else %}
+  Dernière évaluation des liaisons il y a {{ s.publiee_il_y_a_s }} s.
+{% endif %}
+</p>
+
+<div class="module">
+  <h2>Connecteurs</h2>
+  <table>
+    <thead><tr><th>Connecteur</th><th>Opérateur</th><th>Type</th><th>État</th><th>Depuis</th><th>Motif</th><th>Messages soumis</th></tr></thead>
+    <tbody>
+      {% for l in s.liaisons %}
+      <tr>
+        <td>{{ l.nom }}{% if not l.actif %} (inactif){% endif %}</td>
+        <td>{{ l.operateur }}</td>
+        <td>{{ l.type }}</td>
+        <td>{% if l.etat == "CONNECTE" %}Connecté{% elif l.etat == "DEGRADE" %}<strong>Dégradé</strong>{% else %}<strong>Déconnecté</strong>{% endif %}</td>
+        <td>{% if l.depuis %}{% if l.etat == "CONNECTE" %}connecté le {% else %}tombé le {% endif %}{{ l.depuis|date:"d/m/Y H:i:s" }}{% endif %}</td>
+        <td>{{ l.motif }}</td>
+        <td>{{ l.soumis }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7">Aucun connecteur.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="module">
+  <h2>Files</h2>
+  {% if s.files is None %}
+  <p class="errornote">L'API de gestion de RabbitMQ ne répond pas : profondeur des files inconnue.</p>
+  {% else %}
+  <table>
+    <thead><tr><th>File</th><th>En attente</th><th>Consommateurs</th><th>Entrées par seconde</th><th>Sorties par seconde</th><th>Tendance sur cinq minutes</th></tr></thead>
+    <tbody>
+      {% for f in s.files %}
+      <tr>
+        <td>{{ f.nom }}</td>
+        <td>{{ f.profondeur }}</td>
+        <td>{{ f.consommateurs }}</td>
+        <td>{{ f.entrees_s }}</td>
+        <td>{{ f.sorties_s }}</td>
+        <td>{% if f.tendance == "STAGNE" or f.tendance == "MONTE" or f.tendance == "A_INSPECTER" %}<strong>{{ f.explication }}</strong>{% else %}{{ f.explication }}{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+
+<div class="module">
+  <h2>Workers</h2>
+  <table>
+    <thead><tr><th>Worker</th><th>Exemplaire</th><th>État</th><th>Démarré le</th><th>Dernier battement</th><th>Messages en cours</th></tr></thead>
+    <tbody>
+      {% for w in s.workers %}
+        {% for e in w.exemplaires %}
+        <tr>
+          <td>{{ w.nom }}</td>
+          <td>{{ e.exemplaire }}</td>
+          <td>{% if e.etat == "EN_VEILLE" %}En veille, prêt à reprendre{% else %}Actif{% endif %}</td>
+          <td>{{ e.demarre_le|date:"d/m/Y H:i:s" }}</td>
+          <td>il y a {{ e.vu_il_y_a_s }} s</td>
+          <td>{{ e.en_cours }}</td>
+        </tr>
+        {% empty %}
+        <tr><td>{{ w.nom }}</td><td colspan="5"><strong>Aucun exemplaire en vie.</strong></td></tr>
+        {% endfor %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="module">
+  <h2>Derniers incidents de liaison</h2>
+  <table>
+    <thead><tr><th>Connecteur</th><th>État</th><th>Début</th><th>Fin</th><th>Motif</th></tr></thead>
+    <tbody>
+      {% for i in s.incidents %}
+      <tr>
+        <td>{{ i.connecteur.nom }}</td>
+        <td>{{ i.get_etat_display }}</td>
+        <td>{{ i.debut|date:"d/m/Y H:i:s" }}</td>
+        <td>{% if i.fin %}{{ i.fin|date:"d/m/Y H:i:s" }}{% else %}<strong>en cours</strong>{% endif %}</td>
+        <td>{{ i.motif }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">Aucun incident.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endwith %}

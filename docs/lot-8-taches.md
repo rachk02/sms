@@ -131,6 +131,10 @@ Choix faits, à confirmer :
 
 **Critères** Une session tombée apparaît en moins d'une minute avec son heure de chute. La profondeur des files est réelle et non estimée. L'écran distingue une file qui monte d'une file qui stagne, ce qui n'est pas le même incident.
 
+**Fait.** Écran « Supervision des liaisons » du back-office (rôle exploitation, droit de consulter les incidents de liaison), rafraîchi toutes les dix secondes par un fragment. Connecteurs : lus en base par le rôle du back-office, sans leurs secrets, avec leur état, l'heure de leur chute ou de leur dernière connexion, le motif et les messages soumis. La supervision (`telecom.sante.surveiller`, toutes les quinze secondes) tient la nouvelle table `telecom_incident_liaison` : chaque changement d'état clôt l'incident ouvert et en ouvre un si la liaison n'est pas saine, dans la même transaction que l'état et l'alerte ; un seul incident ouvert par connecteur. La table est réservée aux workers et au back-office (sécurité par ligne forcée sans politique, `core` 0033). Si l'ordonnanceur ne publie plus depuis plus d'une minute, l'écran annonce une supervision muette. Files : profondeur, consommateurs et débits lus à l'API de gestion de RabbitMQ, avec ses moyennes de cinq minutes ; une file qui stagne (rien ne sort, consommateur absent ou bloqué) se distingue d'une file qui monte (les consommateurs travaillent, moins vite que les arrivées) ; les paliers de réessai et le rebut ont leur propre lecture. Workers : chaque exemplaire écrit un battement dans Redis toutes les quinze secondes, qui expire en une minute (`core.battements`) ; l'écran nomme les workers attendus dont aucun exemplaire ne bat, et l'ordonnanceur en veille se distingue de l'actif. L'historique complet des incidents est la liste standard, filtrable par connecteur et par état.
+
+Choix faits, à confirmer : seuil de supervision muette à une minute ; fenêtre de cinq minutes pour la tendance des files.
+
 ## T-97 · Back-office, configuration des connecteurs
 
 **Produit** La création et la modification d'un connecteur, ses identifiants chiffrés, son débit, ses sessions, ses routes et leurs priorités.

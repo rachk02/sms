@@ -1,0 +1,12 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+{% block extrahead %}{{ block.super }}<script src="{% static 'vendor/htmx-2.0.11.min.js' %}" defer></script>{% endblock %}
+{% block content %}
+<p>
+  <a href="{% url 'admin:telecom_incidentliaison_changelist' %}">Historique complet des incidents</a>.
+  L'écran se rafraîchit toutes les dix secondes ; la supervision évalue les liaisons toutes les quinze secondes.
+</p>
+<div hx-get="{% url 'admin:telecom_incidentliaison_supervision_fragment' %}" hx-trigger="every 10s" hx-swap="innerHTML">
+  {% include "admin/backoffice/_supervision.html" %}
+</div>
+{% endblock %}

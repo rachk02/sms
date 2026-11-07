@@ -10,7 +10,7 @@ lui.
 import asyncio
 import time
 
-from .base import Worker, installer_arret, journal, lancer
+from .base import Worker, arreter_battement, battre, installer_arret, journal, lancer
 
 CLE_VERROU = 72_016_001
 
@@ -107,6 +107,8 @@ class Ordonnanceur(Worker):
         self.arret = asyncio.Event()
         if installer_signaux:
             installer_arret(asyncio.get_running_loop(), self.arret)
+        self.etat = "EN_VEILLE"
+        battement = asyncio.create_task(battre(self))
         try:
             while not self.arret.is_set():
                 if await sync_to_async(prendre_verrou)():
@@ -115,6 +117,7 @@ class Ordonnanceur(Worker):
                 await self._attendre(self.attente_verrou_s)
             if self.arret.is_set():
                 return
+            self.etat = "ACTIF"
             journal.info("Ordonnanceur actif.")
             connexion = await bus.connecter()
             try:
@@ -167,6 +170,7 @@ class Ordonnanceur(Worker):
             finally:
                 await connexion.close()
         finally:
+            await arreter_battement(battement)
             await sync_to_async(connections.close_all)()
             journal.info("Ordonnanceur arrêté.")
 

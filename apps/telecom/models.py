@@ -51,6 +51,39 @@ class Connecteur(Base):
         return self.nom
 
 
+class IncidentLiaison(Identifiable):
+    """Une liaison hors de l'état sain, de sa chute à son rétablissement (T-96).
+
+    Ouvert par la supervision au changement d'état, clos au retour à CONNECTE ;
+    un passage de DEGRADE à DECONNECTE clôt l'un et ouvre l'autre. Un seul
+    incident ouvert par connecteur. Réservée aux workers et au back-office."""
+
+    connecteur = models.ForeignKey(Connecteur, on_delete=models.PROTECT, related_name="+")
+    etat = models.CharField(max_length=20, choices=Connecteur.EtatLiaison)
+    motif = models.TextField()
+    debut = models.DateTimeField()
+    fin = models.DateTimeField(null=True, blank=True)
+    # Taux d'accusés positifs, nombre d'accusés et délai moyen au moment de
+    # l'ouverture, sur la fenêtre de cinq minutes de la santé.
+    mesures = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "telecom_incident_liaison"
+        verbose_name = "incident de liaison"
+        verbose_name_plural = "incidents de liaison"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["connecteur"],
+                condition=models.Q(fin__isnull=True),
+                name="incident_liaison_un_ouvert",
+            )
+        ]
+        indexes = [models.Index(fields=["-debut"], name="incident_liaison_debut")]
+
+    def __str__(self):
+        return f"{self.connecteur} {self.etat} {self.debut:%Y-%m-%d %H:%M}"
+
+
 class Correlation(Identifiable):
     """Reprise en base de la correspondance tenue en Redis entre l'identifiant
     rendu par l'opérateur et le message. La base est la vérité, Redis un cache."""

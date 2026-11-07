@@ -15,12 +15,13 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from django.db import transaction
 from django.utils import timezone
 
 from apps.core.evenements import publier
 from apps.core.redis import client_redis
 
-from .models import Connecteur
+from .models import Connecteur, IncidentLiaison
 from .passerelles import EtatLiaison, passerelle_pour
 
 journal = logging.getLogger(__name__)
@@ -113,6 +114,8 @@ EVENEMENTS = {
 def surveiller(maintenant: datetime | None = None) -> list[Sante]:
     """Évalue chaque connecteur actif, tient `etat_liaison` à jour et alerte à
     chaque changement : jamais d'alerte répétée tant que l'état ne bouge pas.
+    Chaque changement clôt l'incident ouvert et en ouvre un nouveau si la
+    liaison n'est pas saine (T-96) : l'heure de chute est celle du constat.
     Appelée par l'ordonnanceur, sous le rôle worker."""
     bilans = []
     for connecteur in Connecteur.objects.filter(actif=True):
@@ -120,10 +123,27 @@ def surveiller(maintenant: datetime | None = None) -> list[Sante]:
         bilans.append(sante)
         if connecteur.etat_liaison == sante.etat:
             continue
+        constat = timezone.now()
         champs = {"etat_liaison": sante.etat}
         if sante.etat == EtatLiaison.CONNECTE:
-            champs["derniere_connexion_le"] = timezone.now()
-        Connecteur.objects.filter(id=connecteur.id).update(**champs)
+            champs["derniere_connexion_le"] = constat
+        with transaction.atomic():
+            Connecteur.objects.filter(id=connecteur.id).update(**champs)
+            _tenir_incident(connecteur, sante, constat)
+            publier(
+                EVENEMENTS[sante.etat],
+                objet_id=connecteur.id,
+                donnees={
+                    "connecteur": connecteur.nom,
+                    "operateur": connecteur.operateur,
+                    "avant": connecteur.etat_liaison,
+                    "apres": sante.etat,
+                    "motif": sante.motif,
+                    "taux": sante.mesures.taux,
+                    "accuses": sante.mesures.total,
+                    "delai_moyen_s": sante.mesures.delai_moyen_s,
+                },
+            )
         niveau = logging.INFO if sante.etat == EtatLiaison.CONNECTE else logging.ERROR
         journal.log(
             niveau,
@@ -134,18 +154,21 @@ def surveiller(maintenant: datetime | None = None) -> list[Sante]:
             sante.motif,
             extra={"connecteur_id": str(connecteur.id)},
         )
-        publier(
-            EVENEMENTS[sante.etat],
-            objet_id=connecteur.id,
-            donnees={
-                "connecteur": connecteur.nom,
-                "operateur": connecteur.operateur,
-                "avant": connecteur.etat_liaison,
-                "apres": sante.etat,
-                "motif": sante.motif,
-                "taux": sante.mesures.taux,
-                "accuses": sante.mesures.total,
-                "delai_moyen_s": sante.mesures.delai_moyen_s,
-            },
-        )
     return bilans
+
+
+def _tenir_incident(connecteur, sante: Sante, constat: datetime) -> None:
+    IncidentLiaison.objects.filter(connecteur=connecteur, fin__isnull=True).update(fin=constat)
+    if sante.etat == EtatLiaison.CONNECTE:
+        return
+    IncidentLiaison.objects.create(
+        connecteur=connecteur,
+        etat=sante.etat,
+        motif=sante.motif,
+        debut=constat,
+        mesures={
+            "taux": sante.mesures.taux,
+            "accuses": sante.mesures.total,
+            "delai_moyen_s": sante.mesures.delai_moyen_s,
+        },
+    )

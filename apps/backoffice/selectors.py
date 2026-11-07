@@ -7,7 +7,7 @@ import logging
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from django.conf import settings
 from django.db.models import Count, Max, Min
@@ -29,18 +29,37 @@ class Liaison:
     actif: bool
 
 
-def profondeur_files() -> dict[str, int] | None:
-    """Messages en attente par file, lus sur l'API de gestion de RabbitMQ.
-    None si le courtier ne répond pas."""
+# Fenêtre sur laquelle le courtier rend ses moyennes.
+FENETRE_FILES_S = 300
+
+
+def files_du_courtier() -> list[dict] | None:
+    """Les files telles que l'API de gestion de RabbitMQ les décrit, avec les
+    moyennes des cinq dernières minutes. None si le courtier ne répond pas."""
     hote = urllib.parse.quote(settings.RABBITMQ_VHOST, safe="")
-    requete = urllib.request.Request(f"{settings.RABBITMQ_API_URL}/queues/{hote}")
+    parametres = urllib.parse.urlencode(
+        {
+            "lengths_age": FENETRE_FILES_S,
+            "lengths_incr": 30,
+            "msg_rates_age": FENETRE_FILES_S,
+            "msg_rates_incr": 30,
+        }
+    )
+    requete = urllib.request.Request(f"{settings.RABBITMQ_API_URL}/queues/{hote}?{parametres}")
     authentification = f"{settings.RABBITMQ_USER}:{settings.RABBITMQ_PASSWORD}".encode()
     requete.add_header("Authorization", "Basic " + base64.b64encode(authentification).decode())
     try:
         with urllib.request.urlopen(requete, timeout=3) as reponse:
-            files = json.load(reponse)
+            return json.load(reponse)
     except OSError:
         journal.warning("API de gestion de RabbitMQ injoignable.")
+        return None
+
+
+def profondeur_files() -> dict[str, int] | None:
+    """Messages en attente par file. None si le courtier ne répond pas."""
+    files = files_du_courtier()
+    if files is None:
         return None
     return {file["name"]: int(file.get("messages", 0)) for file in files}
 
@@ -179,4 +198,170 @@ def messages_recus(numero_normalise: str, client_id, maintenant: datetime | None
         Message.objects.filter(
             numero_normalise=numero_normalise, client_id=client_id, date_reception__gte=depuis
         ).order_by("-date_reception")[:MESSAGES_AFFICHES]
+    )
+
+
+# Supervision des liaisons (T-96)
+
+# Au-delà, l'état des liaisons publié par l'ordonnanceur est trop ancien : la
+# supervision est muette et l'écran le dit.
+SUPERVISION_MUETTE_S = 60
+INCIDENTS_AFFICHES = 20
+
+
+@dataclass(frozen=True)
+class FileSupervisee:
+    nom: str
+    profondeur: int
+    consommateurs: int
+    entrees_s: float
+    sorties_s: float
+    tendance: str
+    explication: str
+
+
+def _moyenne(details: dict | None) -> float:
+    """Moyenne du courtier sur la fenêtre, ou à défaut son taux instantané."""
+    details = details or {}
+    return float(details.get("avg_rate", details.get("rate", 0.0)) or 0.0)
+
+
+def tendance(
+    nom: str, profondeur: int, consommateurs: int, sorties_s: float, variation_s: float
+) -> tuple[str, str]:
+    """Une file qui monte n'est pas une file qui stagne. Qui monte : les
+    consommateurs travaillent, moins vite que les arrivées ; il manque du débit.
+    Qui stagne : rien ne sort ; un consommateur est absent ou bloqué. Les
+    paliers de réessai et le rebut ont leur propre lecture."""
+    if nom.rsplit(".", 1)[0].endswith("reessai"):
+        return "PALIER", "Messages qui attendent leur nouvel essai et reviennent seuls."
+    if nom.endswith("rebut"):
+        if profondeur:
+            return "A_INSPECTER", "Échecs définitifs, que personne ne consomme : à inspecter."
+        return "VIDE", "Aucun échec définitif."
+    if profondeur == 0:
+        return "VIDE", "Rien en attente."
+    if sorties_s <= 0:
+        if consommateurs == 0:
+            return "STAGNE", "Rien ne sort : aucun consommateur branché."
+        return "STAGNE", "Rien ne sort depuis cinq minutes : consommateur bloqué ou en échec."
+    if variation_s > 0:
+        return (
+            "MONTE",
+            "La file monte : les consommateurs travaillent, moins vite que les arrivées.",
+        )
+    return "S_ECOULE", "La file s'écoule."
+
+
+def files_supervisees() -> list[FileSupervisee] | None:
+    files = files_du_courtier()
+    if files is None:
+        return None
+    resultat = []
+    for file in sorted(files, key=lambda f: f["name"]):
+        statistiques = file.get("message_stats") or {}
+        profondeur = int(file.get("messages", 0))
+        consommateurs = int(file.get("consumers", 0))
+        sorties = _moyenne(statistiques.get("deliver_get_details"))
+        code, explication = tendance(
+            file["name"], profondeur, consommateurs, sorties, _moyenne(file.get("messages_details"))
+        )
+        resultat.append(
+            FileSupervisee(
+                nom=file["name"],
+                profondeur=profondeur,
+                consommateurs=consommateurs,
+                entrees_s=round(_moyenne(statistiques.get("publish_details")), 2),
+                sorties_s=round(sorties, 2),
+                tendance=code,
+                explication=explication,
+            )
+        )
+    return resultat
+
+
+@dataclass(frozen=True)
+class LiaisonSupervisee:
+    id: object
+    nom: str
+    operateur: str
+    type: str
+    actif: bool
+    etat: str
+    depuis: datetime | None
+    motif: str
+    soumis: int
+
+
+@dataclass(frozen=True)
+class WorkerSupervise:
+    nom: str
+    exemplaires: list
+
+
+@dataclass(frozen=True)
+class Supervision:
+    maintenant: datetime
+    publiee_il_y_a_s: int | None
+    liaisons: list
+    files: list | None
+    workers: list
+    incidents: list
+
+    @property
+    def muette(self) -> bool:
+        return self.publiee_il_y_a_s is None or self.publiee_il_y_a_s > SUPERVISION_MUETTE_S
+
+
+def supervision(maintenant: datetime | None = None) -> Supervision:
+    """L'écran de supervision du back-office : les connecteurs lus en base par
+    le rôle du back-office, sans leurs secrets, avec l'heure de leur chute ; la
+    profondeur réelle des files, lue au courtier ; les workers par leurs
+    battements ; les derniers incidents de liaison."""
+    from apps.core import battements
+    from apps.telecom.models import Connecteur, IncidentLiaison
+
+    maintenant = maintenant or timezone.now()
+    ouverts = {i.connecteur_id: i for i in IncidentLiaison.objects.filter(fin__isnull=True)}
+    connecteurs = list(
+        Connecteur.objects.order_by("nom").values(
+            "id", "nom", "operateur", "type", "actif", "etat_liaison", "derniere_connexion_le"
+        )
+    )
+    soumis = messages_soumis([str(c["id"]) for c in connecteurs])
+    liaisons = []
+    for c in connecteurs:
+        incident = ouverts.get(c["id"])
+        liaisons.append(
+            LiaisonSupervisee(
+                id=c["id"],
+                nom=c["nom"],
+                operateur=c["operateur"],
+                type=c["type"],
+                actif=c["actif"],
+                etat=c["etat_liaison"],
+                depuis=incident.debut if incident else c["derniere_connexion_le"],
+                motif=incident.motif if incident else "",
+                soumis=soumis.get(str(c["id"]), 0),
+            )
+        )
+    _, publiees_le = etat_publie()
+    vivants = battements.lire()
+    for battement in vivants:
+        battement["demarre_le"] = datetime.fromtimestamp(battement["demarre_le"], tz=UTC)
+        battement["vu_il_y_a_s"] = max(0, int(maintenant.timestamp()) - battement["vu_le"])
+    noms = list(battements.ATTENDUS) + sorted(
+        {b["nom"] for b in vivants} - set(battements.ATTENDUS)
+    )
+    workers = [WorkerSupervise(nom, [b for b in vivants if b["nom"] == nom]) for nom in noms]
+    incidents = list(
+        IncidentLiaison.objects.select_related("connecteur").order_by("-debut")[:INCIDENTS_AFFICHES]
+    )
+    return Supervision(
+        maintenant=maintenant,
+        publiee_il_y_a_s=int(maintenant.timestamp()) - publiees_le if publiees_le else None,
+        liaisons=liaisons,
+        files=files_supervisees(),
+        workers=workers,
+        incidents=incidents,
     )
