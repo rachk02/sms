@@ -107,12 +107,16 @@ class RegleFraude(Identifiable):
       fenêtre, quand le client n'y avait rien envoyé depuis trente jours ;
     - LIVRAISON_PLAGE : taux de livraison sur une plage, en pour cent, sur la
       fenêtre et au moins `echantillon_min` accusés ; l'alerte part sous le
-      seuil, et non au-dessus."""
+      seuil, et non au-dessus ;
+    - PLAFOND_COMPTE (T-101) : envois tentés hors campagne sur l'heure ou le
+      jour, en pour cent du plafond du compte ; au seuil critique, le compte
+      est suspendu automatiquement."""
 
     class Code(models.TextChoices):
         CONTIGUS = "CONTIGUS", "Numéros contigus"
         CODES_PLAGE = "CODES_PLAGE", "Codes vers une plage inhabituelle"
         LIVRAISON_PLAGE = "LIVRAISON_PLAGE", "Livraison basse sur une plage"
+        PLAFOND_COMPTE = "PLAFOND_COMPTE", "Plafond du compte dépassé"
 
     code = models.CharField(max_length=20, choices=Code, unique=True)
     seuil_alerte = models.PositiveIntegerField()

@@ -92,6 +92,7 @@ class Ordonnanceur(Worker):
         from asgiref.sync import sync_to_async
         from django.db import connections
 
+        from apps.backoffice.services import suspendre_sur_alertes
         from apps.campagnes.controle import controler_terminees
         from apps.campagnes.diffusion import publier as publier_campagnes
         from apps.campagnes.planification import planifier
@@ -134,6 +135,8 @@ class Ordonnanceur(Worker):
                         # Santé d'abord, pour que l'état publié soit le plus récent.
                         await sync_to_async(surveiller)()
                         await sync_to_async(publier_etat_liaisons)()
+                        # Comptes au-delà du seuil critique de leur plafond (T-101).
+                        await sync_to_async(suspendre_sur_alertes)()
                         derniere_supervision = time.monotonic()
                     if time.monotonic() - dernier_constat >= self.periode_sans_accuse_s:
                         await sync_to_async(constater_sans_accuse)()

@@ -194,6 +194,16 @@ Choix faits, à confirmer :
 
 **Critères** Un compte qui dépasse son plafond horaire reçoit un refus et une alerte part à l'exploitation. Créer dix clés ne multiplie pas la limite, le plafond compte est le garde-fou et le test le vérifie explicitement.
 
+**Fait.** Plafond du compte (`conformite.plafonds.consommer`) : chaque envoi hors campagne tenté compte dans Redis, par heure et par jour (`sms:plafond:<client>:h|j:<instant>`), contre `plafond_horaire` et `plafond_journalier` du compte, que le palier fixe. Au-delà, l'envoi est refusé (`PlafondAtteint`) avant toute écriture au journal. L'envoi unitaire (`journal.services.envoyer_unitaire`) passe par là, et l'API du lot 9 y passera aussi, en donnant sa clé pour l'alerte seulement : le compteur est celui du compte, quelle que soit la clé. Le premier refus d'une période ouvre une alerte de la nouvelle règle `PLAFOND_COMPTE` (T-100), avec la période, le plafond et les essais, et l'exploitation est prévenue (`conformite.fraude.alerte`). Quand les essais atteignent le seuil critique de la règle, en pour cent du plafond, l'alerte devient critique. L'ordonnanceur, à chaque passage de supervision, suspend alors le compte (`backoffice.services.suspendre_sur_alertes`, sans auteur, campagnes en pause comme pour une suspension par un agent) et le note dans l'alerte. Une alerte ne suspend qu'une fois par franchissement : un agent qui réactive le compte sans traiter l'alerte n'est pas contredit par un simple dépassement, seulement par un nouveau franchissement du seuil critique. `fraude.signaler` pose désormais le client lui-même le temps de son écriture. Les tests vérifient que dix clés partagent le même plafond, le plafond journalier, le refus avant écriture avec l'alerte et son événement, et la suspension automatique, unique, puis renouvelée après une réactivation.
+
+Choix faits, à confirmer :
+
+- les campagnes ne comptent pas dans le plafond : elles sont confirmées chiffres lus et bornées par la réservation de leur coût ;
+- les essais refusés comptent, pour qu'un client qui insiste atteigne le seuil critique ;
+- seuil d'alerte au premier refus (100 %), seuil critique à 200 % du plafond sur la même heure ou le même jour, réglables au back-office ;
+- c'est le compte qui est suspendu, pas une clé : les clés et leur plafond propre arrivent au lot 9 ;
+- la suspension automatique attend le passage suivant de l'ordonnanceur, quinze secondes au plus ; les envois au-delà du plafond sont refusés entre-temps.
+
 ## T-102 · Billetterie de support
 
 **Produit** Le formulaire rattaché à une campagne ou à un message, le fil de ticket, les catégories et priorités, le cycle de vie complet des sept états, et les écrans côté agent.

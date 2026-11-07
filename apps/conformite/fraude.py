@@ -21,6 +21,7 @@ import logging
 
 from django.db import transaction
 
+from apps.core.cloisonnement import client_pose, poser_client
 from apps.core.evenements import publier
 
 from .models import AlerteFraude, RegleFraude
@@ -52,8 +53,11 @@ def signaler(
     """Ouvre l'alerte, ou met à jour celle qui est ouverte pour le même client,
     la même règle, la même plage et la même campagne. Une alerte critique le
     reste. L'exploitation est prévenue à l'ouverture et au passage en critique,
-    pas à chaque mise à jour."""
+    pas à chaque mise à jour. Le client est posé le temps de l'écriture :
+    l'appelant peut être hors de la transaction d'une requête."""
     with transaction.atomic():
+        precedent = client_pose()
+        poser_client(client_id)
         alerte = (
             AlerteFraude.objects.select_for_update()
             .filter(
@@ -99,6 +103,7 @@ def signaler(
                 valeur,
                 extra={"client_id": str(client_id), "alerte_id": str(alerte.id)},
             )
+        poser_client(precedent or None)
     return alerte
 
 

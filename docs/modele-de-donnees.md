@@ -637,9 +637,10 @@ normalisée, unique), `gravite` parmi AVERTISSEMENT, BLOCAGE, `motif`, `actif`,
 par le back-office, chaque changement tracé.
 
 **`conformite_regle_fraude`** : `id`, `code` unique parmi CONTIGUS,
-CODES_PLAGE, LIVRAISON_PLAGE, `seuil_alerte`, `seuil_critique`,
-`fenetre_minutes`, `echantillon_min`, `actif`, `modifie_le`. Les trois règles
-sont semées avec leurs seuils initiaux. Lue par tous, écrite par le
+CODES_PLAGE, LIVRAISON_PLAGE, PLAFOND_COMPTE, `seuil_alerte`, `seuil_critique`,
+`fenetre_minutes`, `echantillon_min`, `actif`, `modifie_le`. Les quatre règles
+sont semées avec leurs seuils initiaux ; ceux de PLAFOND_COMPTE sont en pour
+cent du plafond du compte. Lue par tous, écrite par le
 back-office.
 
 **`conformite_alerte_fraude`** : `id`, `client_id`, `regle`, `gravite` parmi

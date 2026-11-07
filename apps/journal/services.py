@@ -622,6 +622,11 @@ def envoyer_unitaire(
     """
     if connection.in_atomic_block:
         raise RuntimeError("envoyer_unitaire doit être appelé hors transaction.")
+    # Plafond du compte (T-101) : refus avant toute écriture, alerte à
+    # l'exploitation au premier refus.
+    from apps.conformite.plafonds import consommer
+
+    consommer(client)
     with transaction.atomic():
         message = enregistrer_message(
             client=client,

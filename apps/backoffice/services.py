@@ -457,3 +457,51 @@ def publier_grille_version(version: VersionGrille, *, agent, maintenant=None) ->
             "Un changement de prix porte sa date de prise d'effet."
         )
     return credits_services.publier_version(version, auteur=agent, maintenant=maintenant)
+
+
+# Suspension automatique (T-101)
+
+
+def suspendre_sur_alertes(maintenant=None) -> list:
+    """Suspend chaque compte actif dont l'alerte du plafond est devenue
+    critique, comme le ferait un agent (campagnes en pause, reprises à la
+    réactivation), sans auteur. Une alerte ne suspend qu'une fois : un agent
+    qui réactive le compte avant de la traiter n'est pas contredit. Appelée par
+    l'ordonnanceur, sous le rôle worker."""
+    from apps.campagnes.services import CampagneRefusee
+    from apps.comptes.services import SuspensionRefusee
+    from apps.conformite.models import AlerteFraude, RegleFraude
+
+    maintenant = maintenant or timezone.now()
+    suspendus = []
+    alertes = AlerteFraude.objects.filter(
+        regle=RegleFraude.Code.PLAFOND_COMPTE,
+        gravite=AlerteFraude.Gravite.CRITIQUE,
+        traitee_le__isnull=True,
+    ).select_related("client")
+    for alerte in alertes:
+        details = alerte.details
+        # L'alerte reste critique jusqu'à son traitement, mais ses détails
+        # suivent la dernière période : seul un franchissement du seuil
+        # critique suspend, une fois.
+        critique = details.get("seuil_critique")
+        if "suspension" in details or not critique or details.get("essais", 0) < critique:
+            continue
+        with transaction.atomic():
+            if alerte.client.etat == Client.Etat.ACTIF:
+                try:
+                    suspendre_compte(
+                        alerte.client,
+                        agent=None,
+                        motif=(
+                            f"Suspension automatique : {details.get('essais')} envois tentés "
+                            f"pour un plafond {details.get('periode')} de "
+                            f"{details.get('plafond')}."
+                        ),
+                    )
+                    suspendus.append(alerte.client)
+                except SuspensionRefusee, CampagneRefusee:
+                    pass
+            alerte.details = {**details, "suspension": maintenant.isoformat()}
+            alerte.save(update_fields=["details", "modifie_le"])
+    return suspendus
