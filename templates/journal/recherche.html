@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block contenu %}
+<h1 class="mb-4 text-2xl font-semibold">Journal des messages</h1>
+
+<form method="get" action="{% url 'journal' %}" class="mb-4 grid grid-cols-1 gap-3 rounded border border-slate-200 bg-white p-4 text-sm sm:grid-cols-3 lg:grid-cols-6">
+  <label class="flex flex-col gap-1">Du
+    <input type="date" name="debut" required value="{{ filtres.jour_debut|default:saisie.debut }}" class="rounded border border-slate-300 px-2 py-1">
+  </label>
+  <label class="flex flex-col gap-1">Au
+    <input type="date" name="fin" required value="{{ filtres.jour_fin|default:saisie.fin }}" class="rounded border border-slate-300 px-2 py-1">
+  </label>
+  <label class="flex flex-col gap-1">État
+    <select name="etat" class="rounded border border-slate-300 px-2 py-1">
+      <option value="">Tous</option>
+      {% for valeur, libelle in etats %}<option value="{{ valeur }}"{% if valeur == saisie.etat %} selected{% endif %}>{{ libelle }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="flex flex-col gap-1">Campagne (identifiant)
+    <input type="text" name="campagne" value="{{ saisie.campagne }}" class="rounded border border-slate-300 px-2 py-1">
+  </label>
+  <label class="flex flex-col gap-1">Numéro
+    <input type="tel" name="numero" value="{{ saisie.numero }}" class="rounded border border-slate-300 px-2 py-1">
+  </label>
+  <div class="flex items-end"><button type="submit" class="rounded bg-slate-900 px-4 py-1.5 text-white">Rechercher</button></div>
+</form>
+
+{% if erreur %}
+  <p class="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-900" role="alert">{{ erreur }}</p>
+{% elif seuil %}
+  <div class="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" role="status">
+    La période couvre {{ filtres.jours }} jours : au-delà de 31 jours, la recherche ne s'affiche pas à l'écran.
+    <a class="underline" href="{% url 'journal-export' %}?{{ export }}">Exporter ces messages en CSV</a> (un an au plus), ou réduisez la période.
+  </div>
+{% elif page %}
+  <div class="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600">
+    <p>Du plus récent au plus ancien, {{ page.messages|length }} message(s) sur cette page.</p>
+    <a class="underline" href="{% url 'journal-export' %}?{{ export }}">Exporter en CSV</a>
+  </div>
+  <div class="overflow-x-auto rounded border border-slate-200 bg-white">
+    <table class="w-full text-left text-sm">
+      <thead class="bg-slate-50 text-slate-600">
+        <tr><th class="px-3 py-2">Reçu le</th><th class="px-3 py-2">Numéro</th><th class="px-3 py-2">Réseau</th><th class="px-3 py-2">Expéditeur</th><th class="px-3 py-2">État</th><th class="px-3 py-2">Coût</th></tr>
+      </thead>
+      <tbody>
+        {% for message in page.messages %}
+          <tr class="border-t border-slate-200">
+            <td class="px-3 py-2">{{ message.date_reception|date:"d/m/Y H:i:s" }}</td>
+            <td class="px-3 py-2">{{ message.numero_normalise }}</td>
+            <td class="px-3 py-2">{{ message.operateur }}</td>
+            <td class="px-3 py-2">{{ message.expediteur_libelle }}</td>
+            <td class="px-3 py-2">{{ message.get_etat_display }}{% if message.motif_echec %}<span class="block text-xs text-slate-500">{{ message.motif_echec }}</span>{% endif %}</td>
+            <td class="px-3 py-2">{{ message.cout_total }} FCFA</td>
+          </tr>
+        {% empty %}
+          <tr class="border-t border-slate-200"><td class="px-3 py-4 text-slate-600" colspan="6">Aucun message ne répond à ces critères sur la période.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <nav class="mt-3 flex gap-4 text-sm" aria-label="Pages">
+    {% if not premiere %}<a class="underline" href="{% url 'journal' %}?{{ debut_recherche }}">Revenir au début</a>{% endif %}
+    {% if suivante %}<a class="underline" href="{% url 'journal' %}?{{ suivante }}">Page suivante</a>{% endif %}
+  </nav>
+{% endif %}
+{% endblock %}

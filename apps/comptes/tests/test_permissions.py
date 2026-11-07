@@ -45,6 +45,7 @@ ATTENDUS = {
     "factures": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "donnees": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     # Sans période, l'export du journal est refusé.
+    "journal": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "journal-export": ("get", {ANONYME: CONNEXION, UTILISATEUR: 400, ADMIN: 400}),
     "facture": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
     "paiement-statut": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),

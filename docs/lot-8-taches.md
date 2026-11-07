@@ -68,6 +68,14 @@ Choix faits, à confirmer :
 
 **Critères** Aucune recherche ne s'exécute sans borne de dates. La pagination reste constante en temps de réponse à la page cent comme à la page une. Une recherche par numéro utilise l'index sur la colonne normalisée, confirmé par le plan d'exécution.
 
+**Fait.** Écran minimal `/journal` (permission `compte.consulter`), lié depuis l'accueil : dates de début et de fin, état, identifiant de campagne, numéro. `journal.selectors.lire_filtres` valide la saisie : une seule date, ou une plage à l'envers, est refusée avant toute lecture ; sans aucune date, la recherche porte sur les sept derniers jours. Le numéro est normalisé puis cherché par égalité sur `numero_normalise`. `rechercher` rend cinquante messages, du plus récent au plus ancien, avec un curseur sur (date de réception, id) ; la borne simple sur la date, redondante avec la condition du curseur, permet à l'index de démarrer au curseur. Au-delà de 31 jours, l'écran ne cherche pas et propose l'export, qui accepte désormais les mêmes filtres et va jusqu'à un an. Les tests vérifient le refus sans borne, sans aucune lecture de `journal_message` ; les filtres et le cloisonnement ; le parcours complet de trois pages sans OFFSET ; par le plan exécuté, que la page cent ne lit pas plus de lignes que la page une ; et que la recherche par numéro passe par l'index de la colonne normalisée.
+
+Choix faits, à confirmer :
+
+- le seuil de bascule en export est une durée, 31 jours, et non un nombre de résultats : compter les résultats demanderait de lire le journal ;
+- la navigation va de page en page vers le passé, avec un retour au début, sans page précédente ;
+- les tests de plan désactivent le balayage séquentiel, pour voir le plan d'une table de production, où les messages se comptent en millions.
+
 ## T-94 · Fiche message
 
 **Produit** Le détail d'un message avec son historique d'états daté, l'opérateur atteint, le connecteur emprunté, l'expéditeur utilisé, le coût et le motif d'échec.

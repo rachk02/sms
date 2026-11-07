@@ -194,3 +194,4 @@ Règles, reprises de `~/.claude/CLAUDE.md` :
 [2026-11-07 18:58:24] Suivi - T-91 : contrôle des compteurs pré-agrégés contre le journal, recalcul idempotent par campagne, commande controler_compteurs et contrôle quotidien de l ordonnanceur ; tests ciblés laissés à la CI (Docker arrêté).
 [2026-11-07 19:15:28] Correction - T-91 : le contrôle lit le journal et les compteurs dans un même instantané (REPEATABLE READ), pour qu un accusé tardif ne fasse pas de faux écart.
 [2026-11-07 19:15:28] Suivi - T-92 : tableau de bord client (cinq indicateurs, périodes, fragment hors bande, état vide) ; compteurs avec latence et envois hors campagne, exclus du palier de volume en attendant décision.
+[2026-11-07 19:31:45] Suivi - T-93 : recherche dans le journal des messages (dates obligatoires, filtres état, campagne, numéro normalisé, pagination par curseur avec borne simple pour l index, bascule en export au-delà de 31 jours ; export aux mêmes filtres).
