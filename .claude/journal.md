@@ -195,3 +195,5 @@ Règles, reprises de `~/.claude/CLAUDE.md` :
 [2026-11-07 19:15:28] Correction - T-91 : le contrôle lit le journal et les compteurs dans un même instantané (REPEATABLE READ), pour qu un accusé tardif ne fasse pas de faux écart.
 [2026-11-07 19:15:28] Suivi - T-92 : tableau de bord client (cinq indicateurs, périodes, fragment hors bande, état vide) ; compteurs avec latence et envois hors campagne, exclus du palier de volume en attendant décision.
 [2026-11-07 19:31:45] Suivi - T-93 : recherche dans le journal des messages (dates obligatoires, filtres état, campagne, numéro normalisé, pagination par curseur avec borne simple pour l index, bascule en export au-delà de 31 jours ; export aux mêmes filtres).
+[2026-11-07 19:46:45] Correction - T-93 : l écran de recherche échouait sans paramètres (argument de filtre de gabarit absent) ; la saisie est passée complète.
+[2026-11-07 19:46:45] Suivi - T-94 : fiche message (historique daté, liaison publiée, diagnostic par état, contexte de ticket), lue par sa clé exacte.

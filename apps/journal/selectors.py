@@ -13,8 +13,10 @@ from django.utils.dateparse import parse_date, parse_datetime
 
 from apps.core.etats import Etat
 from apps.core.numeros import NumeroInvalide, normaliser
+from apps.telecom import correlation
+from apps.telecom.supervision import etat_publie
 
-from .models import HORS_CAMPAGNE, Compteur, Message
+from .models import HORS_CAMPAGNE, Compteur, Evenement, Message
 
 # Fenêtre du rapprochement d'un STOP avec ses émetteurs (T-70).
 FENETRE_DESINSCRIPTION = timedelta(hours=72)
@@ -363,3 +365,178 @@ def rechercher(client_id, filtres: Filtres, apres: str | None = None, taille: in
     lot = list(requete_de_recherche(client_id, filtres, apres)[: taille + 1])
     suivant = _curseur(lot[taille - 1]) if len(lot) > taille else None
     return Page(lot[:taille], suivant)
+
+
+# Fiche d'un message (T-94)
+
+# Ce que veut dire un motif posé avant le réseau. Les codes viennent des
+# contrôles des modules (liste noire, expéditeurs, comptes) et du journal ; ils
+# sont repris ici en clair, sans importer ces modules.
+EXPLICATIONS = {
+    "LISTE_NOIRE": (
+        "Le numéro est sur la liste noire du compte ou de la plateforme : la personne "
+        "s'est désinscrite, ou le numéro a été bloqué. Le message n'est pas parti."
+    ),
+    "EXPEDITEUR_NON_APPROUVE": (
+        "L'expéditeur n'était pas approuvé pour ce réseau au moment de l'envoi. "
+        "Le message n'est pas parti."
+    ),
+    "BAC_A_SABLE_NUMERO_NON_VERIFIE": (
+        "Compte en bac à sable : seuls vos numéros de test vérifiés reçoivent les envois. "
+        "Le message n'est pas parti."
+    ),
+    "ANNULE_PAR_LE_CLIENT": "Annulé avec sa campagne avant de partir.",
+    "RETENU_PAR_LE_CLIENT": "Retenu : sa campagne est en pause.",
+    "SOUMISSION_INTERROMPUE_SORT_INCONNU": (
+        "La soumission a été interrompue et la passerelle n'a pas pu dire si le message "
+        "était parti. Il n'est pas renvoyé, pour ne pas risquer un doublon : "
+        "l'exploitation le vérifie."
+    ),
+}
+LIBELLES_DETAILS = {
+    "libelle_operateur": "Réponse de l'opérateur",
+    "motif": "Motif",
+    "code": "Code",
+    "reference_smsc": "Référence chez l'opérateur",
+    "reprise": "Reprise",
+    "validite_heures": "Validité (heures)",
+    "connecteur": "Liaison",
+}
+# Les événements d'un message suivent sa réception ; la marge couvre un accusé
+# daté par l'horloge de l'opérateur. Borne haute : la plus longue attente d'un
+# message avant soumission, plus la validité.
+AVANT_RECEPTION = timedelta(days=1)
+APRES_RECEPTION = timedelta(days=45)
+
+
+@dataclass(frozen=True)
+class Etape:
+    horodatage: datetime
+    etat: str
+    libelle: str
+    source: str
+    details: list
+
+
+@dataclass(frozen=True)
+class Fiche:
+    message: Message
+    etapes: list
+    liaison: str
+    latence_s: float | None
+    diagnostic: str
+
+    def contexte_ticket(self) -> dict:
+        """Ce qu'un ticket ouvert depuis la fiche emporte, sans saisie (T-102)."""
+        m = self.message
+        return {
+            "message_id": str(m.id),
+            "date_reception": m.date_reception.isoformat(),
+            "numero": m.numero_normalise,
+            "reseau": m.operateur,
+            "expediteur": m.expediteur_libelle,
+            "etat": m.etat,
+            "motif_echec": m.motif_echec,
+            "liaison": self.liaison,
+            "reference_smsc": m.reference_smsc,
+            "campagne_id": str(m.campagne_id or ""),
+            "cout_total": m.cout_total,
+            "date_soumission": m.date_soumission.isoformat() if m.date_soumission else "",
+            "date_accuse": m.date_accuse.isoformat() if m.date_accuse else "",
+            "diagnostic": self.diagnostic,
+            "historique": [
+                {"horodatage": e.horodatage.isoformat(), "etat": e.etat, "details": e.details}
+                for e in self.etapes
+            ],
+        }
+
+
+def _details(details: dict) -> list:
+    return [(LIBELLES_DETAILS.get(cle, cle), str(valeur)) for cle, valeur in details.items()]
+
+
+def _reponse_operateur(etapes: list) -> str:
+    for etape in reversed(etapes):
+        for libelle, valeur in etape.details:
+            if libelle == LIBELLES_DETAILS["libelle_operateur"] and valeur:
+                return f" Réponse de l'opérateur : {valeur}."
+    return ""
+
+
+def diagnostic(message: Message, etapes: list) -> str:
+    """Pourquoi ce message en est là, en une ou deux phrases : la question la
+    plus fréquente posée au support."""
+    etat, reseau = message.etat, message.operateur or "le réseau"
+    explication = EXPLICATIONS.get(message.motif_echec, "")
+    reponse = _reponse_operateur(etapes)
+    if etat in (Etat.RECU, Etat.EN_FILE):
+        return f"En file : il part dès que la liaison vers {reseau} le permet."
+    if etat == Etat.EN_ATTENTE:
+        return explication or (
+            "Retenu avant l'envoi : sa campagne est en pause, ou hors de la fenêtre "
+            "légale des envois marketing. Il partira à la reprise."
+        )
+    if etat == Etat.SOUMIS:
+        heures = int(correlation.validite().total_seconds() // 3600)
+        return (
+            f"Accepté par {reseau}, en attente de l'accusé de livraison. Sans accusé "
+            f"dans les {heures} heures, il sera classé sans accusé."
+        )
+    if etat == Etat.LIVRE:
+        return f"Livré au téléphone du destinataire, selon l'accusé de {reseau}."
+    if etat == Etat.NON_LIVRE:
+        return (
+            f"{reseau} a renoncé à le livrer.{reponse} Causes fréquentes : téléphone éteint "
+            "ou hors couverture pendant toute la durée de validité, numéro inactif ou "
+            "inexistant."
+        )
+    if etat == Etat.EXPIRE:
+        return f"Sa durée de validité a expiré avant que le téléphone soit joignable.{reponse}"
+    if etat == Etat.SANS_ACCUSE:
+        return (
+            f"Accepté par {reseau}, mais l'opérateur n'a rendu aucun accusé dans le délai : "
+            "on ne sait pas s'il a été livré."
+        )
+    if etat == Etat.REJETE:
+        if message.date_soumission:
+            return f"Refusé par {reseau} après l'avoir accepté.{reponse}"
+        motif = f" : {message.motif_echec}" if message.motif_echec else ""
+        return explication or f"Refusé avant de partir vers le réseau{motif}."
+    if etat == Etat.ANNULE:
+        return explication or "Annulé avant de partir."
+    return ""
+
+
+def fiche(client_id, message_id, date_reception: datetime) -> Fiche | None:
+    """La fiche d'un message, lue par sa clé exacte (une seule partition), avec
+    son historique d'états daté ; None s'il n'est pas à ce client."""
+    message = Message.objects.filter(
+        client_id=client_id, id=message_id, date_reception=date_reception
+    ).first()
+    if message is None:
+        return None
+    evenements = Evenement.objects.filter(
+        client_id=client_id,
+        message_id=message.id,
+        horodatage__gte=date_reception - AVANT_RECEPTION,
+        horodatage__lt=date_reception + APRES_RECEPTION,
+    ).order_by("horodatage", "id")
+    etapes = [
+        Etape(
+            e.horodatage,
+            e.etat,
+            Etat(e.etat).label,
+            Evenement.Source(e.source).label,
+            _details(e.details or {}),
+        )
+        for e in evenements
+    ]
+    liaison = ""
+    if message.connecteur_id:
+        liaisons, _ = etat_publie()
+        publiee = liaisons.get(str(message.connecteur_id))
+        liaison = publiee["nom"] if publiee else f"liaison {str(message.connecteur_id)[:8]}"
+    latence = None
+    if message.etat == Etat.LIVRE and message.date_soumission and message.date_accuse:
+        latence = max(0.0, (message.date_accuse - message.date_soumission).total_seconds())
+    return Fiche(message, etapes, liaison, latence, diagnostic(message, etapes))

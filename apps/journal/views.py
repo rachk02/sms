@@ -7,8 +7,9 @@ transaction.
 """
 
 from django.db import transaction
-from django.http import HttpResponseBadRequest, StreamingHttpResponse
+from django.http import Http404, HttpResponseBadRequest, StreamingHttpResponse
 from django.shortcuts import render
+from django.utils.dateparse import parse_datetime
 from django.utils.http import urlencode
 
 from apps.comptes.permissions import permission_requise
@@ -40,9 +41,15 @@ def exporter(request):
     return reponse
 
 
+CHAMPS_DE_RECHERCHE = ("debut", "fin", "etat", "campagne", "numero")
+
+
 @permission_requise("compte.consulter")
 def rechercher(request):
-    contexte = {"etats": Etat.choices, "saisie": request.GET}
+    # Chaque champ présent, vide au besoin : un argument de filtre absent fait
+    # échouer le gabarit au lieu de valoir une chaîne vide.
+    saisie = {cle: request.GET.get(cle, "") for cle in CHAMPS_DE_RECHERCHE}
+    contexte = {"etats": Etat.choices, "saisie": saisie}
     try:
         filtres = selectors.lire_filtres(request.GET)
     except selectors.RechercheRefusee as refus:
@@ -66,3 +73,14 @@ def rechercher(request):
             "debut_recherche": urlencode(filtres.parametres()),
         },
     )
+
+
+@permission_requise("compte.consulter")
+def fiche_message(request, pk):
+    """Fiche d'un message (T-94). La date de réception, clé de partition, vient
+    avec l'adresse : sans elle, la lecture ne serait pas bornée."""
+    recu = parse_datetime(request.GET.get("recu", ""))
+    fiche = selectors.fiche(request.user.client_id, pk, recu) if recu else None
+    if fiche is None:
+        raise Http404
+    return render(request, "journal/message.html", {"fiche": fiche, "m": fiche.message})

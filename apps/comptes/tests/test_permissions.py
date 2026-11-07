@@ -47,6 +47,7 @@ ATTENDUS = {
     # Sans période, l'export du journal est refusé.
     "journal": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "journal-export": ("get", {ANONYME: CONNEXION, UTILISATEUR: 400, ADMIN: 400}),
+    "journal-message": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
     "facture": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
     "paiement-statut": ("get", {ANONYME: CONNEXION, UTILISATEUR: 404, ADMIN: 404}),
     # La page du fournisseur simulé : un paiement inconnu n'existe pas.
@@ -131,6 +132,7 @@ def _adresse(nom, membres):
         "campagne-reprendre",
         "campagne-annuler",
         "campagne-suivi",
+        "journal-message",
         "contacts-liste-supprimer",
         "contacts-champ-supprimer",
     ) or (nom.startswith("import-") and nom != "import-deposer"):

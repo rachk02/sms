@@ -4,10 +4,10 @@
 
 <form method="get" action="{% url 'journal' %}" class="mb-4 grid grid-cols-1 gap-3 rounded border border-slate-200 bg-white p-4 text-sm sm:grid-cols-3 lg:grid-cols-6">
   <label class="flex flex-col gap-1">Du
-    <input type="date" name="debut" required value="{{ filtres.jour_debut|default:saisie.debut }}" class="rounded border border-slate-300 px-2 py-1">
+    <input type="date" name="debut" required value="{% if filtres %}{{ filtres.jour_debut }}{% else %}{{ saisie.debut }}{% endif %}" class="rounded border border-slate-300 px-2 py-1">
   </label>
   <label class="flex flex-col gap-1">Au
-    <input type="date" name="fin" required value="{{ filtres.jour_fin|default:saisie.fin }}" class="rounded border border-slate-300 px-2 py-1">
+    <input type="date" name="fin" required value="{% if filtres %}{{ filtres.jour_fin }}{% else %}{{ saisie.fin }}{% endif %}" class="rounded border border-slate-300 px-2 py-1">
   </label>
   <label class="flex flex-col gap-1">État
     <select name="etat" class="rounded border border-slate-300 px-2 py-1">
@@ -44,7 +44,7 @@
       <tbody>
         {% for message in page.messages %}
           <tr class="border-t border-slate-200">
-            <td class="px-3 py-2">{{ message.date_reception|date:"d/m/Y H:i:s" }}</td>
+            <td class="px-3 py-2"><a class="underline" href="{% url 'journal-message' message.id %}?recu={{ message.date_reception.isoformat|urlencode }}">{{ message.date_reception|date:"d/m/Y H:i:s" }}</a></td>
             <td class="px-3 py-2">{{ message.numero_normalise }}</td>
             <td class="px-3 py-2">{{ message.operateur }}</td>
             <td class="px-3 py-2">{{ message.expediteur_libelle }}</td>

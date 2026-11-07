@@ -62,6 +62,8 @@ Choix faits, à confirmer :
 - les envois hors campagne entrent au tableau de bord mais pas encore au palier de volume des grilles (T-82) : les y compter changerait le prix ;
 - rafraîchissement toutes les dix secondes, comme le prévoit l'architecture pour un tableau de bord ordinaire.
 
+Au déploiement de T-92, les compteurs des campagnes terminées juste avant n'ont pas de latence alors que la requête de contrôle la recompte : lancer une fois `manage.py controler_compteurs --jours 2 --corriger`, sans quoi le contrôle quotidien signalera ces campagnes.
+
 ## T-93 · Journal des messages, recherche
 
 **Produit** L'écran de recherche avec plage de dates obligatoire, filtres par statut, campagne et numéro, pagination par curseur, et bascule en export au-delà du seuil.
@@ -81,6 +83,13 @@ Choix faits, à confirmer :
 **Produit** Le détail d'un message avec son historique d'états daté, l'opérateur atteint, le connecteur emprunté, l'expéditeur utilisé, le coût et le motif d'échec.
 
 **Critères** La fiche répond à elle seule à la question la plus fréquente du support, pourquoi ce message n'est pas arrivé. Le bouton d'ouverture de ticket depuis cette fiche transporte tout ce contexte.
+
+**Fait.** Écran minimal `/journal/messages/<id>?recu=<date de réception>` (permission `compte.consulter`), ouvert depuis chaque ligne de la recherche. La date de réception, clé de partition, vient avec l'adresse : le message se lit par sa clé exacte, sur une seule partition, et sans elle la page répond 404. `journal.selectors.fiche` rend le message, son historique d'états daté avec la source et les détails de chaque événement (réponse de l'opérateur, référence, motif), le réseau, la liaison empruntée (son nom vient de l'état des liaisons publié par l'ordonnanceur, le rôle web ne lisant pas la table des connecteurs), l'expéditeur, le coût, le motif d'échec, le délai de livraison, et un diagnostic en clair, état par état : en file, retenu, en attente d'accusé, livré, non livré avec la réponse de l'opérateur et les causes fréquentes, expiré, sans accusé, refusé avant le réseau avec sa cause (liste noire, expéditeur non approuvé, bac à sable), refusé après acceptation, annulé. `Fiche.contexte_ticket()` rassemble tout ce contexte, historique compris, en un dictionnaire transportable : le bouton d'ouverture de ticket s'y branchera avec la billetterie (T-102).
+
+Choix faits, à confirmer :
+
+- l'adresse de la fiche porte la date de réception plutôt que de la déduire de l'identifiant ;
+- le diagnostic ne dit rien de la facturation d'un message non livré : elle dépend du mode de règlement du compte.
 
 ## T-95 · Back-office, gestion des clients
 
