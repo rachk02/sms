@@ -12,6 +12,7 @@ from django.utils import timezone
 from apps.comptes.models import Client, Dossier, Piece, Utilisateur, pieces_attendues
 from apps.comptes.services import creer_client, creer_utilisateur, envoyer_invitation
 from apps.core.audit import auditer
+from apps.core.models import Audit
 from apps.fichiers.models import Fichier
 from apps.fichiers.services import FichierRefuse, deposer
 
@@ -302,3 +303,111 @@ def attribuer_roles(agent, roles: list[str], *, auteur, motif: str, adresse_ip=N
         adresse_ip=adresse_ip,
     )
     return apres
+
+
+# Suspension, réactivation et crédits d'un compte (T-95)
+
+
+@dataclass(frozen=True)
+class EnCours:
+    campagne: object
+    # Messages qui ne sont pas encore partis et que la pause retient.
+    non_partis: int
+
+
+def apercu_suspension(client) -> list:
+    """Ce que la suspension arrêtera, montré à l'agent avant qu'il confirme :
+    chaque campagne en attente ou en cours, et ses messages pas encore partis.
+    Ne change rien."""
+    from apps.campagnes import selectors as suivis
+    from apps.campagnes import services as campagnes
+    from apps.campagnes.models import Campagne
+
+    en_cours = Campagne.objects.filter(client=client, etat__in=campagnes.PAUSABLES)
+    apercu = []
+    for campagne in en_cours.order_by("cree_le"):
+        suivi = suivis.suivi(campagne)
+        non_partis = suivi.non_soumis if suivi else campagne.destinataires_prevus or 0
+        apercu.append(EnCours(campagne, non_partis))
+    return apercu
+
+
+@transaction.atomic
+def suspendre_compte(client, *, agent, motif: str, adresse_ip=None) -> list:
+    """Met en pause chaque campagne en attente ou en cours, puis suspend le
+    compte : ses messages en file sont retenus, ceux qui viennent d'ailleurs
+    sont refusés avant le réseau, et rien ne se confirme ni ne reprend. La trace
+    de la suspension nomme les campagnes mises en pause : la réactivation ne
+    reprendra qu'elles. `agent` est nul pour une suspension automatique."""
+    from apps.campagnes import services as campagnes
+    from apps.campagnes.models import Campagne
+    from apps.comptes.services import suspendre
+
+    en_cours = Campagne.objects.filter(client=client, etat__in=campagnes.PAUSABLES)
+    mises_en_pause = [
+        campagnes.mettre_en_pause(campagne, auteur=agent)
+        for campagne in en_cours.order_by("cree_le")
+    ]
+    suspendre(
+        client,
+        auteur=agent,
+        motif=motif,
+        adresse_ip=adresse_ip,
+        details={"campagnes_en_pause": [str(c.id) for c in mises_en_pause]},
+    )
+    return mises_en_pause
+
+
+@transaction.atomic
+def reactiver_compte(client, *, agent, motif: str, adresse_ip=None) -> list:
+    """Réactive le compte, puis reprend les campagnes que sa dernière suspension
+    avait mises en pause et qui le sont encore ; celles que le client avait
+    lui-même mises en pause le restent."""
+    from apps.campagnes import services as campagnes
+    from apps.campagnes.models import Campagne
+    from apps.comptes.services import reactiver
+
+    suspension = (
+        Audit.objects.filter(
+            action="comptes.suspension", objet_type="comptes.client", objet_id=str(client.id)
+        )
+        .order_by("-horodatage")
+        .first()
+    )
+    ids = (suspension.valeur_apres or {}).get("campagnes_en_pause", []) if suspension else []
+    reactiver(client, auteur=agent, motif=motif, adresse_ip=adresse_ip)
+    reprises = [
+        campagnes.reprendre(campagne, auteur=agent)
+        for campagne in Campagne.objects.filter(
+            client=client, id__in=ids, etat=Campagne.Etat.EN_PAUSE
+        ).order_by("cree_le")
+    ]
+    return reprises
+
+
+class CreditRefuse(ValueError):
+    pass
+
+
+@transaction.atomic
+def attribuer_credits(client, montant: int, *, agent, motif: str, adresse_ip=None):
+    """Crédits offerts par un agent, geste commercial ou réparation : un
+    recrédit au registre, avec son motif, et sa trace au journal d'audit."""
+    from apps.credits import services as credits
+
+    motif = (motif or "").strip()
+    if not motif:
+        raise CreditRefuse("Une attribution de crédits exige un motif.")
+    if not isinstance(montant, int) or isinstance(montant, bool) or montant <= 0:
+        raise CreditRefuse("Le montant est un nombre entier de FCFA, positif.")
+    ecriture = credits.recrediter(client.id, montant, motif=motif, auteur=agent)
+    auditer(
+        "credits.attribution",
+        client,
+        auteur=agent,
+        client=client,
+        apres={"montant": montant, "ecriture": str(ecriture.id)},
+        motif=motif,
+        adresse_ip=adresse_ip,
+    )
+    return ecriture

@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from django.db import transaction
 from django.utils import timezone
 
+from apps.comptes.models import Client
 from apps.core.audit import auditer
 from apps.core.evenements import publier
 
@@ -27,11 +28,13 @@ journal = logging.getLogger(__name__)
 def liberer_programmees(maintenant: datetime) -> int:
     """Les campagnes programmées dont l'heure est venue passent EN_ATTENTE :
     l'ordonnanceur les publie dès ce tour. Une campagne annulée entretemps
-    n'est plus PLANIFIEE et n'est pas touchée."""
+    n'est plus PLANIFIEE et n'est pas touchée. Celles d'un compte suspendu
+    attendent sa réactivation (T-95)."""
     return Campagne.objects.filter(
         etat=Campagne.Etat.PLANIFIEE,
         recurrence_jours__isnull=True,
         planifiee_pour__lte=maintenant,
+        client__etat=Client.Etat.ACTIF,
     ).update(etat=Campagne.Etat.EN_ATTENTE, modifie_le=maintenant)
 
 
@@ -100,6 +103,7 @@ def recurrentes_echues(maintenant: datetime) -> list:
             recurrence_jours__isnull=False,
             parent__isnull=True,
             prochaine_occurrence__lte=maintenant,
+            client__etat=Client.Etat.ACTIF,
         ).values_list("id", flat=True)
     )
 

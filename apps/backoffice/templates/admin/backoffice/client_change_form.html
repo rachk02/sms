@@ -1,0 +1,13 @@
+{% extends "admin/change_form.html" %}
+{% block object-tools-items %}
+  {% if original %}
+    {% if peut_suspendre %}
+      {% if original.etat == "ACTIF" %}<li><a href="{% url 'admin:comptes_client_suspendre' original.pk %}">Suspendre</a></li>{% endif %}
+      {% if original.etat == "SUSPENDU" %}<li><a href="{% url 'admin:comptes_client_reactiver' original.pk %}">Réactiver</a></li>{% endif %}
+    {% endif %}
+    {% if peut_crediter and original.etat != "CLOTURE" %}<li><a href="{% url 'admin:comptes_client_crediter' original.pk %}">Offrir des crédits</a></li>{% endif %}
+    {% if peut_cloturer and original.etat != "CLOTURE" %}<li><a href="{% url 'admin:comptes_client_cloturer' original.pk %}">Clore le compte</a></li>{% endif %}
+    {% if peut_rembourser and original.etat == "CLOTURE" %}<li><a href="{% url 'admin:comptes_client_rembourser' original.pk %}">Rembourser le solde</a></li>{% endif %}
+  {% endif %}
+  {{ block.super }}
+{% endblock %}

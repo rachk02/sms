@@ -1,6 +1,7 @@
 {% extends "admin/base_site.html" %}
 {% block content %}
 {% if introduction %}<p>{{ introduction }}</p>{% endif %}
+{% if elements %}<ul>{% for element in elements %}<li>{{ element }}</li>{% endfor %}</ul>{% endif %}
 <form method="post" enctype="multipart/form-data" novalidate>
   {% csrf_token %}
   {% if formulaire.non_field_errors %}<div class="errornote">{{ formulaire.non_field_errors }}</div>{% endif %}

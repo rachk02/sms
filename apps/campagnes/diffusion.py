@@ -420,10 +420,11 @@ def cloturer(campagne_id) -> bool:
 
 
 def campagnes_a_publier() -> list:
-    """Les campagnes que l'ordonnanceur doit faire avancer."""
+    """Les campagnes que l'ordonnanceur doit faire avancer, d'un compte actif."""
     return list(
         Campagne.objects.filter(
-            etat__in=(Campagne.Etat.EN_ATTENTE, Campagne.Etat.EN_COURS)
+            etat__in=(Campagne.Etat.EN_ATTENTE, Campagne.Etat.EN_COURS),
+            client__etat=Client.Etat.ACTIF,
         ).values_list("id", flat=True)
     )
 

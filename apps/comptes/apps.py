@@ -9,6 +9,7 @@ class ComptesConfig(AppConfig):
     def ready(self):
         from apps.core import controles
 
-        from .services import controle_bac_a_sable
+        from .services import controle_bac_a_sable, controle_compte_actif
 
+        controles.enregistrer("compte_actif", controle_compte_actif)
         controles.enregistrer("bac_a_sable", controle_bac_a_sable)

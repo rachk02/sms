@@ -115,6 +115,16 @@ Choix faits, à confirmer :
 
 **Critères** Toute action sensible laisse une écriture au journal d'audit avec motif saisi. La suspension arrête les envois en cours et le dit à l'agent avant de confirmer. Un agent sans le rôle requis ne voit pas ces écrans et la route refuse.
 
+**Fait.** Sur l'administration existante, écrans minimaux. Les rôles sont décrits plus haut (« Rôles d'agent, mise en place »). La liste des comptes garde sa recherche et ses filtres ; la fiche client affiche en plus, en lecture, le solde de crédits, l'activité des trente derniers jours (lue sur les compteurs, par le sélecteur du tableau de bord), les campagnes actives et les membres, et l'état n'y est plus modifiable : il ne change que par la suspension, la réactivation ou la clôture. Les actions de la fiche n'apparaissent qu'à l'agent qui en a le droit, et leurs routes refusent les autres.
+
+Suspension (`backoffice.services.suspendre_compte`, droit `suspendre_client`) : la page dit d'abord ce qui sera arrêté, chaque campagne en attente ou en cours et ses messages pas encore partis, sans rien changer ; l'envoi du formulaire, motif exigé, met ces campagnes en pause puis suspend le compte (`comptes.services.suspendre`), et la trace nomme les campagnes mises en pause. Ensuite : les messages en file de ces campagnes sont retenus ; tout autre message du compte est refusé avant le réseau, sans frais, par un contrôle de soumission (`COMPTE_NON_ACTIF`, expliqué sur la fiche message), sauf les messages système dus à l'abonné ; rien ne se confirme ni ne reprend ; les campagnes programmées et les occurrences récurrentes attendent. La réactivation (`reactiver_compte`) reprend les seules campagnes que la suspension avait mises en pause, jamais celles que le client avait lui-même arrêtées. `suspendre_compte` accepte un auteur nul, pour la suspension automatique de T-101. Crédits offerts (`attribuer_credits`, droit `crediter_client`) : un recrédit au registre avec motif et auteur, et sa trace au journal d'audit. Les tests suivent la suspension et la réactivation de bout en bout, une campagne programmée pendant la suspension, les crédits offerts, et l'écran : refus au rôle finance, page d'aperçu sans effet, motif exigé, puis suspension.
+
+Choix faits, à confirmer :
+
+- les membres d'un compte suspendu peuvent encore se connecter, consulter et exporter ; seuls les envois s'arrêtent ;
+- une campagne programmée dont l'heure passe pendant la suspension part à la réactivation, en retard, et non à sa prochaine heure ;
+- les messages déjà soumis au réseau au moment de la suspension finissent leur chemin et se facturent normalement.
+
 ## T-96 · Back-office, supervision des liaisons
 
 **Produit** L'écran d'état des connecteurs, la profondeur des files, l'état des workers, et l'historique des incidents de liaison.

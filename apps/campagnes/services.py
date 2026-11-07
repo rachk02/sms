@@ -584,6 +584,7 @@ def reprendre(campagne: Campagne, *, auteur) -> Campagne:
     campagne = _verrouillee(campagne)
     if campagne.etat != Campagne.Etat.EN_PAUSE:
         raise CampagneRefusee("Seule une campagne en pause se reprend.")
+    _compte_ouvert(campagne.client)
     campagne.etat = Campagne.Etat.EN_COURS if campagne.demarree_le else Campagne.Etat.EN_ATTENTE
     campagne.save(update_fields=["etat", "modifie_le"])
     auditer(

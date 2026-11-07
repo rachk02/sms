@@ -29,6 +29,9 @@ PROFILS = (roles.SUPPORT, roles.EXPLOITATION, roles.FINANCE, SUPER, SANS_ROLE)
 PERSONNALISEES = {
     "comptes_client_cloturer": ("backoffice.cloturer_client", True),
     "comptes_client_rembourser": ("backoffice.rembourser_client", True),
+    "comptes_client_suspendre": ("backoffice.suspendre_client", True),
+    "comptes_client_reactiver": ("backoffice.suspendre_client", True),
+    "comptes_client_crediter": ("backoffice.crediter_client", True),
     "comptes_utilisateur_reinitialiser_second_facteur": (
         "backoffice.reinitialiser_second_facteur",
         True,

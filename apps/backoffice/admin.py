@@ -13,9 +13,10 @@ from django.urls import path
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
+from apps.campagnes.services import CampagneRefusee
 from apps.comptes import second_facteur
 from apps.comptes.models import Client, Dossier, Piece, Utilisateur
-from apps.comptes.services import ClotureRefusee
+from apps.comptes.services import ClotureRefusee, SuspensionRefusee
 from apps.conformite import services as conformite
 from apps.conformite.models import Fenetre, JourFerie
 from apps.core.models import Audit
@@ -32,24 +33,31 @@ from . import selectors
 from .forms import (
     AvoirForm,
     ClotureForm,
+    CreditForm,
     EnregistrementClientForm,
     PaiementManuelForm,
     RemboursementForm,
     RolesForm,
+    SuspensionForm,
 )
 from .models import DossierPreuve
 from .roles import exiger
 from .services import (
     CONTROLES_DE_REVUE,
     AttributionRefusee,
+    CreditRefuse,
     DecisionRefusee,
     EnregistrementRefuse,
     PieceDeposee,
+    apercu_suspension,
     approuver_dossier,
+    attribuer_credits,
     attribuer_roles,
     cloturer_compte,
     enregistrer_client,
+    reactiver_compte,
     rejeter_dossier,
+    suspendre_compte,
 )
 
 
@@ -69,6 +77,73 @@ class ClientAdmin(admin.ModelAdmin):
     list_display = ("raison_sociale", "forme", "rccm", "ifu", "palier", "etat", "cree_le")
     list_filter = ("forme", "palier", "etat")
     search_fields = ("raison_sociale", "rccm", "ifu")
+    change_form_template = "admin/backoffice/client_change_form.html"
+    # L'état ne change que par la suspension, la réactivation ou la clôture,
+    # qui arrêtent ou reprennent les envois et laissent leur trace.
+    readonly_fields = (
+        "etat",
+        "cloture_le",
+        "solde_credits",
+        "activite_30_jours",
+        "campagnes_actives",
+        "membres_du_compte",
+    )
+
+    @admin.display(description="Solde de crédits")
+    def solde_credits(self, client):
+        solde = credits.solde(client.id)
+        return f"{solde.disponible} FCFA disponibles ({solde.reserve} réservés)"
+
+    @admin.display(description="Activité sur 30 jours")
+    def activite_30_jours(self, client):
+        from apps.campagnes.selectors import tableau_de_bord
+
+        tableau = tableau_de_bord(client.id, "30j")
+        if tableau.vide:
+            return "Aucun envoi ni aucune désinscription."
+        taux = "sans accusé" if tableau.taux_livraison is None else f"{tableau.taux_livraison} %"
+        return (
+            f"{tableau.emis} émis, livraison {taux}, {tableau.refuses} refusés avant le "
+            f"réseau, {tableau.desinscriptions} désinscriptions"
+        )
+
+    @admin.display(description="Campagnes en attente, en cours ou en pause")
+    def campagnes_actives(self, client):
+        from apps.campagnes.models import Campagne
+
+        actives = Campagne.objects.filter(
+            client=client,
+            etat__in=(
+                Campagne.Etat.PLANIFIEE,
+                Campagne.Etat.EN_ATTENTE,
+                Campagne.Etat.EN_COURS,
+                Campagne.Etat.EN_PAUSE,
+            ),
+        ).order_by("cree_le")
+        return ", ".join(f"{c.nom} ({c.get_etat_display().lower()})" for c in actives) or "aucune"
+
+    @admin.display(description="Membres")
+    def membres_du_compte(self, client):
+        membres = Utilisateur.objects.filter(client=client).order_by("courriel")
+        return (
+            ", ".join(
+                f"{m.courriel} ({m.get_role_display().lower()}"
+                f"{'' if m.is_active else ', désactivé'})"
+                for m in membres
+            )
+            or "aucun"
+        )
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        utilisateur = request.user
+        actions = {
+            "peut_suspendre": utilisateur.has_perm("backoffice.suspendre_client"),
+            "peut_crediter": utilisateur.has_perm("backoffice.crediter_client"),
+            "peut_cloturer": utilisateur.has_perm("backoffice.cloturer_client"),
+            "peut_rembourser": utilisateur.has_perm("backoffice.rembourser_client"),
+        }
+        contexte = {**(extra_context or {}), **actions}
+        return super().change_view(request, object_id, form_url, contexte)
 
     def get_urls(self):
         propres = [
@@ -82,14 +157,126 @@ class ClientAdmin(admin.ModelAdmin):
                 self.admin_site.admin_view(self.rembourser),
                 name="comptes_client_rembourser",
             ),
+            path(
+                "<uuid:pk>/suspendre/",
+                self.admin_site.admin_view(self.suspendre),
+                name="comptes_client_suspendre",
+            ),
+            path(
+                "<uuid:pk>/reactiver/",
+                self.admin_site.admin_view(self.reactiver),
+                name="comptes_client_reactiver",
+            ),
+            path(
+                "<uuid:pk>/crediter/",
+                self.admin_site.admin_view(self.crediter),
+                name="comptes_client_crediter",
+            ),
         ]
         return propres + super().get_urls()
 
-    def _formulaire(self, request, titre, introduction, bouton, formulaire):
+    def suspendre(self, request, pk):
+        """Suspension (T-95). La page dit d'abord ce qui sera arrêté ; seul
+        l'envoi du formulaire, motif compris, change quelque chose."""
+        exiger(request, "backoffice.suspendre_client")
+        client = get_object_or_404(Client, pk=pk)
+        apercu = apercu_suspension(client)
+        formulaire = SuspensionForm(request.POST or None)
+        if request.method == "POST" and formulaire.is_valid():
+            try:
+                pausees = suspendre_compte(
+                    client,
+                    agent=request.user,
+                    motif=formulaire.cleaned_data["motif"],
+                    adresse_ip=adresse_ip(request),
+                )
+            except (SuspensionRefusee, CampagneRefusee) as refus:
+                formulaire.add_error(None, str(refus))
+            else:
+                messages.success(
+                    request, f"{client} suspendu ; {len(pausees)} campagne(s) mise(s) en pause."
+                )
+                return redirect("admin:comptes_client_change", client.id)
+        return self._formulaire(
+            request,
+            f"Suspendre le compte {client}",
+            "Plus aucun envoi : les campagnes ci-dessous sont mises en pause et leurs messages "
+            "pas encore partis sont retenus ; les messages déjà soumis au réseau finissent leur "
+            "chemin. Les autres envois en file sont refusés avant le réseau, sans frais. Rien "
+            "ne se confirme ni ne reprend avant la réactivation. Les membres peuvent encore se "
+            "connecter." + ("" if apercu else " Aucune campagne n'est en attente ni en cours."),
+            "Suspendre le compte",
+            formulaire,
+            elements=[
+                f"{e.campagne.nom} ({e.campagne.get_etat_display().lower()}) : "
+                f"{e.non_partis} message(s) pas encore partis"
+                for e in apercu
+            ],
+        )
+
+    def reactiver(self, request, pk):
+        exiger(request, "backoffice.suspendre_client")
+        client = get_object_or_404(Client, pk=pk)
+        formulaire = SuspensionForm(request.POST or None)
+        if request.method == "POST" and formulaire.is_valid():
+            try:
+                reprises = reactiver_compte(
+                    client,
+                    agent=request.user,
+                    motif=formulaire.cleaned_data["motif"],
+                    adresse_ip=adresse_ip(request),
+                )
+            except (SuspensionRefusee, CampagneRefusee) as refus:
+                formulaire.add_error(None, str(refus))
+            else:
+                messages.success(
+                    request, f"{client} réactivé ; {len(reprises)} campagne(s) reprise(s)."
+                )
+                return redirect("admin:comptes_client_change", client.id)
+        return self._formulaire(
+            request,
+            f"Réactiver le compte {client}",
+            "Les envois reprennent : les campagnes que la suspension avait mises en pause "
+            "reprennent ; celles que le client avait lui-même mises en pause le restent.",
+            "Réactiver le compte",
+            formulaire,
+        )
+
+    def crediter(self, request, pk):
+        exiger(request, "backoffice.crediter_client")
+        client = get_object_or_404(Client, pk=pk)
+        formulaire = CreditForm(request.POST or None)
+        if request.method == "POST" and formulaire.is_valid():
+            try:
+                attribuer_credits(
+                    client,
+                    formulaire.cleaned_data["montant"],
+                    agent=request.user,
+                    motif=formulaire.cleaned_data["motif"],
+                    adresse_ip=adresse_ip(request),
+                )
+            except CreditRefuse as refus:
+                formulaire.add_error(None, str(refus))
+            else:
+                messages.success(
+                    request, f"{formulaire.cleaned_data['montant']} FCFA offerts à {client}."
+                )
+                return redirect("admin:comptes_client_change", client.id)
+        return self._formulaire(
+            request,
+            f"Offrir des crédits à {client}",
+            "Un recrédit au registre, avec votre nom et votre motif. Les crédits offerts se "
+            "consomment avant les crédits payés et ne se remboursent pas.",
+            "Offrir les crédits",
+            formulaire,
+        )
+
+    def _formulaire(self, request, titre, introduction, bouton, formulaire, elements=()):
         contexte = {
             **self.admin_site.each_context(request),
             "title": titre,
             "introduction": introduction,
+            "elements": list(elements),
             "bouton": bouton,
             "formulaire": formulaire,
             "opts": self.model._meta,

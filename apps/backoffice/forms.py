@@ -89,3 +89,19 @@ class RolesForm(forms.Form):
 
         super().__init__(*args, **kwargs)
         self.fields["roles"].choices = [(role, role) for role in ROLES]
+
+
+class SuspensionForm(forms.Form):
+    motif = forms.CharField(
+        widget=forms.Textarea(attrs={"rows": 3}),
+        help_text="Ce qui justifie la décision : il figurera au journal d'audit.",
+    )
+
+
+class CreditForm(forms.Form):
+    montant = forms.IntegerField(min_value=1, label="Crédits offerts (FCFA)")
+    motif = forms.CharField(
+        widget=forms.Textarea(attrs={"rows": 3}),
+        help_text="Geste commercial, réparation d'un incident : il figurera au registre et à "
+        "l'audit.",
+    )

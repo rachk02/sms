@@ -198,3 +198,4 @@ Règles, reprises de `~/.claude/CLAUDE.md` :
 [2026-11-07 19:46:45] Correction - T-93 : l écran de recherche échouait sans paramètres (argument de filtre de gabarit absent) ; la saisie est passée complète.
 [2026-11-07 19:46:45] Suivi - T-94 : fiche message (historique daté, liaison publiée, diagnostic par état, contexte de ticket), lue par sa clé exacte.
 [2026-11-07 19:46:54] Suivi - T-95, première partie : rôles d agent (groupes Support, Exploitation, Finance synchronisés après migration, droits sans table), contrôle explicite du droit dans chaque vue réécrite du back-office, attribution des rôles par le super-administrateur seul, test en matrice.
+[2026-11-07 19:52:29] Suivi - T-95 : suspension et réactivation d'un compte (pause des campagnes en cours, contrôle de soumission COMPTE_NON_ACTIF, reprise des seules campagnes mises en pause par la suspension), crédits offerts avec motif et trace, fiche client enrichie au back-office

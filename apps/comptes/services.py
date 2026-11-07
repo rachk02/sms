@@ -123,6 +123,22 @@ def verifier_numero_test(client, numero_normalise: str, code: str) -> bool:
 MOTIF_BAC_A_SABLE = "BAC_A_SABLE_NUMERO_NON_VERIFIE"
 
 
+MOTIF_COMPTE_NON_ACTIF = "COMPTE_NON_ACTIF"
+
+
+def controle_compte_actif(message) -> str | None:
+    """Contrôle avant soumission (T-95) : le message d'un compte suspendu ou
+    clos ne part pas, quel que soit le chemin par lequel il est venu (envoi
+    unitaire, API). Les messages d'une campagne en pause sont retenus avant ce
+    contrôle, et repartent à la reprise. Un message système, obligation de la
+    plateforme envers l'abonné (confirmation d'un STOP), part toujours."""
+    if message.nature == "SYSTEME":
+        return None
+    if message.client.etat == Client.Etat.ACTIF:
+        return None
+    return MOTIF_COMPTE_NON_ACTIF
+
+
 def controle_bac_a_sable(message) -> str | None:
     """Contrôle avant soumission, enregistré au démarrage (voir apps.core.controles)."""
     if envoi_autorise(message.client, message.numero_normalise):
@@ -347,6 +363,71 @@ def clore(client: Client, *, auteur, motif: str, adresse_ip=None) -> Client:
         client=client,
         avant={"etat": avant},
         apres={"etat": client.etat, "membres_desactives": [str(i) for i in retires]},
+        motif=motif,
+        adresse_ip=adresse_ip,
+    )
+    return client
+
+
+# Suspension et réactivation (T-95)
+
+
+class SuspensionRefusee(ValueError):
+    pass
+
+
+@transaction.atomic
+def suspendre(
+    client: Client, *, auteur, motif: str, adresse_ip=None, details: dict | None = None
+) -> Client:
+    """Suspend un compte actif : plus aucun envoi, ni confirmé ni soumis.
+    `auteur` est nul quand la suspension est automatique (T-101). `details`
+    complète la trace : les campagnes mises en pause, par exemple."""
+    from apps.core.audit import auditer
+
+    motif = (motif or "").strip()
+    if not motif:
+        raise SuspensionRefusee("Une suspension exige un motif.")
+    client = Client.objects.select_for_update().get(id=client.id)
+    if client.etat != Client.Etat.ACTIF:
+        raise SuspensionRefusee(f"Ce compte est {client.get_etat_display().lower()}.")
+    client.etat = Client.Etat.SUSPENDU
+    client.save(update_fields=["etat", "modifie_le"])
+    auditer(
+        "comptes.suspension",
+        client,
+        auteur=auteur,
+        client=client,
+        avant={"etat": Client.Etat.ACTIF},
+        apres={"etat": client.etat, **(details or {})},
+        motif=motif,
+        adresse_ip=adresse_ip,
+    )
+    return client
+
+
+@transaction.atomic
+def reactiver(
+    client: Client, *, auteur, motif: str, adresse_ip=None, details: dict | None = None
+) -> Client:
+    """Réactive un compte suspendu. Un compte clos ne se réactive pas."""
+    from apps.core.audit import auditer
+
+    motif = (motif or "").strip()
+    if not motif:
+        raise SuspensionRefusee("Une réactivation exige un motif.")
+    client = Client.objects.select_for_update().get(id=client.id)
+    if client.etat != Client.Etat.SUSPENDU:
+        raise SuspensionRefusee(f"Ce compte est {client.get_etat_display().lower()}.")
+    client.etat = Client.Etat.ACTIF
+    client.save(update_fields=["etat", "modifie_le"])
+    auditer(
+        "comptes.reactivation",
+        client,
+        auteur=auteur,
+        client=client,
+        avant={"etat": Client.Etat.SUSPENDU},
+        apres={"etat": client.etat, **(details or {})},
         motif=motif,
         adresse_ip=adresse_ip,
     )
