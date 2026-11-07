@@ -6,6 +6,33 @@ Découpage provisoire, à revoir en entrant dans le lot.
 
 C'est le poste que l'on sous-estime toujours parce qu'il ne se vend pas. Vingt-six écrans d'administration, dont la moitié peut tenir en version minimale au départ, à condition de décider lesquels explicitement.
 
+## Décisions prises avant d'entrer dans le lot
+
+Tranchées avec l'utilisateur le 7 novembre 2026.
+
+**Billetterie intégrée.** Le support se développe dans la plateforme, et non
+dans un outil du marché : un ticket ouvert depuis un message ou une campagne
+porte tout son contexte technique sans saisie.
+
+**Page d'état, hébergeur choisi plus tard.** La page, le fichier d'état poussé
+chaque minute et la publication d'incident se construisent derrière une
+abstraction de dépôt, éprouvée sur un dossier local. Le véritable hébergement
+statique, séparé de la plateforme, et son compte se branchent avec l'accord de
+l'utilisateur.
+
+**Quatre rôles d'agent.** Support (clients, tickets, messages), exploitation
+(liaisons, connecteurs, page d'état, anti-fraude), finance (crédits, paiements,
+factures, grilles) et super-administrateur, qui a tout. Un agent peut cumuler
+plusieurs rôles.
+
+**Plafonds.** Le plafond par compte, la suspension automatique et l'alerte à
+l'exploitation se font au lot 8 ; le plafond par clé se branche sur le même
+mécanisme au lot 9, avec les clés de l'API.
+
+**Écrans.** Comme aux lots précédents, les écrans restent minimaux en attendant
+la refonte de l'interface : le back-office s'appuie sur l'administration
+existante, le portail sur des gabarits simples.
+
 ## T-91 · Compteurs pré-agrégés
 
 **Produit** La table des compteurs par client, campagne, opérateur et heure, alimentée par les workers au fil de l'eau, et le traitement de rattrapage en cas de trou.
