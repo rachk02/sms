@@ -65,7 +65,14 @@ def test_une_expression_bloquante_refuse_la_campagne_et_se_nomme(compte):
             services.creer(client=compte, auteur=None, nom="Promo", texte=texte)
         assert "promesse trompeuse" in str(refus.value)
     # Un texte voisin passe.
-    assert services.creer(client=compte, auteur=None, nom="Ok", texte="Votre crédit est prêt")
+    from apps.contacts import listes
+    from apps.contacts.services import creer_contact
+
+    liste = listes.creer(client=compte, nom="Clients")
+    listes.ajouter(liste, [creer_contact(client=compte, numero="70000003", origine="SAISIE").id])
+    assert services.creer(
+        client=compte, auteur=None, nom="Ok", texte="Votre crédit est prêt", listes=[liste.id]
+    )
 
 
 @override_settings(SMS_PRIX_SEGMENT_PROVISOIRE=20, SMS_NUMERO_COURT="36000")

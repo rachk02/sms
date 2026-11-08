@@ -1217,7 +1217,7 @@ class GrilleAdmin(admin.ModelAdmin):
     def publier(self, request, pk):
         _autorise(_super(request))
         version = get_object_or_404(VersionGrille.objects.select_related("grille"), pk=pk)
-        formulaire = ConfirmationForm(request.POST or None)
+        formulaire = ConfirmationForm(request.POST if request.method == "POST" else None)
         if request.method == "POST" and formulaire.is_valid():
             try:
                 publier_grille_version(version, agent=request.user)

@@ -37,16 +37,18 @@ class WorkerEnvoi(Worker):
             self.files = tuple(files)
         self.prefetch = prefetch or int(os.environ.get("SMS_PREFETCH_ENVOI", self.prefetch))
         self.passerelles = {}
+        self.versions = {}
 
     def _passerelle(self, connecteur):
         from apps.telecom.passerelles import passerelle_pour
 
         # Refaite quand le connecteur a été modifié au back-office (T-97) :
         # hôte, identifiants ou réglages pris en compte sans redémarrage.
-        version, passerelle = self.passerelles.get(connecteur.id, (None, None))
-        if passerelle is None or version != connecteur.modifie_le:
+        passerelle = self.passerelles.get(connecteur.id)
+        if passerelle is None or self.versions.get(connecteur.id) != connecteur.modifie_le:
             passerelle = passerelle_pour(connecteur)
-            self.passerelles[connecteur.id] = (connecteur.modifie_le, passerelle)
+            self.passerelles[connecteur.id] = passerelle
+            self.versions[connecteur.id] = connecteur.modifie_le
         return passerelle
 
     def _soumettre(self, donnees: dict, avec_creneau: bool = False) -> None:

@@ -40,7 +40,7 @@ def regles(transactional_db):
     """Les seuils semés par la migration, reposés : le vidage de la base entre
     deux tests efface les lignes semées."""
     migration = importlib.import_module("apps.conformite.migrations.0005_fraude")
-    plafond = importlib.import_module("apps.conformite.migrations.0006_plafond_compte")
+    plafond = importlib.import_module("apps.core.migrations.0037_regle_plafond_compte")
     for regle in [*migration.REGLES, plafond.REGLE]:
         RegleFraude.objects.using("worker").update_or_create(code=regle["code"], defaults=regle)
 

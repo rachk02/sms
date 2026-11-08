@@ -31,7 +31,7 @@ MIDI = timezone.make_aware(datetime(2026, 11, 7, 12, 5))
 @pytest.fixture(autouse=True)
 def regle(transactional_db):
     """La règle semée par la migration, reposée après le vidage de la base."""
-    migration = importlib.import_module("apps.conformite.migrations.0006_plafond_compte")
+    migration = importlib.import_module("apps.core.migrations.0037_regle_plafond_compte")
     RegleFraude.objects.using("worker").update_or_create(
         code=migration.REGLE["code"], defaults=migration.REGLE
     )
