@@ -262,6 +262,93 @@ def test_un_point_injoignable_est_un_echec_et_non_une_panne(compte):
     assert livraison.derniere_erreur and livraison.etat == Livraison.Etat.EN_COURS
 
 
+def test_la_livraison_va_a_l_adresse_verifiee_sans_resoudre_le_nom_une_seconde_fois(
+    compte, settings, monkeypatch
+):
+    """Un nom dont la réponse DNS change entre la vérification et la connexion
+    (rebond DNS) ne mène pas la plateforme vers son propre réseau : la
+    connexion part vers l'adresse vérifiée, jamais vers le nom résolu à
+    nouveau."""
+    client, _ = compte
+    settings.WEBHOOKS_ADRESSES_PRIVEES = False
+    resolutions = []
+
+    def resoudre(hote, *args, **kwargs):
+        resolutions.append(hote)
+        # Publique pour la création et pour la vérification de la livraison,
+        # interne ensuite.
+        ip = "93.184.216.34" if len(resolutions) <= 2 else "127.0.0.1"
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, 0))]
+
+    connexions = []
+
+    def connecter(adresse, *args, **kwargs):
+        connexions.append(adresse)
+        raise OSError("connexion interceptée par le test")
+
+    monkeypatch.setattr(socket, "getaddrinfo", resoudre)
+    monkeypatch.setattr(socket, "create_connection", connecter)
+    _point(compte, "https://rebond.exemple/webhooks")
+    (livraison,) = _repartir(_evenement(client))
+    with pytest.raises(webhooks.LivraisonEchouee):
+        webhooks.livrer(livraison.id)
+    assert connexions == [("93.184.216.34", 443)]
+    assert resolutions == ["rebond.exemple", "rebond.exemple"]
+
+
+def _info(adresse):
+    if ":" in adresse:
+        return (socket.AF_INET6, socket.SOCK_STREAM, 6, "", (adresse, 0, 0, 0))
+    return (socket.AF_INET, socket.SOCK_STREAM, 6, "", (adresse, 0))
+
+
+def test_une_seule_adresse_interne_parmi_celles_de_l_hote_suffit_a_refuser(
+    compte, settings, monkeypatch
+):
+    """Toutes les adresses rendues par la résolution sont contrôlées, pas la
+    première seulement, en IPv4 comme en IPv6."""
+    client, admin = compte
+    settings.WEBHOOKS_ADRESSES_PRIVEES = False
+    publique = _info("93.184.216.34")
+    reponse = [[publique]]
+    monkeypatch.setattr(socket, "getaddrinfo", lambda hote, *a, **k: reponse[0])
+    connexions = []
+
+    def connecter(adresse, *args, **kwargs):
+        connexions.append(adresse)
+        raise OSError("connexion interceptée par le test")
+
+    monkeypatch.setattr(socket, "create_connection", connecter)
+    for interne in (
+        "127.0.0.1",
+        "10.0.0.5",
+        "169.254.169.254",
+        "::1",
+        "fd12:3456::1",
+        "fe80::1",
+        "::ffff:127.0.0.1",  # IPv4 mappée
+        "64:ff9b::7f00:1",  # NAT64
+        "2002:7f00:1::",  # 6to4
+        "2001:0:5db8:d822::80ff:fffe",  # Teredo, client 127.0.0.1
+        "2001:0:7f00:1::a2b7:27dd",  # Teredo, serveur 127.0.0.1
+    ):
+        # Déclaré quand l'hôte n'avait que des adresses publiques.
+        reponse[0] = [publique]
+        point, _ = _point(compte, "https://melange.exemple/webhooks")
+        (livraison,) = _repartir(_evenement(client))
+        # À la livraison, une adresse interne s'est ajoutée, en second.
+        reponse[0] = [publique, _info(interne)]
+        with pytest.raises(webhooks.LivraisonEchouee):
+            webhooks.livrer(livraison.id)
+        livraison.refresh_from_db()
+        assert "non public" in livraison.derniere_erreur, interne
+        webhooks.desactiver_point(point, auteur=admin)
+        # La déclaration applique la même règle.
+        with pytest.raises(webhooks.PointRefuse):
+            _point(compte, "https://melange.exemple/webhooks")
+    assert connexions == []
+
+
 def test_le_seuil_de_solde_bas_part_une_fois_puis_se_rearme(compte):
     from apps.comptes.services import regler_seuil_alerte
     from apps.core.cloisonnement import poser_client

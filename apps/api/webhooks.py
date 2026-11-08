@@ -21,8 +21,10 @@ désactivent et préviennent son propriétaire par courriel. Les livraisons enco
 en attente vers un point désactivé sont abandonnées sans tentative.
 """
 
+import functools
 import hashlib
 import hmac
+import http.client
 import ipaddress
 import json
 import logging
@@ -67,19 +69,48 @@ def _adresses_privees_autorisees() -> bool:
     return bool(getattr(settings, "WEBHOOKS_ADRESSES_PRIVEES", False))
 
 
-def _hote_public(hote: str) -> bool:
-    """Vrai si toutes les adresses de cet hôte sont publiques. Une adresse
-    interne (boucle locale, réseau privé, lien local, métadonnées d'un nuage)
-    ferait de la plateforme un relais vers son propre réseau."""
+def _adresses(hote: str) -> list[str]:
+    """Les adresses de l'hôte, résolues une fois, dans l'ordre du résolveur."""
     try:
-        adresses = {info[4][0] for info in socket.getaddrinfo(hote, None)}
+        infos = socket.getaddrinfo(hote, None)
     except OSError:
-        return False
-    for adresse in adresses:
-        ip = ipaddress.ip_address(adresse.split("%")[0])
-        if not ip.is_global:
-            return False
-    return bool(adresses)
+        return []
+    return list(dict.fromkeys(info[4][0].split("%")[0] for info in infos))
+
+
+NAT64 = ipaddress.ip_network("64:ff9b::/96")
+
+
+def _ipv4_incluses(ip) -> list:
+    """Les adresses IPv4 qu'une adresse IPv6 transporte : NAT64, IPv4 mappée,
+    6to4, Teredo (serveur et client). Chacune doit être publique, elle aussi.
+
+    Constat sous Python 3.14 : `is_global` refuse déjà en entier les plages
+    6to4 et Teredo, et juge une IPv4 mappée sur l'adresse qu'elle porte ; seul
+    le préfixe NAT64 bien connu (64:ff9b::/96) passait pour public. Le contrôle
+    des adresses incluses reste en défense, si la bibliothèque change."""
+    if ip.version != 6:
+        return []
+    incluses = [ip.ipv4_mapped, ip.sixtofour, *(ip.teredo or ())]
+    if ip in NAT64:
+        incluses.append(ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF))
+    return [v4 for v4 in incluses if v4 is not None]
+
+
+def _publique(adresse: str) -> bool:
+    ip = ipaddress.ip_address(adresse)
+    return ip.is_global and all(v4.is_global for v4 in _ipv4_incluses(ip))
+
+
+def _toutes_publiques(adresses: list[str]) -> bool:
+    """Vrai si toutes ces adresses sont publiques. Une adresse interne (boucle
+    locale, réseau privé, lien local, métadonnées d'un nuage) ferait de la
+    plateforme un relais vers son propre réseau."""
+    return bool(adresses) and all(_publique(a) for a in adresses)
+
+
+def _hote_public(hote: str) -> bool:
+    return _toutes_publiques(_adresses(hote))
 
 
 def verifier_adresse(url: str) -> str:
@@ -273,7 +304,47 @@ class _SansRedirection(urllib.request.HTTPRedirectHandler):
         return None
 
 
-_OUVREUR = urllib.request.build_opener(_SansRedirection)
+def _connecter(adresse: str, cible, *args, **kwargs):
+    # Le port vient de l'adresse du point, l'hôte est l'adresse déjà vérifiée.
+    return socket.create_connection((adresse, cible[1]), *args, **kwargs)
+
+
+class _HttpEpingle(http.client.HTTPConnection):
+    """Connexion vers une adresse déjà vérifiée : le nom n'est pas résolu une
+    seconde fois. Sans cela, une réponse DNS qui change entre la vérification
+    et la connexion (rebond DNS) mènerait vers une adresse interne."""
+
+    def __init__(self, *args, adresse: str, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._create_connection = functools.partial(_connecter, adresse)
+
+
+class _HttpsEpingle(http.client.HTTPSConnection):
+    """Même chose en https ; le certificat se vérifie toujours contre le nom
+    de l'hôte, que la connexion garde pour SNI et pour l'en-tête Host."""
+
+    def __init__(self, *args, adresse: str, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._create_connection = functools.partial(_connecter, adresse)
+
+
+def _ouvreur(adresse: str) -> urllib.request.OpenerDirector:
+    """Un ouvreur par livraison : sans redirection, sans mandataire (un
+    mandataire résoudrait le nom lui-même), connecté à l'adresse vérifiée."""
+
+    class Http(urllib.request.HTTPHandler):
+        def http_open(self, req):
+            return self.do_open(functools.partial(_HttpEpingle, adresse=adresse), req)
+
+    class Https(urllib.request.HTTPSHandler):
+        def https_open(self, req):
+            return self.do_open(
+                functools.partial(_HttpsEpingle, adresse=adresse), req, context=self._context
+            )
+
+    return urllib.request.build_opener(
+        urllib.request.ProxyHandler({}), _SansRedirection, Http, Https
+    )
 
 
 @dataclass(frozen=True)
@@ -289,11 +360,16 @@ class Reponse:
 def _poster(url: str, corps: bytes, entetes: dict) -> Reponse:
     """Un POST, sans suivre de redirection : une redirection compte comme un
     échec. Le corps de la réponse n'est pas lu au-delà de quelques octets."""
-    if not _adresses_privees_autorisees() and not _hote_public(urlsplit(url).hostname or ""):
+    # Le nom se résout une seule fois : l'adresse vérifiée est celle où l'on
+    # se connecte.
+    adresses = _adresses(urlsplit(url).hostname or "")
+    if not adresses:
+        return Reponse(None, "hôte introuvable au moment de la livraison")
+    if not _adresses_privees_autorisees() and not _toutes_publiques(adresses):
         return Reponse(None, "hôte non public au moment de la livraison")
     requete = urllib.request.Request(url, data=corps, headers=entetes, method="POST")
     try:
-        with _OUVREUR.open(requete, timeout=DELAI_S) as reponse:
+        with _ouvreur(adresses[0]).open(requete, timeout=DELAI_S) as reponse:
             reponse.read(1024)
             return Reponse(reponse.status)
     except urllib.error.HTTPError as refus:
