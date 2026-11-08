@@ -13,16 +13,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AlterField(
-            model_name='utilisateur',
-            name='groups',
-            field=models.ManyToManyField(blank=True, help_text='Les groupes dont fait partie cet utilisateur. Celui-ci obtient tous les droits de tous les groupes auxquels il appartient.', related_name='user_set', related_query_name='user', to='auth.group', verbose_name='groupes'),
-        ),
-        migrations.AlterField(
-            model_name='utilisateur',
-            name='user_permissions',
-            field=models.ManyToManyField(blank=True, help_text='Permissions spécifiques à cet utilisateur.', related_name='user_set', related_query_name='user', to='auth.permission', verbose_name='permissions de l’utilisateur'),
-        ),
         migrations.CreateModel(
             name='CleApi',
             fields=[
