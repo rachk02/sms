@@ -159,6 +159,22 @@ def test_un_point_se_declare_avec_un_secret_montre_une_seule_fois(compte, recept
             _point(compte, url)
 
 
+def test_la_reactivation_respecte_le_maximum_de_points_actifs(compte, recepteur):
+    """Désactiver un point, en déclarer un autre, puis réactiver le premier ne
+    fait pas passer le compte au-delà du maximum de points actifs."""
+    _, admin = compte
+    premier, _ = _point(compte, recepteur.url)
+    for _ in range(webhooks.POINTS_MAXIMUM - 1):
+        _point(compte, recepteur.url)
+    webhooks.desactiver_point(premier, auteur=admin)
+    _point(compte, recepteur.url)
+    with pytest.raises(webhooks.PointRefuse):
+        webhooks.reactiver_point(premier, auteur=admin)
+    premier.refresh_from_db()
+    assert not premier.actif
+    assert PointReception.objects.filter(actif=True).count() == webhooks.POINTS_MAXIMUM
+
+
 def test_un_evenement_donne_une_livraison_par_point_abonne_et_une_seule(compte, recepteur):
     client, admin = compte
     abonne, _ = _point(compte, recepteur.url, (LIVRE, ECHEC))

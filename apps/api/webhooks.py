@@ -142,6 +142,11 @@ def _verifier_evenements(evenements) -> list[str]:
     return retenus
 
 
+def _verifier_place(client_id) -> None:
+    if PointReception.objects.filter(client_id=client_id, actif=True).count() >= POINTS_MAXIMUM:
+        raise PointRefuse(f"Un compte déclare au plus {POINTS_MAXIMUM} points actifs.")
+
+
 @transaction.atomic
 def creer_point(*, client, url: str, evenements, auteur, adresse_ip=None):
     """Déclare un point et rend son secret de signature, montré cette seule
@@ -151,8 +156,7 @@ def creer_point(*, client, url: str, evenements, auteur, adresse_ip=None):
 
     url = verifier_adresse(url)
     evenements = _verifier_evenements(evenements)
-    if PointReception.objects.filter(client=client, actif=True).count() >= POINTS_MAXIMUM:
-        raise PointRefuse(f"Un compte déclare au plus {POINTS_MAXIMUM} points actifs.")
+    _verifier_place(client.id)
     secret = f"whsec_{secrets.token_urlsafe(32)}"
     point = PointReception.objects.create(
         client=client,
@@ -207,6 +211,7 @@ def reactiver_point(point, *, auteur, adresse_ip=None) -> PointReception:
     if point.actif:
         return point
     verifier_adresse(point.url)
+    _verifier_place(point.client_id)
     point.actif = True
     point.echecs_consecutifs = 0
     point.desactive_le = None
