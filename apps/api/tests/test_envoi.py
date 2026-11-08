@@ -155,6 +155,9 @@ def test_un_lot_de_mille_est_accepte_en_moins_de_deux_secondes(client, compte, e
         plafond_horaire=100_000, plafond_journalier=100_000
     )
     espaces("client")
+    # Un premier appel note l'usage de la clé (au plus une fois par minute) :
+    # il se fait hors mesure.
+    assert _poster(client, jeton, _lot(1, debut=5000)).status_code == 202
     # Le nombre de requêtes ne dépend pas de la taille du lot.
     with CaptureQueriesContext(connections["default"]) as petit:
         assert _poster(client, jeton, _lot(10)).status_code == 202
@@ -165,7 +168,7 @@ def test_un_lot_de_mille_est_accepte_en_moins_de_deux_secondes(client, compte, e
     assert reponse.status_code == 202 and reponse.json()["acceptes"] == 1000
     assert len(grand.captured_queries) == len(petit.captured_queries)
     assert duree < 2.0, duree
-    assert Message.objects.using("worker").count() == 1010
+    assert Message.objects.using("worker").count() == 1011
 
 
 def test_les_corps_mal_formes_sont_refuses(client, compte):
