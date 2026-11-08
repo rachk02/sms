@@ -222,3 +222,36 @@ def test_le_mot_de_passe_seul_ne_remplace_pas_un_second_facteur_actif(client):
     assert client.get("/membres")["Location"].startswith("/second-facteur/verifier")
     with pytest.raises(second_facteur.CodeRefuse):
         second_facteur.activer(utilisateur, autre, pyotp.TOTP(autre).now())
+
+
+def test_une_reconnexion_ne_rend_pas_de_nouveaux_essais_de_code(client):
+    """Le compteur des codes refusés porte sur l'utilisateur : se reconnecter
+    avec le bon mot de passe n'ouvre pas cinq essais de plus."""
+    utilisateur = _utilisateur()
+    secret = second_facteur.nouveau_secret()
+    second_facteur.activer(utilisateur, secret, pyotp.TOTP(secret).now())
+    _connecter(client)
+    for _ in range(5):
+        reponse = client.post("/second-facteur/verifier", {"code": "000000"})
+    assert reponse["Location"] == "/connexion"
+    _connecter(client)
+    # Même un bon code est refusé tant que dure le blocage.
+    bon = pyotp.TOTP(secret).at(time.time() + 30)
+    reponse = client.post("/second-facteur/verifier", {"code": bon})
+    assert reponse["Location"] == "/connexion"
+    assert "_auth_user_id" not in client.session
+    utilisateur.refresh_from_db()
+    assert utilisateur.second_facteur_dernier_pas is not None
+    assert second_facteur.verifier(utilisateur, bon) is False
+
+
+def test_un_bon_code_remet_le_compteur_a_zero(client):
+    utilisateur = _utilisateur()
+    secret = second_facteur.nouveau_secret()
+    second_facteur.activer(utilisateur, secret, pyotp.TOTP(secret).now())
+    for _ in range(4):
+        assert second_facteur.verifier(utilisateur, "000000") is False
+    assert second_facteur.verifier(utilisateur, pyotp.TOTP(secret).at(time.time() + 30))
+    for _ in range(4):
+        assert second_facteur.verifier(utilisateur, "000000") is False
+    assert not second_facteur.bloque(utilisateur)

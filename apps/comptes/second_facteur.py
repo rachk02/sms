@@ -17,6 +17,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.core.chiffrement import chiffrer, dechiffrer
+from apps.core.redis import client_redis
 
 from .models import CodeSecours, Utilisateur
 
@@ -26,8 +27,36 @@ NOMBRE_CODES_SECOURS = 10
 ALPHABET_SECOURS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # sans 0, O, 1, I
 
 
+# Cinq codes refusés bloquent le second facteur de l'utilisateur quinze
+# minutes. Le compteur porte sur l'utilisateur, pas sur la session : une
+# reconnexion avec le bon mot de passe ne le remet pas à zéro. Même modèle
+# que le verrouillage de la connexion (authentification.py), Redis compris :
+# Redis indisponible, l'erreur remonte et aucun code n'est vérifié.
+ECHECS_MAX = 5
+DUREE_BLOCAGE = timedelta(minutes=15)
+CLE_ECHECS = "sms:second-facteur:echecs:{utilisateur}"
+
+
 class CodeRefuse(ValueError):
     pass
+
+
+def _cle_echecs(utilisateur: Utilisateur) -> str:
+    return CLE_ECHECS.format(utilisateur=utilisateur.pk)
+
+
+def bloque(utilisateur: Utilisateur) -> bool:
+    return int(client_redis().get(_cle_echecs(utilisateur)) or 0) >= ECHECS_MAX
+
+
+def _compter_tentative(utilisateur: Utilisateur) -> int:
+    """La tentative est comptée avant la vérification du code : des requêtes
+    lancées en parallèle ne passent pas toutes sous la borne."""
+    cle = _cle_echecs(utilisateur)
+    with client_redis().pipeline() as lot:
+        lot.incr(cle)
+        lot.expire(cle, int(DUREE_BLOCAGE.total_seconds()), nx=True)
+        return lot.execute()[0]
 
 
 def exige(utilisateur: Utilisateur) -> bool:
@@ -106,10 +135,20 @@ def activer(utilisateur: Utilisateur, secret: str, code: str) -> list[str]:
     return [presenter(c) for c in codes]
 
 
-@transaction.atomic
 def verifier(utilisateur: Utilisateur, code: str) -> bool:
     """Vrai si le code de l'application, ou un code de secours encore inutilisé,
-    est valable. Un code de secours servi est consommé."""
+    est valable. Un code de secours servi est consommé. Un second facteur
+    bloqué par trop de refus ne vérifie aucun code, pas même un bon."""
+    if _compter_tentative(utilisateur) > ECHECS_MAX:
+        return False
+    if _verifier(utilisateur, code):
+        client_redis().delete(_cle_echecs(utilisateur))
+        return True
+    return False
+
+
+@transaction.atomic
+def _verifier(utilisateur: Utilisateur, code: str) -> bool:
     courant = Utilisateur.objects.select_for_update().get(pk=utilisateur.pk)
     if not courant.second_facteur_actif:
         return False

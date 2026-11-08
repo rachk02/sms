@@ -10,8 +10,6 @@ from . import second_facteur
 from .middleware import CLE_CODES, CLE_VERIFIE, accueil_de_l_espace
 
 CLE_SECRET = "second_facteur_secret_en_cours"
-CLE_ECHECS = "second_facteur_echecs"
-ECHECS_MAX = 5
 
 
 def _suivant(request) -> str:
@@ -78,15 +76,12 @@ def verifier(request):
     erreur = ""
     if request.method == "POST":
         if second_facteur.verifier(request.user, request.POST.get("code", "")):
-            request.session.pop(CLE_ECHECS, None)
             request.session.cycle_key()
             request.session[CLE_VERIFIE] = True
             return redirect(_suivant(request))
-        echecs = request.session.get(CLE_ECHECS, 0) + 1
-        request.session[CLE_ECHECS] = echecs
-        if echecs >= ECHECS_MAX:
+        if second_facteur.bloque(request.user):
             logout(request)
-            messages.error(request, "Trop de codes refusés : reconnectez-vous.")
+            messages.error(request, "Trop de codes refusés : réessayez dans quinze minutes.")
             return redirect("connexion")
         erreur = "Code refusé."
     contexte = {"erreur": erreur, "suivant": _suivant(request)}
