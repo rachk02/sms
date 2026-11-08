@@ -235,7 +235,9 @@ def _changer(ticket: Ticket, vers: str, maintenant) -> str:
 
 def _verrouiller(ticket: Ticket) -> Ticket:
     return (
-        Ticket.objects.select_for_update().select_related("client", "demandeur").get(id=ticket.id)
+        Ticket.objects.select_for_update(of=("self",))
+        .select_related("client", "demandeur")
+        .get(id=ticket.id)
     )
 
 
