@@ -28,6 +28,23 @@ de chaque lot, ou marquées comme telles dans une tâche) n'y figurent pas.
   Les deux voies sont défendables (servir ou refuser) ; le choix revient à
   l'utilisateur.
 
+**Redis indisponible, deux comportements opposés à mettre côte à côte.**
+
+| Chemin | Redis indisponible | Effet |
+|---|---|---|
+| Quotas et plafond de l'API (T-107) | ouvert : l'appel est servi sans quota | l'API continue de servir, sans frein autre que le solde |
+| Connexion à l'interface (verrouillage par courriel) | fermé : l'erreur remonte | aucune nouvelle connexion, agents du back-office compris |
+| Second facteur (compteur des codes refusés) | fermé : l'erreur remonte | aucun code vérifié, donc aucune session ne passe le second facteur |
+
+Les sessions vivent en base, pas dans Redis : une session déjà ouverte et
+déjà vérifiée continue de servir pendant la panne. Ce sont les nouvelles
+connexions qui sont refusées. Le refus fermé est le choix sûr pour la
+connexion et le second facteur ; mais pendant une panne de Redis, l'API
+reste ouverte quand l'interface ne l'est plus, et les agents qui devraient
+intervenir ne peuvent pas se connecter. Une règle commune est à décider par
+l'utilisateur. Relevé par la session responsable en l'absence de
+l'utilisateur, sans changement de code.
+
 ## Points ouverts, à trancher par l'utilisateur
 
 Ce ne sont pas des choix faits, mais des décisions qui manquent.
@@ -84,6 +101,149 @@ responsable en l'absence de l'utilisateur, à confirmer :
   vérification Argon2 n'ayant pas lieu : l'écart révèle si un préfixe existe.
   Accepté sans changement, le préfixe n'étant pas secret (il s'affiche dans
   l'espace du compte).
+- **Résolution DNS hors de l'échéance d'une livraison, risque résiduel.**
+  L'échéance de dix secondes couvre la connexion et l'échange, pas la
+  résolution du nom : `getaddrinfo` n'a pas de délai en Python, un résolveur
+  lent retient encore le worker. Deux options : régler le résolveur du
+  conteneur (`timeout` et `attempts` dans `resolv.conf`), ce qui revient à
+  l'exploitation ; ou un fil d'exécution à délai autour de la résolution, qui
+  laisserait des fils orphelins dans le worker. Pas de correctif, décidé par
+  la session responsable en l'absence de l'utilisateur, à confirmer.
+
+## Relecture des rôles du back-office, 8 novembre 2026
+
+Le mode de règlement d'un client se modifiait par la fiche standard du client,
+au support compris, sans motif ni trace : il y passe en lecture seule et ne
+change plus que par `comptes.services.changer_mode_reglement`. Le palier et
+les deux plafonds du client passent en lecture seule pour tous sauf le
+super-administrateur, dont chaque modification va au journal d'audit avec
+l'ancienne et la nouvelle valeur. Décidé par la session responsable en
+l'absence de l'utilisateur, à confirmer, et reste à trancher :
+
+- **Qui règle le palier et les plafonds.** La finance (palier) et
+  l'exploitation (plafonds) n'ont aujourd'hui que la lecture des clients ;
+  leur confier ces champs demande des permissions dédiées.
+- **Motif obligatoire et service dédié** pour ces changements, comme pour le
+  mode de règlement.
+
+## Relecture de sécurité des rappels de paiement, 8 novembre 2026
+
+Aucun défaut certain : seule la référence est prise dans le rappel, le statut
+et le montant sont relus auprès du fournisseur, le crédit se fait sous le
+verrou de la transaction, une fois. Deux points pour l'utilisateur, décidés
+par la session responsable en l'absence de l'utilisateur, à confirmer :
+
+- **Unicité de l'écriture ACHAT d'un paiement, défense en profondeur
+  recommandée.** L'écriture `ACHAT` de référence `paiement:<id>` n'a pas de
+  contrainte d'unicité en base, alors que `CONSOMMATION` en a une
+  (`registre_consommation_unique_par_message`). Le crédit unique tient
+  aujourd'hui par le verrou de la ligne `paiements_transaction` et son état.
+  Une contrainte partielle sur le modèle de celle de `CONSOMMATION` fermerait
+  la porte à un second chemin qui oublierait le verrou. Elle touche le
+  registre de crédits : non faite.
+- **Devise du statut, condition du branchement d'un vrai fournisseur.** Le
+  statut rendu par l'API d'un fournisseur (`fournisseurs.Statut`) porte un
+  montant mais pas de devise : tout est en FCFA avec le fournisseur simulé.
+  Un vrai fournisseur devra rendre sa devise, et un statut dans une autre
+  devise ne devra rien créditer.
+
+## Relecture des exports et des imports, 8 novembre 2026
+
+Deux correctifs, chacun avec un test vu échouer sur l'ancien code :
+
+- **Cellules exécutables dans les exports CSV.** Un texte venu d'un tiers (SMS
+  entrant, contact importé, raison sociale) qui commençait par `=`, `+`, `-`,
+  `@`, une tabulation ou un retour chariot sortait tel quel, et devenait une
+  formule chez qui ouvrait l'export dans un tableur. Une telle cellule sort
+  désormais précédée d'une apostrophe (`apps/core/tableur.py`), sauf un nombre
+  signé : les numéros normalisés (+22670123456) et les montants restent tels
+  quels.
+- **Archive bureautique sans borne une fois décompressée.** Un `.xlsx` ou un
+  `.docx` de quelques kilo-octets pouvait se décompresser en plusieurs
+  gigaoctets à la lecture. La somme des tailles déclarées des membres est
+  bornée à 1 Go au dépôt ; la bibliothèque standard ne décompresse jamais un
+  membre au-delà de sa taille déclarée.
+
+Décidé par la session responsable en l'absence de l'utilisateur, à
+confirmer :
+
+- **Borne en nombre de lignes d'un import, et valeur de la borne de 1 Go.**
+  Aucun import n'est borné en lignes : seuls les 200 Mo du fichier déposé et,
+  désormais, le 1 Go décompressé le limitent. Les deux réglages sont à fixer
+  ensemble par l'utilisateur, selon la taille de carnet qu'il veut accepter
+  d'un client.
+- **Apostrophe visible sur un numéro saisi comme texte.** Un numéro écrit avec
+  des espaces dans un champ libre d'un contact (« +226 70 00 00 00 ») n'est pas
+  un nombre signé : il sort précédé d'une apostrophe. Gêne de lecture
+  acceptée. Les numéros normalisés, sans espace, ne sont pas touchés.
+
+## Relecture de l'authentification, 8 novembre 2026
+
+Deux correctifs, chacun avec un test vu échouer sur l'ancien code :
+
+- **Contournement complet du second facteur.** La page d'activation est
+  ouverte avant la présentation du code, et rien ne refusait un compte dont le
+  second facteur était déjà actif. Avec le seul mot de passe, un intrus
+  réglait son propre secret à la place de celui de la victime et recevait une
+  session vérifiée. La page renvoie désormais vers la vérification, et le
+  service refuse sous verrou.
+- **Essais de code sans limite.** Le compteur des cinq codes refusés vivait
+  dans la session : une reconnexion avec le bon mot de passe rendait cinq
+  essais de plus. Il porte désormais sur l'utilisateur, dans Redis, sur le
+  modèle du verrouillage de connexion.
+
+Sain : jetons d'invitation et de vérification signés, à usage unique et à
+durée bornée ; verrouillage par courriel sans révéler si un compte existe ;
+rotation de la clé de session à la connexion et à la vérification ; code TOTP
+comparé en temps constant, rejeu refusé ; codes de secours hachés et
+consommés sous verrou.
+
+Deux absences, à trancher par l'utilisateur :
+
+- **Pas de parcours de mot de passe oublié, ni de changement de mot de
+  passe.** Un utilisateur qui oublie le sien ne peut que demander une
+  nouvelle invitation ; un mot de passe compromis ne se change pas.
+- **Pas de freinage par adresse IP à la connexion.** Le verrouillage porte sur
+  le courriel. Une même adresse peut essayer un mot de passe courant sur
+  beaucoup de courriels différents (pulvérisation) sans être freinée.
+
+## Relecture de la configuration de production, 8 novembre 2026
+
+`manage.py check --deploy` lancé sur `prod.py` avec des variables factices,
+aucun vrai secret. Un correctif, avec son test vu échouer sur l'ancien code :
+sans `SMS_MOTEUR_COURRIEL`, les courriels partaient vers la console, donc au
+journal avec les liens d'invitation et leurs jetons, et `PORTAIL_URL`
+retombait sur le poste de développement. `prod.py` exige désormais un vrai
+moteur d'envoi et une adresse en https, sinon le service refuse de démarrer.
+
+Sain : `DEBUG` est faux dans `base.py` et `prod.py` ne le change pas ;
+`ALLOWED_HOSTS` vient de l'environnement, sans valeur par défaut ; HSTS d'un
+an avec les sous-domaines ; redirection vers https ; cookies de session et
+CSRF en `Secure`, session en `HttpOnly` et `SameSite=Lax` ; `X-Frame-Options`
+à `DENY`, `nosniff`, `Referrer-Policy` et `Cross-Origin-Opener-Policy` aux
+valeurs par défaut de Django ; administration absente de l'espace des
+clients ; point des métriques fermé sans jeton, jeton comparé en temps
+constant ; clé de chiffrement absente : refus, jamais de secret en clair.
+
+Points qui dépendent du déploiement réel, à trancher par l'utilisateur :
+
+- **Préchargement HSTS** (seul avertissement restant de `check --deploy`).
+  Inscrire le domaine dans la liste des navigateurs engage tous ses
+  sous-domaines en https pour longtemps, et se défait mal.
+- **Aucune politique de sécurité du contenu (CSP).** Django 6 la propose
+  (`SECURE_CSP`). Il faut d'abord recenser les scripts en ligne des gabarits ;
+  la version standard d'Alpine évalue ses expressions et demande soit
+  `unsafe-eval`, soit sa version compatible CSP.
+- **Redirection vers https et appels internes.** `SECURE_SSL_REDIRECT`
+  renvoie en 301 toute requête en http : le relevé des métriques et le relais
+  des accusés par Jasmin (`JASMIN_URL_RAPPEL`), s'ils passent en http sur le
+  réseau interne, seraient redirigés, et un accusé non suivi serait perdu.
+  Selon le mandataire inverse : appels internes en https, ou chemins exemptés
+  (`SECURE_REDIRECT_EXEMPT`).
+- **Mandataire inverse.** `SECURE_PROXY_SSL_HEADER` croit l'en-tête
+  `X-Forwarded-Proto` : le mandataire doit l'écraser, jamais le laisser venir
+  du client. S'il réécrit l'en-tête `Host`, il faudra `CSRF_TRUSTED_ORIGINS`
+  avec le nom de domaine réel.
 
 ## Lot 7, crédits, tarifs, paiements, facturation
 
