@@ -110,8 +110,12 @@ class ClientAdmin(admin.ModelAdmin):
     change_form_template = "admin/backoffice/client_change_form.html"
     # L'état ne change que par la suspension, la réactivation ou la clôture,
     # qui arrêtent ou reprennent les envois et laissent leur trace.
+    # Le mode de règlement ne change que par `changer_mode_reglement`, avec
+    # motif et trace au journal d'audit : passer un client en paiement à la
+    # livraison est une décision financière, jamais une saisie de fiche.
     readonly_fields = (
         "etat",
+        "mode_reglement",
         "cloture_le",
         "solde_credits",
         "activite_30_jours",

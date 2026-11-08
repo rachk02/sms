@@ -15,7 +15,8 @@ from django.urls import reverse
 
 from apps.backoffice import roles
 from apps.backoffice.services import AttributionRefusee, attribuer_roles
-from apps.comptes.services import creer_utilisateur
+from apps.comptes.models import Client
+from apps.comptes.services import creer_client, creer_utilisateur
 from apps.core.models import Audit
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -148,3 +149,32 @@ def test_seul_un_super_administrateur_attribue_des_roles_et_jamais_a_lui_meme(ag
     trace = Audit.objects.get(action="backoffice.roles")
     assert trace.valeur_avant == {"roles": []}
     assert trace.valeur_apres == {"roles": [roles.FINANCE, roles.SUPPORT]}
+
+
+def test_le_mode_de_reglement_ne_se_change_pas_par_la_fiche_du_client(client, agents):
+    """Passer un client en paiement à la livraison est une décision financière :
+    elle passe par `comptes.services.changer_mode_reglement`, avec motif et
+    trace au journal d'audit. La fiche du client ne propose le champ à aucun
+    rôle, pas même au super-administrateur."""
+    compte = creer_client(raison_sociale="Faso Riz SA", forme=Client.Forme.SOCIETE)
+    adresse = reverse("admin:comptes_client_change", args=[compte.pk])
+    for profil in (roles.SUPPORT, SUPER):
+        client.force_login(agents[profil])
+        page = client.get(adresse)
+        assert page.status_code == 200, profil
+        assert 'name="mode_reglement"' not in page.content.decode(), profil
+        # Un formulaire forgé qui le porterait ne le change pas.
+        donnees = {
+            "raison_sociale": "Faso Riz SA",
+            "forme": Client.Forme.SOCIETE,
+            "pays": "BF",
+            "palier": compte.palier,
+            "mode_reglement": "LIVRAISON",
+            "plafond_horaire": compte.plafond_horaire,
+            "plafond_journalier": compte.plafond_journalier,
+            "seuil_alerte_solde": 0,
+            "alerte_solde_armee": "on",
+        }
+        client.post(adresse, donnees)
+        compte.refresh_from_db()
+        assert compte.mode_reglement != "LIVRAISON", profil
