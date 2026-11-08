@@ -48,6 +48,22 @@ Ce ne sont pas des choix faits, mais des décisions qui manquent.
 - **T-97, connecteurs** : la recopie automatique vers Jasmin de l'hôte, de
   l'identifiant et du secret saisis au back-office (lot 10 ou mise en
   production).
+- **Lot 1, journal d'audit** (relevé par l'audit d'avant-lancement du
+  8 novembre 2026) : `core.Audit` porte deux `ForeignKey`, `auteur` vers
+  `comptes.Utilisateur` et `client` vers `comptes.Client`, depuis le commit
+  b4175d9 qui a déplacé l'audit dans `core`. Elles remontent d'une couche,
+  `core` étant sous `comptes`. Correction possible, celle que la charte prévoit :
+  deux UUID simples et indexés, la cohérence tenue par les services. Elle
+  demande une migration de `core` sur une table que toutes les autres
+  alimentent ; non corrigée, décidé par la session responsable en l'absence de
+  l'utilisateur, à confirmer.
+- **Tables sans cloisonnement par ligne** (même audit) : `comptes_code_secours`
+  (codes de secours du second facteur, lot 3) et `core_evenement_traite`
+  (traces d'idempotence des consommateurs de file) n'ont ni `client_id` ni
+  politique. La première se lit par utilisateur, comme `comptes_utilisateur`
+  que la charte laisse hors cloisonnement ; la seconde n'est écrite et lue que
+  par les workers. À confirmer : les laisser ainsi, ou les réserver aux rôles
+  qui s'en servent.
 
 ## Lot 7, crédits, tarifs, paiements, facturation
 
