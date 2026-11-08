@@ -20,7 +20,7 @@ from apps.core.courriels import envoyer
 from apps.core.evenements import publier
 
 from . import engagement
-from .models import MessageTicket, PieceTicket, Ticket
+from .models import Incident, MessageTicket, PieceTicket, PublicationIncident, Ticket
 
 E = Ticket.Etat
 
@@ -500,3 +500,67 @@ def traiter_echeances(maintenant=None) -> dict:
             )
             faits[compte] += 1
     return faits
+
+
+# Incidents de la page d'état (T-103)
+
+
+class IncidentRefuse(ValueError):
+    pass
+
+
+@transaction.atomic
+def declarer_incident(
+    *, titre: str, composants: list, etat: str, texte: str, agent, debut_le=None, adresse_ip=None
+) -> Incident:
+    """Déclare un incident, avec sa première publication : la constatation, ce
+    qui est touché et ce qui ne l'est pas. Seul un humain déclare une panne.
+    Une maintenance se déclare à l'avance, avec son début prévu."""
+    maintenant = timezone.now()
+    titre, texte = (titre or "").strip(), (texte or "").strip()
+    if not titre or not texte or not composants:
+        raise IncidentRefuse("Indiquez le titre, les composants touchés et la constatation.")
+    if etat == Incident.Etat.RETABLI:
+        raise IncidentRefuse("Un incident se déclare dégradé, en panne ou en maintenance.")
+    debut_le = debut_le or maintenant
+    if debut_le > maintenant and etat != Incident.Etat.MAINTENANCE:
+        raise IncidentRefuse("Seule une maintenance se déclare à l'avance.")
+    incident = Incident.objects.create(
+        titre=titre[:200], composants=list(composants), etat=etat, debut_le=debut_le
+    )
+    PublicationIncident.objects.create(incident=incident, texte=texte, etat=etat, auteur=agent)
+    auditer(
+        "support.incident.declaration",
+        incident,
+        auteur=agent,
+        apres={"titre": incident.titre, "composants": incident.composants, "etat": etat},
+        adresse_ip=adresse_ip,
+    )
+    return incident
+
+
+@transaction.atomic
+def publier_incident(incident: Incident, *, texte: str, etat: str, agent, adresse_ip=None):
+    """Une publication de plus : l'avancement, ou le rétablissement, qui clôt
+    l'incident avec ce qui a été perdu et ce qui a été repris."""
+    texte = (texte or "").strip()
+    if not texte:
+        raise IncidentRefuse("Le texte de la publication est vide.")
+    incident = Incident.objects.select_for_update().get(id=incident.id)
+    if incident.fin_le is not None:
+        raise IncidentRefuse("Cet incident est clos.")
+    avant = {"etat": incident.etat}
+    incident.etat = etat
+    if etat == Incident.Etat.RETABLI:
+        incident.fin_le = timezone.now()
+    incident.save()
+    PublicationIncident.objects.create(incident=incident, texte=texte, etat=etat, auteur=agent)
+    auditer(
+        "support.incident.publication",
+        incident,
+        auteur=agent,
+        avant=avant,
+        apres={"etat": etat},
+        adresse_ip=adresse_ip,
+    )
+    return incident

@@ -1,0 +1,5 @@
+{% extends "admin/change_form.html" %}
+{% block object-tools-items %}
+  {% if original and peut_publier and not original.fin_le %}<li><a href="{% url 'admin:support_incident_publier' original.pk %}">Publier</a></li>{% endif %}
+  {{ block.super }}
+{% endblock %}

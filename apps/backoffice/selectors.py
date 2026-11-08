@@ -307,6 +307,8 @@ class Supervision:
     files: list | None
     workers: list
     incidents: list
+    # Dernier rapprochement du registre (T-104) : instant, écarts, clients.
+    rapprochement: dict | None = None
 
     @property
     def muette(self) -> bool:
@@ -364,4 +366,14 @@ def supervision(maintenant: datetime | None = None) -> Supervision:
         files=files_supervisees(),
         workers=workers,
         incidents=incidents,
+        rapprochement=_rapprochement(),
     )
+
+
+def _rapprochement() -> dict | None:
+    from apps.credits.rapprochement import dernier
+
+    constat = dernier()
+    if constat:
+        constat["le"] = datetime.fromtimestamp(constat["le"], tz=UTC)
+    return constat

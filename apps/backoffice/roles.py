@@ -30,6 +30,7 @@ ROLES = {
         "backoffice.cloturer_client": None,
         "backoffice.reinitialiser_second_facteur": None,
         "support.ticket": ("view", "add", "change"),
+        "support.incident": _VOIR,
     },
     EXPLOITATION: {
         "comptes.client": _VOIR,
@@ -44,6 +45,8 @@ ROLES = {
         "conformite.alertefraude": ("view", "change"),
         # Le niveau 2 (liaisons, accusés, intégration), à confirmer.
         "support.ticket": ("view", "change"),
+        # Qui publie sur la page d'état, à confirmer (point ouvert du support).
+        "support.incident": ("view", "add", "change"),
     },
     FINANCE: {
         "comptes.client": _VOIR,

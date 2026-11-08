@@ -78,6 +78,18 @@
 </div>
 
 <div class="module">
+  <h2>Dernier rapprochement du registre</h2>
+  {% if s.rapprochement %}
+    <p>Le {{ s.rapprochement.le|date:"d/m/Y à H:i:s" }} :
+      {% if s.rapprochement.ecarts %}<strong>{{ s.rapprochement.ecarts }} écart{{ s.rapprochement.ecarts|pluralize }}</strong>
+        ({{ s.rapprochement.clients|join:", " }}).
+      {% else %}aucun écart.{% endif %}</p>
+  {% else %}
+    <p><strong>Aucun rapprochement constaté.</strong></p>
+  {% endif %}
+</div>
+
+<div class="module">
   <h2>Derniers incidents de liaison</h2>
   <table>
     <thead><tr><th>Connecteur</th><th>État</th><th>Début</th><th>Fin</th><th>Motif</th></tr></thead>

@@ -67,6 +67,8 @@ RESERVEES_AUX_WORKERS = (
     "telecom_correlation",
     "telecom_accuse_orphelin",
     "telecom_incident_liaison",
+    "support_incident",
+    "support_publication_incident",
     "telecom_route",
     "core_evenement_sortant",
     "core_audit",

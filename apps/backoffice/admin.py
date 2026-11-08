@@ -41,7 +41,7 @@ from apps.paiements.models import Facture, Reglage, Transaction
 from apps.support import engagement as support_engagement
 from apps.support import selectors as support_selectors
 from apps.support import services as support
-from apps.support.models import Ticket
+from apps.support.models import Incident, Ticket
 from apps.telecom import services as telecom
 from apps.telecom.models import Connecteur, IncidentLiaison, Route
 
@@ -52,10 +52,12 @@ from .forms import (
     ConfirmationForm,
     ConnecteurForm,
     CreditForm,
+    DeclarationIncidentForm,
     EnregistrementClientForm,
     GrilleForm,
     PaiementManuelForm,
     PalierForm,
+    PublicationIncidentForm,
     RemboursementForm,
     RolesForm,
     SaisieTicketForm,
@@ -1619,3 +1621,127 @@ class TicketAdmin(admin.ModelAdmin):
             "opts": self.model._meta,
         }
         return TemplateResponse(request, "admin/backoffice/ticket.html", contexte)
+
+
+@admin.register(Incident)
+class IncidentAdmin(admin.ModelAdmin):
+    """Incidents de la page d'état (T-103). Un incident se déclare avec sa
+    constatation, se raconte par publications successives et se clôt au
+    rétablissement. La page publique est republiée chaque minute par
+    l'ordonnanceur."""
+
+    list_display = ("titre", "etat", "composants", "debut_le", "fin_le")
+    list_filter = ("etat", ("fin_le", admin.EmptyFieldListFilter))
+    date_hierarchy = "debut_le"
+    change_form_template = "admin/backoffice/incident_change_form.html"
+    change_list_template = "admin/backoffice/incident_change_list.html"
+    readonly_fields = [champ.name for champ in Incident._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_urls(self):
+        propres = [
+            path(
+                "declarer/",
+                self.admin_site.admin_view(self.declarer),
+                name="support_incident_declarer",
+            ),
+            path(
+                "<uuid:pk>/publier/",
+                self.admin_site.admin_view(self.publier),
+                name="support_incident_publier",
+            ),
+        ]
+        return propres + super().get_urls()
+
+    def changelist_view(self, request, extra_context=None):
+        contexte = {
+            **(extra_context or {}),
+            "peut_declarer": request.user.has_perm("support.add_incident"),
+        }
+        return super().changelist_view(request, contexte)
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        contexte = {
+            **(extra_context or {}),
+            "peut_publier": request.user.has_perm("support.change_incident"),
+        }
+        return super().change_view(request, object_id, form_url, contexte)
+
+    def _page_incident(self, request, titre, introduction, bouton, formulaire, elements=()):
+        contexte = {
+            **self.admin_site.each_context(request),
+            "title": titre,
+            "introduction": introduction,
+            "elements": list(elements),
+            "bouton": bouton,
+            "formulaire": formulaire,
+            "opts": self.model._meta,
+        }
+        return TemplateResponse(request, "admin/backoffice/formulaire.html", contexte)
+
+    def declarer(self, request):
+        exiger(request, "support.add_incident")
+        formulaire = DeclarationIncidentForm(request.POST if request.method == "POST" else None)
+        if request.method == "POST" and formulaire.is_valid():
+            try:
+                incident = support.declarer_incident(
+                    **formulaire.cleaned_data,
+                    agent=request.user,
+                    adresse_ip=adresse_ip(request),
+                )
+            except support.IncidentRefuse as refus:
+                formulaire.add_error(None, str(refus))
+            else:
+                messages.success(
+                    request,
+                    f"Incident déclaré : {incident.titre}. La page se republie sous une minute.",
+                )
+                return redirect("admin:support_incident_changelist")
+        return self._page_incident(
+            request,
+            "Déclarer un incident",
+            "La page publique d'état passe le composant à l'état déclaré à sa prochaine "
+            "publication, sous une minute. Une panne annoncée à tort coûte cher en confiance : "
+            "ne déclarez une panne que constatée.",
+            "Déclarer et publier",
+            formulaire,
+        )
+
+    def publier(self, request, pk):
+        exiger(request, "support.change_incident")
+        incident = get_object_or_404(Incident, pk=pk)
+        formulaire = PublicationIncidentForm(
+            request.POST if request.method == "POST" else None, initial={"etat": incident.etat}
+        )
+        if request.method == "POST" and formulaire.is_valid():
+            try:
+                support.publier_incident(
+                    incident,
+                    **formulaire.cleaned_data,
+                    agent=request.user,
+                    adresse_ip=adresse_ip(request),
+                )
+            except support.IncidentRefuse as refus:
+                formulaire.add_error(None, str(refus))
+            else:
+                messages.success(request, "Publication enregistrée.")
+                return redirect("admin:support_incident_changelist")
+        return self._page_incident(
+            request,
+            f"Publier sur : {incident.titre}",
+            f"{incident.get_etat_display()} depuis le "
+            f"{timezone.localtime(incident.debut_le):%d/%m/%Y à %H:%M}. "
+            "Rétabli, l'incident se clôt.",
+            "Publier",
+            formulaire,
+            elements=[
+                f"{timezone.localtime(p.publiee_le):%d/%m %H:%M} "
+                f"({p.get_etat_display()}) : {p.texte}"
+                for p in incident.publications.all()
+            ],
+        )

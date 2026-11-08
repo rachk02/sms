@@ -102,6 +102,7 @@ class Ordonnanceur(Worker):
         from apps.journal.services import creer_partitions_a_venir
         from apps.paiements.services import facturer_en_attente
         from apps.paiements.services import relancer as relancer_paiements
+        from apps.support.page_etat import publier as publier_page_etat
         from apps.support.services import traiter_echeances
         from apps.telecom.sante import surveiller
         from apps.telecom.supervision import publier_etat_liaisons
@@ -144,6 +145,8 @@ class Ordonnanceur(Worker):
                         await sync_to_async(solder_envois_unitaires)()
                         # Préavis et clôtures des tickets échus (T-102).
                         await sync_to_async(traiter_echeances)()
+                        # Page publique d'état, poussée chaque minute (T-103).
+                        await sync_to_async(publier_page_etat)()
                         dernier_constat = time.monotonic()
                     # Une fois par jour, et au démarrage : le rapprochement ne fait que
                     # lire et alerter, le refaire après un redémarrage ne coûte rien.

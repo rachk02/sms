@@ -57,3 +57,6 @@ sauvegardes/
 
 # Outils téléchargés (binaire Tailwind)
 .outils/
+
+# Page d'état publiée en local (T-103)
+/var/

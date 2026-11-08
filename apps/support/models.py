@@ -7,6 +7,7 @@ de messages, publics ou internes ; une note interne n'est jamais montrée au
 client.
 """
 
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 
 from apps.core.models import Identifiable
@@ -138,3 +139,56 @@ class PieceTicket(Identifiable):
         db_table = "support_piece"
         verbose_name = "pièce jointe"
         verbose_name_plural = "pièces jointes"
+
+
+class Incident(Identifiable):
+    """Incident déclaré sur la page d'état (T-103). Table de la plateforme, sans
+    client : la page est publique. Seul un humain déclare une panne ; le
+    passage en dégradé est automatique et ne passe pas par ici."""
+
+    class Composant(models.TextChoices):
+        APPLICATION = "APPLICATION", "Application web"
+        API = "API", "API publique"
+        ORANGE = "ORANGE", "Envoi vers Orange"
+        MOOV = "MOOV", "Envoi vers Moov"
+        TELECEL = "TELECEL", "Envoi vers Telecel"
+        ACCUSES = "ACCUSES", "Remontée des accusés"
+        RECHARGEMENT = "RECHARGEMENT", "Rechargement de crédits"
+
+    class Etat(models.TextChoices):
+        DEGRADE = "DEGRADE", "Dégradé"
+        PANNE = "PANNE", "En panne"
+        MAINTENANCE = "MAINTENANCE", "Maintenance planifiée"
+        RETABLI = "RETABLI", "Rétabli"
+
+    titre = models.CharField(max_length=200)
+    composants = ArrayField(models.CharField(max_length=12, choices=Composant))
+    etat = models.CharField(max_length=12, choices=Etat)
+    debut_le = models.DateTimeField()
+    fin_le = models.DateTimeField(null=True, blank=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "support_incident"
+        verbose_name = "incident publié"
+        verbose_name_plural = "incidents publiés"
+        indexes = [models.Index(fields=["-debut_le"], name="incident_debut")]
+
+    def __str__(self):
+        return self.titre
+
+
+class PublicationIncident(Identifiable):
+    incident = models.ForeignKey(Incident, on_delete=models.PROTECT, related_name="publications")
+    texte = models.TextField()
+    etat = models.CharField(max_length=12, choices=Incident.Etat)
+    auteur = models.ForeignKey(
+        "comptes.Utilisateur", on_delete=models.PROTECT, null=True, related_name="+"
+    )
+    publiee_le = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "support_publication_incident"
+        verbose_name = "publication d'incident"
+        verbose_name_plural = "publications d'incident"
+        ordering = ["publiee_le"]

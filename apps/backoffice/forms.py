@@ -3,7 +3,7 @@ from django import forms
 from apps.comptes.models import Client, Piece, pieces_attendues
 from apps.credits.models import Grille
 from apps.paiements.services import MANUELS
-from apps.support.models import Ticket
+from apps.support.models import Incident, Ticket
 from apps.telecom.models import Connecteur, Operateur
 from apps.telecom.services import ConfigurationRefusee, verifier_parametres
 
@@ -265,3 +265,42 @@ class SaisieTicketForm(forms.Form):
             c for c in Ticket.Canal.choices if c[0] != Ticket.Canal.FORMULAIRE
         ]
         self.fields["categorie"].choices = Ticket.Categorie.choices
+
+
+# Page d'état (T-103)
+
+
+class DeclarationIncidentForm(forms.Form):
+    titre = forms.CharField(max_length=200)
+    composants = forms.MultipleChoiceField(
+        choices=Incident.Composant.choices,
+        widget=forms.CheckboxSelectMultiple,
+        label="Composants touchés",
+    )
+    etat = forms.ChoiceField(
+        label="État",
+        choices=[c for c in Incident.Etat.choices if c[0] != Incident.Etat.RETABLI],
+        help_text="La panne ne s'affiche que déclarée ici ; le dégradé vient aussi de la "
+        "supervision.",
+    )
+    debut_le = forms.DateTimeField(
+        required=False,
+        label="Début",
+        widget=forms.DateTimeInput(attrs={"type": "datetime-local"}),
+        help_text="Laissez vide pour maintenant ; une maintenance se déclare à l'avance.",
+    )
+    texte = forms.CharField(
+        label="Constatation",
+        widget=forms.Textarea(attrs={"rows": 4}),
+        help_text="Ce qui est touché et ce qui ne l'est pas. Publié tel quel.",
+    )
+
+
+class PublicationIncidentForm(forms.Form):
+    etat = forms.ChoiceField(label="État", choices=Incident.Etat.choices)
+    texte = forms.CharField(
+        label="Publication",
+        widget=forms.Textarea(attrs={"rows": 4}),
+        help_text="L'avancement, toutes les trente minutes même sans nouveauté ; au "
+        "rétablissement, ce qui a été perdu et ce qui a été repris.",
+    )

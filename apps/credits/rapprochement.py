@@ -13,7 +13,9 @@ faux écart. Appelé par l'ordonnanceur, sous le rôle worker, qui voit tous les
 clients.
 """
 
+import json
 import logging
+import time
 from dataclasses import dataclass
 
 from django.db import connection
@@ -23,6 +25,9 @@ from apps.core.evenements import publier
 journal = logging.getLogger(__name__)
 
 EVENEMENT = "credits.rapprochement.ecart"
+# Le dernier passage, lu par la supervision du back-office (T-104) : le web ne
+# relance pas la requête, il lit ce que le worker a constaté.
+CLE_DERNIER = "sms:rapprochement:dernier"
 
 ECARTS = """
 WITH registre AS (
@@ -105,4 +110,24 @@ def rapprocher() -> list[Ecart]:
             },
         )
     journal.info("Rapprochement du registre : %d écart(s).", len(trouves))
+    from apps.core.redis import client_redis
+
+    client_redis().set(
+        CLE_DERNIER,
+        json.dumps(
+            {
+                "le": int(time.time()),
+                "ecarts": len(trouves),
+                "clients": [e.raison_sociale for e in trouves[:10]],
+            }
+        ),
+    )
     return trouves
+
+
+def dernier() -> dict | None:
+    """Le dernier rapprochement constaté : instant, nombre d'écarts, clients."""
+    from apps.core.redis import client_redis
+
+    brut = client_redis().get(CLE_DERNIER)
+    return json.loads(brut) if brut else None

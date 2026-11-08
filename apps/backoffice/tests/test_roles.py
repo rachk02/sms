@@ -41,6 +41,8 @@ PERSONNALISEES = {
     "backoffice_dossierpreuve_client": ("backoffice.view_dossierpreuve", False),
     "conformite_alertefraude_traiter": ("conformite.change_alertefraude", True),
     "support_ticket_saisir": ("support.add_ticket", False),
+    "support_incident_declarer": ("support.add_incident", False),
+    "support_incident_publier": ("support.change_incident", True),
     "support_ticket_traiter": ("support.change_ticket", True),
     "credits_grille_version_ajouter": (SUPER, True),
     "credits_grille_version": (SUPER, True),

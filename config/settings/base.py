@@ -145,6 +145,18 @@ RABBITMQ_URL = (
 )
 
 MINIO_BUCKET = env("MINIO_BUCKET", "sms")
+
+# Page publique d'état du service (T-103) : dépôt derrière une abstraction,
+# l'hébergeur n'est pas choisi. « dossier » écrit dans un dossier local servi en
+# statique ; « seau » pousse vers un seau compatible S3, séparé de la plateforme.
+PAGE_ETAT = {
+    "depot": env("PAGE_ETAT_DEPOT", "dossier"),
+    "dossier": env("PAGE_ETAT_DOSSIER", str(RACINE / "var" / "page-etat")),
+    "point_acces": env("PAGE_ETAT_POINT_ACCES", ""),
+    "identifiant": env("PAGE_ETAT_IDENTIFIANT", ""),
+    "secret": env("PAGE_ETAT_SECRET", ""),
+    "seau": env("PAGE_ETAT_SEAU", "page-etat"),
+}
 STOCKAGE_OBJET = {
     "point_acces": env("MINIO_ENDPOINT"),
     "identifiant": env("MINIO_ROOT_USER"),
