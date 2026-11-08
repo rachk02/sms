@@ -30,6 +30,7 @@ import json
 import logging
 import secrets
 import socket
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -309,9 +310,46 @@ class _SansRedirection(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def _connecter(adresse: str, cible, *args, **kwargs):
+class _Echeance:
+    """Borne tout l'échange d'une livraison. Le délai d'une prise ne vaut que
+    pour chaque opération : un récepteur qui répond octet par octet tiendrait
+    le worker indéfiniment. À l'échéance, la connexion est coupée ; la lecture
+    en cours échoue et la livraison compte comme un échec."""
+
+    def __init__(self, secondes: float):
+        self.fin = time.monotonic() + secondes
+        self._minuteries: list[threading.Timer] = []
+        self._doubles: list[socket.socket] = []
+
+    def surveiller(self, prise: socket.socket) -> None:
+        # Un double de la prise : la couche TLS reprend la prise d'origine,
+        # mais couper le double coupe la même connexion.
+        double = prise.dup()
+        self._doubles.append(double)
+        minuterie = threading.Timer(max(0.0, self.fin - time.monotonic()), _couper, (double,))
+        minuterie.daemon = True
+        minuterie.start()
+        self._minuteries.append(minuterie)
+
+    def lever(self) -> None:
+        for minuterie in self._minuteries:
+            minuterie.cancel()
+        for double in self._doubles:
+            double.close()
+
+
+def _couper(prise: socket.socket) -> None:
+    try:
+        prise.shutdown(socket.SHUT_RDWR)
+    except OSError:
+        pass
+
+
+def _connecter(adresse: str, echeance: _Echeance, cible, *args, **kwargs):
     # Le port vient de l'adresse du point, l'hôte est l'adresse déjà vérifiée.
-    return socket.create_connection((adresse, cible[1]), *args, **kwargs)
+    prise = socket.create_connection((adresse, cible[1]), *args, **kwargs)
+    echeance.surveiller(prise)
+    return prise
 
 
 class _HttpEpingle(http.client.HTTPConnection):
@@ -319,32 +357,36 @@ class _HttpEpingle(http.client.HTTPConnection):
     seconde fois. Sans cela, une réponse DNS qui change entre la vérification
     et la connexion (rebond DNS) mènerait vers une adresse interne."""
 
-    def __init__(self, *args, adresse: str, **kwargs):
+    def __init__(self, *args, adresse: str, echeance: _Echeance, **kwargs):
         super().__init__(*args, **kwargs)
-        self._create_connection = functools.partial(_connecter, adresse)
+        self._create_connection = functools.partial(_connecter, adresse, echeance)
 
 
 class _HttpsEpingle(http.client.HTTPSConnection):
     """Même chose en https ; le certificat se vérifie toujours contre le nom
     de l'hôte, que la connexion garde pour SNI et pour l'en-tête Host."""
 
-    def __init__(self, *args, adresse: str, **kwargs):
+    def __init__(self, *args, adresse: str, echeance: _Echeance, **kwargs):
         super().__init__(*args, **kwargs)
-        self._create_connection = functools.partial(_connecter, adresse)
+        self._create_connection = functools.partial(_connecter, adresse, echeance)
 
 
-def _ouvreur(adresse: str) -> urllib.request.OpenerDirector:
+def _ouvreur(adresse: str, echeance: _Echeance) -> urllib.request.OpenerDirector:
     """Un ouvreur par livraison : sans redirection, sans mandataire (un
     mandataire résoudrait le nom lui-même), connecté à l'adresse vérifiée."""
 
     class Http(urllib.request.HTTPHandler):
         def http_open(self, req):
-            return self.do_open(functools.partial(_HttpEpingle, adresse=adresse), req)
+            return self.do_open(
+                functools.partial(_HttpEpingle, adresse=adresse, echeance=echeance), req
+            )
 
     class Https(urllib.request.HTTPSHandler):
         def https_open(self, req):
             return self.do_open(
-                functools.partial(_HttpsEpingle, adresse=adresse), req, context=self._context
+                functools.partial(_HttpsEpingle, adresse=adresse, echeance=echeance),
+                req,
+                context=self._context,
             )
 
     return urllib.request.build_opener(
@@ -373,14 +415,17 @@ def _poster(url: str, corps: bytes, entetes: dict) -> Reponse:
     if not _adresses_privees_autorisees() and not _toutes_publiques(adresses):
         return Reponse(None, "hôte non public au moment de la livraison")
     requete = urllib.request.Request(url, data=corps, headers=entetes, method="POST")
+    echeance = _Echeance(DELAI_S)
     try:
-        with _ouvreur(adresses[0]).open(requete, timeout=DELAI_S) as reponse:
+        with _ouvreur(adresses[0], echeance).open(requete, timeout=DELAI_S) as reponse:
             reponse.read(1024)
             return Reponse(reponse.status)
     except urllib.error.HTTPError as refus:
         return Reponse(refus.code, f"HTTP {refus.code}")
-    except (urllib.error.URLError, OSError, ValueError) as panne:
+    except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as panne:
         return Reponse(None, repr(panne)[:TAILLE_ERREUR])
+    finally:
+        echeance.lever()
 
 
 def _prevenir_proprietaire(point) -> None:

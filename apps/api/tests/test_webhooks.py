@@ -365,6 +365,38 @@ def test_une_seule_adresse_interne_parmi_celles_de_l_hote_suffit_a_refuser(
     assert connexions == []
 
 
+def test_un_recepteur_qui_repond_au_compte_gouttes_est_coupe_a_l_echeance(compte, monkeypatch):
+    """Le délai borne tout l'échange, pas chaque lecture : un récepteur qui
+    rend sa réponse octet par octet ne tient pas le worker au-delà."""
+    client, _ = compte
+    monkeypatch.setattr(webhooks, "DELAI_S", 1)
+    ecoute = socket.socket()
+    ecoute.bind(("127.0.0.1", 0))
+    ecoute.listen()
+
+    def servir():
+        prise, _ = ecoute.accept()
+        prise.recv(65536)
+        try:
+            # Chaque octet arrive bien avant le délai d'une lecture ; la
+            # réponse entière prendrait plus de dix secondes.
+            for octet in b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n":
+                prise.sendall(bytes([octet]))
+                time.sleep(0.25)
+        except OSError:
+            pass
+        prise.close()
+
+    threading.Thread(target=servir, daemon=True).start()
+    _point(compte, f"http://127.0.0.1:{ecoute.getsockname()[1]}/webhooks")
+    (livraison,) = _repartir(_evenement(client))
+    debut = time.monotonic()
+    with pytest.raises(webhooks.LivraisonEchouee):
+        webhooks.livrer(livraison.id)
+    assert time.monotonic() - debut < 3
+    ecoute.close()
+
+
 def test_le_seuil_de_solde_bas_part_une_fois_puis_se_rearme(compte):
     from apps.comptes.services import regler_seuil_alerte
     from apps.core.cloisonnement import poser_client
