@@ -75,6 +75,13 @@ SIGNATURES_BINAIRES = (
 )
 
 MO = 1024 * 1024
+# Une archive bureautique (.xlsx, .docx) se lit décompressée : quelques
+# kilo-octets déposés peuvent en faire des dizaines de gigaoctets et épuiser la
+# mémoire du worker d'import (la table des chaînes d'un classeur se charge
+# entière). La somme des tailles déclarées de ses membres est bornée au dépôt ;
+# la lecture ne décompresse jamais un membre au-delà de sa taille déclarée.
+# Un gigaoctet, à confirmer : de quoi lire plusieurs millions de lignes.
+DECOMPRESSE_MAX = 1024 * MO
 # Par famille : types admis, taille maximale, chiffrement au repos.
 REGLES = {
     Fichier.Famille.PIECE: ((PDF, JPEG, PNG), 5 * MO, True),
@@ -123,11 +130,17 @@ def reconnaitre(flux, admis: tuple[TypeFichier, ...]) -> TypeFichier:
             try:
                 with zipfile.ZipFile(flux) as archive:
                     present = type_fichier.membre in archive.namelist()
+                    decompresse = sum(membre.file_size for membre in archive.infolist())
             except zipfile.BadZipFile:
-                present = False
+                present, decompresse = False, 0
             flux.seek(0)
             if not present:
                 continue
+            if decompresse > DECOMPRESSE_MAX:
+                raise FichierRefuse(
+                    "Archive trop lourde une fois décompressée : "
+                    f"{DECOMPRESSE_MAX // MO} Mo au plus."
+                )
         return type_fichier
     raise FichierRefuse(
         f"Type de fichier non admis : {_attendus(admis)} attendu, reconnu au contenu."
