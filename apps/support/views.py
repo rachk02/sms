@@ -1,6 +1,7 @@
 """Billetterie, côté client (T-102). Le fragment du fil est dans `fragments.py`."""
 
 from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.http import Http404
 from django.shortcuts import redirect, render
 from django.utils.dateparse import parse_datetime
@@ -39,6 +40,23 @@ def _contexte(client_id, donnees) -> tuple[dict, str]:
     return {}, ""
 
 
+RATTACHEMENTS = ("message", "recu", "campagne")
+
+
+def _rattachement(parametres) -> dict:
+    """Les paramètres de rattachement d'une adresse, validés par les champs du
+    formulaire : une valeur mal formée rend une page introuvable, jamais une
+    erreur du serveur."""
+    donnees = {}
+    for nom in RATTACHEMENTS:
+        if parametres.get(nom):
+            try:
+                donnees[nom] = OuvertureForm.base_fields[nom].clean(parametres[nom])
+            except ValidationError:
+                raise Http404 from None
+    return donnees
+
+
 @permission_requise("support.ouvrir")
 def nouveau(request):
     if request.method == "POST":
@@ -47,7 +65,7 @@ def nouveau(request):
         donnees = formulaire.cleaned_data if valide else {}
     else:
         formulaire = OuvertureForm(initial=request.GET.dict())
-        valide, donnees = False, request.GET.dict()
+        valide, donnees = False, _rattachement(request.GET)
     contexte, rattache = _contexte(request.user.client_id, donnees)
     if valide:
         try:

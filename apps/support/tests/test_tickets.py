@@ -330,3 +330,20 @@ def test_la_liste_du_client_ne_montre_que_son_compte(client, compte, membre):
     page = client.get("/support").content.decode()
     assert "Connexion impossible" in page and "Question" not in page
     assert client.get(f"/support/{etranger.id}").status_code == 404
+
+
+@pytest.mark.parametrize(
+    "parametres",
+    [
+        {"campagne": "pas-un-uuid"},
+        {"message": "pas-un-uuid", "recu": "2026-11-08T10:00:00+00:00"},
+        {"message": str(uuid.uuid4()), "recu": "pas-une-date"},
+    ],
+)
+def test_un_rattachement_mal_forme_rend_une_page_introuvable(client, membre, parametres):
+    """Une adresse de rattachement bricolée rend une page introuvable, jamais
+    une erreur du serveur."""
+    client.force_login(membre)
+    client.raise_request_exception = False
+    reponse = client.get(f"/support/nouveau?{urlencode(parametres)}")
+    assert reponse.status_code == 404
