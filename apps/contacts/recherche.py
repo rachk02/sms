@@ -32,6 +32,7 @@ from django.utils import timezone
 
 from apps.core import courriels
 from apps.core.evenements import publier
+from apps.core.tableur import cellules
 from apps.fichiers import services as fichiers
 from apps.fichiers.models import Fichier
 
@@ -214,7 +215,7 @@ def produire(export_id) -> Export:
             texte = io.TextIOWrapper(temporaire, encoding="utf-8-sig", newline="")
             ecrivain = csv.writer(texte, delimiter=";")
             for ligne in _lignes(export.client, filtres):
-                ecrivain.writerow(ligne)
+                ecrivain.writerow(cellules(ligne))
                 lignes += 1
             texte.flush()
             texte.detach()

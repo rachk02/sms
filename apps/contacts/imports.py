@@ -23,6 +23,7 @@ from django.utils import timezone
 
 from apps.core.evenements import publier
 from apps.core.numeros import NumeroInvalide, normaliser
+from apps.core.tableur import cellules
 from apps.fichiers import services as fichiers
 from apps.fichiers.models import Fichier
 from apps.telecom.prefixes import classer, table
@@ -351,7 +352,7 @@ def rapport_csv(import_):
     for rejet in ImportRejet.objects.filter(import_lie=import_).order_by("numero_ligne").iterator():
         tampon = io.StringIO()
         csv.writer(tampon, delimiter=";").writerow(
-            [rejet.numero_ligne, rejet.motif, rejet.contenu_ligne]
+            cellules([rejet.numero_ligne, rejet.motif, rejet.contenu_ligne])
         )
         yield tampon.getvalue()
 

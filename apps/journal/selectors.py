@@ -1,7 +1,5 @@
 """Lectures du journal des messages. Aucune écriture."""
 
-import csv
-import io
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
@@ -13,6 +11,7 @@ from django.utils.dateparse import parse_date, parse_datetime
 
 from apps.core.etats import Etat
 from apps.core.numeros import NumeroInvalide, normaliser
+from apps.core.tableur import ligne as ligne_csv
 from apps.telecom import correlation
 from apps.telecom.supervision import etat_publie
 
@@ -109,9 +108,9 @@ def periode_d_export(debut: str | None, fin: str | None) -> tuple[datetime, date
 
 
 def _ligne(valeurs) -> str:
-    tampon = io.StringIO()
-    csv.writer(tampon, delimiter=";").writerow(valeurs)
-    return tampon.getvalue()
+    # Le texte d'un message peut venir d'un tiers : aucune cellule ne sort en
+    # formule exécutable par un tableur.
+    return ligne_csv(valeurs)
 
 
 def _date(valeur) -> str:

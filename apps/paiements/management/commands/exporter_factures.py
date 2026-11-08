@@ -15,6 +15,7 @@ from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
+from apps.core.tableur import cellules
 from apps.paiements.models import Facture
 
 COLONNES = (
@@ -86,4 +87,4 @@ class Command(BaseCommand):
         sortie = csv.writer(self.stdout, delimiter=";", lineterminator="")
         sortie.writerow(COLONNES)
         for ligne in lignes(debut, fin):
-            sortie.writerow(ligne)
+            sortie.writerow(cellules(ligne))
