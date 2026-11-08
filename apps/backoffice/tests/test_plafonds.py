@@ -78,25 +78,26 @@ def test_le_plafond_journalier_vaut_aussi(en_tant_que_worker):
 
 
 def test_au_dela_du_plafond_l_envoi_est_refuse_et_l_exploitation_prevenue(en_tant_que_worker):
-    client = _compte(horaire=2)
+    # Plafond de trois : le seuil critique, à 200 %, tombe au sixième essai.
+    client = _compte(horaire=3)
     passerelle = passerelle_pour(_connecteur())
-    _envoyer(client, passerelle, "Votre code : 4821")
-    _envoyer(client, passerelle, "Votre code : 4822")
-    with pytest.raises(plafonds.PlafondAtteint, match="Plafond horaire du compte atteint : 2"):
+    for rang in range(3):
+        _envoyer(client, passerelle, f"Votre code : 482{rang}")
+    with pytest.raises(plafonds.PlafondAtteint, match="Plafond horaire du compte atteint : 3"):
         _envoyer(client, passerelle, "Votre code : 4823")
     # Refusé avant toute écriture au journal.
-    assert Message.objects.filter(client=client).count() == 2
+    assert Message.objects.filter(client=client).count() == 3
     alerte = AlerteFraude.objects.get(client=client, regle=Code.PLAFOND_COMPTE)
-    assert (alerte.gravite, alerte.valeur) == (Gravite.ALERTE, 3)
-    assert alerte.details["periode"] == "horaire" and alerte.details["plafond"] == 2
+    assert (alerte.gravite, alerte.valeur) == (Gravite.ALERTE, 4)
+    assert alerte.details["periode"] == "horaire" and alerte.details["plafond"] == 3
     assert EvenementSortant.objects.filter(
         nom="conformite.fraude.alerte", objet_id=alerte.id
     ).exists()
-    # Les refus suivants ne réécrivent pas l'alerte.
+    # Un refus suivant, sous le seuil critique, ne réécrit pas l'alerte.
     with pytest.raises(plafonds.PlafondAtteint):
         _envoyer(client, passerelle, "Votre code : 4824")
     alerte.refresh_from_db()
-    assert alerte.valeur == 3
+    assert (alerte.gravite, alerte.valeur) == (Gravite.ALERTE, 4)
 
 
 def test_au_seuil_critique_le_compte_est_suspendu_une_fois(en_tant_que_worker):
