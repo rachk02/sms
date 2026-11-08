@@ -146,8 +146,15 @@ def test_le_plafond_puis_le_solde_refusent_la_suite_du_lot(client, compte, espac
     assert codes == ["", "", "SOLDE_INSUFFISANT", "SOLDE_INSUFFISANT", "PLAFOND_COMPTE"]
 
 
-def test_un_lot_de_mille_est_accepte_en_moins_de_deux_secondes(client, compte):
-    _, jeton = compte
+def test_un_lot_de_mille_est_accepte_en_moins_de_deux_secondes(client, compte, espaces):
+    compte_client, jeton = compte
+    # Le plafond horaire du palier (mille messages) tomberait au milieu du
+    # second lot : ce test mesure la tenue en charge, pas le plafond.
+    espaces("worker")
+    Client.objects.filter(id=compte_client.id).update(
+        plafond_horaire=100_000, plafond_journalier=100_000
+    )
+    espaces("client")
     # Le nombre de requêtes ne dépend pas de la taille du lot.
     with CaptureQueriesContext(connections["default"]) as petit:
         assert _poster(client, jeton, _lot(10)).status_code == 202
@@ -174,4 +181,5 @@ def test_les_corps_mal_formes_sont_refuses(client, compte):
     assert _poster(client, jeton, {"messages": []}).status_code == 400
     trop = _poster(client, jeton, _lot(1001))
     assert trop.status_code == 400 and trop.json()["erreur"]["code"] == "LOT_TROP_GRAND"
-    assert client.get(ENVOI, **entetes).status_code == 405
+    # GET lit le journal (T-109) ; les autres méthodes sont refusées.
+    assert client.delete(ENVOI, **entetes).status_code == 405
