@@ -15,7 +15,8 @@ class Idempotence(Identifiable, Cloisonne):
     unique que la première requête soit validée, puis lit sa réponse. Une
     requête qui échoue emporte sa réservation avec elle."""
 
-    # 255 caractères saisis, plus le préfixe « test: » d'une clé d'essai (T-113).
+    # 255 caractères saisis, plus le préfixe d'environnement « test: » ou
+    # « live: » (T-113).
     cle = models.CharField(max_length=260)
     # SHA-256 de la méthode, du chemin et du corps de la requête.
     empreinte = models.CharField(max_length=64)

@@ -154,6 +154,18 @@ def test_une_cle_d_idempotence_d_essai_ne_sert_pas_en_production(client, cles, e
     assert Message.objects.count() == 1 and MessageEssai.objects.count() == 1
 
 
+def test_une_cle_reelle_ne_retombe_jamais_sur_une_cle_d_essai(client, cles, espaces):
+    """Une clé réelle écrite comme la clé rangée d'un essai (« test:k ») ne
+    rejoue pas la réponse de l'essai : elle envoie vraiment."""
+    _, essai, reelle = cles
+    corps = _lot(1)
+    _poster(client, essai, corps, cle="k")
+    en_prod = _poster(client, reelle, corps, cle="test:k")
+    assert en_prod.status_code == 202 and "Idempotent-Rejoue" not in en_prod
+    espaces("worker")
+    assert Message.objects.count() == 1 and MessageEssai.objects.count() == 1
+
+
 def test_les_essais_expires_sont_effaces(client, cles, espaces):
     _poster(client, cles[1], _lot(1))
     espaces("worker")

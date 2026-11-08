@@ -81,7 +81,9 @@ def _envoyer(request):
     if cle:
         # Une clé d'essai et une clé réelle ne partagent jamais une réponse
         # gardée : le même Idempotency-Key repart en production (T-113).
-        cle = f"test:{cle}" if essai else cle
+        # Chaque environnement a son préfixe, si bien qu'aucune clé saisie
+        # ne peut prendre la forme rangée d'une clé de l'autre.
+        cle = f"{'test' if essai else 'live'}:{cle}"
         empreinte = services.empreinte(request.method, request.path, request.body)
         reservation = services.reserver(cle, empreinte)
         if reservation.reutilisee:
