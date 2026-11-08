@@ -102,6 +102,9 @@ def _autorise(autorisation: bool) -> None:
         raise PermissionDenied
 
 
+LIMITES_CLIENT = ("palier", "plafond_horaire", "plafond_journalier")
+
+
 @admin.register(Client)
 class ClientAdmin(admin.ModelAdmin):
     list_display = ("raison_sociale", "forme", "rccm", "ifu", "palier", "etat", "cree_le")
@@ -178,6 +181,32 @@ class ClientAdmin(admin.ModelAdmin):
         }
         contexte = {**(extra_context or {}), **actions}
         return super().change_view(request, object_id, form_url, contexte)
+
+    def get_readonly_fields(self, request, obj=None):
+        # Le palier et les plafonds règlent ce qu'un compte peut envoyer : seul
+        # le super-administrateur les modifie sur la fiche (qui, de la finance
+        # ou de l'exploitation, devrait les régler reste à trancher).
+        champs = super().get_readonly_fields(request, obj)
+        if not request.user.is_superuser:
+            champs = (*champs, *LIMITES_CLIENT)
+        return champs
+
+    def save_model(self, request, obj, form, change):
+        modifies = [champ for champ in LIMITES_CLIENT if change and champ in form.changed_data]
+        avant = Client.objects.filter(pk=obj.pk).values(*modifies).first() if modifies else None
+        super().save_model(request, obj, form, change)
+        if modifies:
+            from apps.core.audit import auditer
+
+            auditer(
+                "backoffice.client.limites",
+                obj,
+                auteur=request.user,
+                client=obj,
+                avant=avant,
+                apres={champ: getattr(obj, champ) for champ in modifies},
+                adresse_ip=adresse_ip(request),
+            )
 
     def get_urls(self):
         propres = [

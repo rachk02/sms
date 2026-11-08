@@ -178,3 +178,49 @@ def test_le_mode_de_reglement_ne_se_change_pas_par_la_fiche_du_client(client, ag
         client.post(adresse, donnees)
         compte.refresh_from_db()
         assert compte.mode_reglement != "LIVRAISON", profil
+
+
+def test_le_palier_et_les_plafonds_ne_changent_que_par_le_super_administrateur_avec_trace(
+    client, agents
+):
+    """Le palier et les plafonds d'un client se lisent sur sa fiche ; seul le
+    super-administrateur les modifie, et chaque modification va au journal
+    d'audit avec l'ancienne et la nouvelle valeur."""
+    compte = creer_client(raison_sociale="Faso Riz SA", forme=Client.Forme.SOCIETE)
+    horaire, journalier = compte.plafond_horaire, compte.plafond_journalier
+    adresse = reverse("admin:comptes_client_change", args=[compte.pk])
+    commun = {
+        "raison_sociale": "Faso Riz SA",
+        "forme": Client.Forme.SOCIETE,
+        "pays": "BF",
+        "contact_facturation": "",
+        "seuil_alerte_solde": 0,
+        "alerte_solde_armee": "on",
+    }
+    client.force_login(agents[roles.SUPPORT])
+    page = client.get(adresse).content.decode()
+    for champ in ("palier", "plafond_horaire", "plafond_journalier"):
+        assert f'name="{champ}"' not in page, champ
+    client.post(
+        adresse,
+        {**commun, "palier": Client.Palier.VERIFIE, "plafond_horaire": 1, "plafond_journalier": 2},
+    )
+    compte.refresh_from_db()
+    assert (compte.palier, compte.plafond_horaire, compte.plafond_journalier) == (
+        Client.Palier.DECOUVERTE,
+        horaire,
+        journalier,
+    )
+    assert not Audit.objects.filter(action="backoffice.client.limites").exists()
+
+    client.force_login(agents[SUPER])
+    reponse = client.post(
+        adresse,
+        {**commun, "palier": compte.palier, "plafond_horaire": 7, "plafond_journalier": 70},
+    )
+    assert reponse.status_code == 302
+    compte.refresh_from_db()
+    assert (compte.plafond_horaire, compte.plafond_journalier) == (7, 70)
+    trace = Audit.objects.get(action="backoffice.client.limites")
+    assert trace.valeur_avant == {"plafond_horaire": horaire, "plafond_journalier": journalier}
+    assert trace.valeur_apres == {"plafond_horaire": 7, "plafond_journalier": 70}
