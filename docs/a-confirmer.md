@@ -245,6 +245,81 @@ Points qui dépendent du déploiement réel, à trancher par l'utilisateur :
   du client. S'il réécrit l'en-tête `Host`, il faudra `CSRF_TRUSTED_ORIGINS`
   avec le nom de domaine réel.
 
+## Relecture du support, 8 novembre 2026
+
+Un correctif, avec son test vu échouer sur l'ancien code : une adresse
+d'ouverture de ticket au paramètre `campagne` ou `message` mal formé levait
+une erreur 500 ; elle rend désormais une page introuvable.
+
+Sain : pièces jointes reconnues au contenu (PDF, JPEG, PNG seulement, donc ni
+SVG ni HTML), 5 Mo au plus, chiffrées au repos, rangées sous un chemin tiré au
+hasard, le nom d'origine n'étant jamais un chemin ; aucun lien de
+téléchargement côté client, lien signé de quinze minutes pour les seuls agents
+qui traitent les tickets ; aucun contenu client rendu sans échappement, au
+portail comme au back-office ; courriels de notification en texte seul ;
+ticket, réponse et fragment HTMX lus sur le compte, cloisonnement en plus ;
+notes internes absentes du fil du client et des courriels ; verrou du ticket
+limité à sa ligne (correctif de T-102).
+
+Décidé par la session responsable en l'absence de l'utilisateur, à
+confirmer :
+
+- **Pièces jointes servies en ligne aux agents, option recommandée.** Le lien
+  signé de `fichiers.lien` ouvre le fichier dans le navigateur. Le risque est
+  faible : type contrôlé au contenu, origine du stockage distincte de celle du
+  back-office. Recommandé : demander au stockage un téléchargement
+  (`response-content-disposition=attachment`) ; non fait aujourd'hui, la
+  fonction servant aussi à d'autres écrans dont les appelants restent à
+  relire. Vérifier en préproduction que le stockage répond avec
+  `X-Content-Type-Options: nosniff`.
+- **Taille des envois contrôlée après réception.** La borne de 5 Mo est
+  vérifiée une fois tout le fichier reçu par Django. Le mandataire inverse
+  doit borner la taille des requêtes.
+
+## Relecture des notifications, 8 novembre 2026
+
+Un correctif, décidé en cours de relecture. Le module
+`notifications` prévu (file `courriels.sortants`, prestataire, modèles
+versionnés, journal des envois) n'existe pas encore : les courriels partent
+en direct par `apps.core.courriels.envoyer`, en texte seul, après la
+validation de la transaction. Aucune notification ne part par SMS. Six
+appelants relus : invitation et vérification d'adresse, réinitialisation du
+second facteur, support, confirmation de paiement, export de contacts,
+désactivation d'un point de réception de webhook.
+
+Sain : chaque courriel part vers un membre du compte concerné, jamais vers
+une adresse saisie ; aucun ne porte de donnée d'un autre compte. Les workers
+passent par le rôle `worker`, qui ignore le cloisonnement par construction ;
+chaque requête relue y filtre explicitement par client (contacts exportés,
+points de réception, membres prévenus).
+
+**Défaut certain, corrigé (07d787f), décidé par la session responsable en
+l'absence de l'utilisateur, à confirmer.** Un membre retiré du compte
+(`retirer_membre`, ou clôture du compte) continuait de recevoir des
+courriels, faute de relire `is_active` au moment de l'envoi :
+
+- **Support** : le demandeur retiré recevait chaque réponse d'un agent avec
+  tout le fil public du ticket, les rappels et la clôture.
+- **Export de contacts** : retiré entre sa demande et la production par le
+  worker, il recevait quand même le lien vers tout le répertoire exporté.
+- **Paiement** : la confirmation partait à l'initiateur retiré.
+
+Le destinataire est désormais relu au moment de l'envoi
+(`apps/comptes/selectors.py`). Support et paiement : au membre s'il est
+encore actif dans ce compte, sinon aux administrateurs actifs, sur le modèle
+de la désactivation d'un point de réception. Export : au seul demandeur
+encore actif, sinon à personne ; aucun lien vers le répertoire ne part à qui
+ne l'a pas demandé. Un test par appelant, vu échouer sur l'ancien code.
+
+À trancher par l'utilisateur :
+
+- **Lien d'export valable sept jours, envoyé par courriel.** C'est un lien
+  signé vers le stockage, sans connexion : quiconque obtient le courriel
+  télécharge tout le répertoire de contacts du compte. Deux options, qui
+  touchent à l'usage : un lien vers le portail, qui exige la connexion et
+  sert le fichier après contrôle des droits, ou une durée courte (24 heures
+  par exemple).
+
 ## Lot 7, crédits, tarifs, paiements, facturation
 
 **Ouverture du lot**
