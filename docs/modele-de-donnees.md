@@ -756,6 +756,21 @@ le courtier ne produit pas de seconde livraison. Index sur
 `(client_id, cree_le décroissant)`. Les deux tables sont cloisonnées (`core`
 0042).
 
+**`api_message_essai`** (T-113) : un message envoyé avec une clé d'essai ;
+rien ne part. `id` (uuid7), `client_id`, `cle_api` (préfixe de la clé),
+`numero_normalise`, `operateur`, `expediteur_libelle`, `segments`, `encodage`,
+`cout_unitaire`, `cout_total` (le coût qu'aurait eu le message, jamais
+réservé), `etat`, `issue` (l'état final simulé, choisi par le dernier chiffre
+du numéro), `motif_echec`, `date_reception`, `date_soumission`, `date_accuse`,
+`prochaine_etape_le` (nul une fois l'issue atteinte ; index partiel pour
+l'ordonnanceur), `historique` en jsonb (états datés), `expire_le` (trente
+jours). Index sur `(client_id, date_reception décroissante, id décroissant)`
+pour le journal par curseur. Hors du journal, des compteurs et du registre de
+crédits. Cloisonnée (`core` 0043).
+
+Précision de T-113 : `api_idempotence.cle` passe à 260 caractères, pour le
+préfixe `test:` des clés d'idempotence envoyées avec une clé d'essai.
+
 ## fichiers
 
 **`fichiers_fichier`** : `id`, `client_id`, `famille` parmi PIECE, IMPORT,

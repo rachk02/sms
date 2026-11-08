@@ -15,7 +15,8 @@ class Idempotence(Identifiable, Cloisonne):
     unique que la première requête soit validée, puis lit sa réponse. Une
     requête qui échoue emporte sa réservation avec elle."""
 
-    cle = models.CharField(max_length=255)
+    # 255 caractères saisis, plus le préfixe « test: » d'une clé d'essai (T-113).
+    cle = models.CharField(max_length=260)
     # SHA-256 de la méthode, du chemin et du corps de la requête.
     empreinte = models.CharField(max_length=64)
     statut_http = models.SmallIntegerField(null=True, blank=True)
@@ -99,3 +100,47 @@ class Livraison(Identifiable, Cloisonne):
 
     def __str__(self):
         return f"{self.evenement} vers {self.point_id}"
+
+
+class MessageEssai(Identifiable, Cloisonne):
+    """Un message envoyé avec une clé d'essai (T-113). Rien ne part : la ligne
+    porte ce qu'aurait été le message et son issue simulée, choisie par le
+    dernier chiffre du numéro. Hors du journal, des compteurs et du registre
+    de crédits ; effacée après trente jours."""
+
+    cle_api = models.CharField(max_length=12)
+    numero_normalise = models.CharField(max_length=20)
+    operateur = models.CharField(max_length=10)
+    expediteur_libelle = models.CharField(max_length=11)
+    segments = models.SmallIntegerField()
+    encodage = models.CharField(max_length=10)
+    cout_unitaire = models.IntegerField()
+    cout_total = models.IntegerField()
+    etat = models.CharField(max_length=20, default="RECU")
+    issue = models.CharField(max_length=20)
+    motif_echec = models.CharField(max_length=50, blank=True)
+    date_reception = models.DateTimeField()
+    date_soumission = models.DateTimeField(null=True, blank=True)
+    date_accuse = models.DateTimeField(null=True, blank=True)
+    # Instant de l'étape simulée suivante ; nul une fois l'issue atteinte.
+    prochaine_etape_le = models.DateTimeField(null=True, blank=True)
+    historique = models.JSONField(default=list)
+    expire_le = models.DateTimeField()
+
+    # Même interface de lecture qu'un message du journal.
+    campagne_id = None
+
+    class Meta:
+        db_table = "api_message_essai"
+        indexes = [
+            models.Index(fields=["client", "-date_reception", "-id"], name="essai_client_date"),
+            models.Index(
+                fields=["prochaine_etape_le"],
+                name="essai_etape_echue",
+                condition=models.Q(prochaine_etape_le__isnull=False),
+            ),
+            models.Index(fields=["expire_le"], name="essai_expiration"),
+        ]
+
+    def __str__(self):
+        return f"essai {self.id}"

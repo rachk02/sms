@@ -92,6 +92,8 @@ class Ordonnanceur(Worker):
         from asgiref.sync import sync_to_async
         from django.db import connections
 
+        from apps.api.essais import avancer as avancer_essais
+        from apps.api.essais import purger as purger_essais
         from apps.api.services import purger as purger_idempotence
         from apps.backoffice.services import suspendre_sur_alertes
         from apps.campagnes.controle import controler_terminees
@@ -159,6 +161,8 @@ class Ordonnanceur(Worker):
                         await sync_to_async(controler_terminees)()
                         # Clés d'idempotence de l'API expirées (T-108).
                         await sync_to_async(purger_idempotence)()
+                        # Messages du bac à sable de plus de trente jours (T-113).
+                        await sync_to_async(purger_essais)()
                         dernier_rapprochement = time.monotonic()
                     # Paiements en attente revérifiés, rappel reçu ou non, puis
                     # expirés au-delà du délai (T-86).
@@ -177,6 +181,8 @@ class Ordonnanceur(Worker):
                     # campagnes avancent aussi.
                     await sync_to_async(planifier)()
                     await sync_to_async(publier_campagnes)()
+                    # Accusés simulés du bac à sable, à chaque tour (T-113).
+                    await sync_to_async(avancer_essais)()
                     await bus.relayer(canal)
                     await self._attendre(self.periode_relais_s)
             finally:

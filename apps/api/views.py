@@ -12,7 +12,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from apps.campagnes.services import LOT_MAXIMUM, CampagneRefusee, accepter_unitaires
-from apps.comptes.models import Client
+from apps.comptes.models import CleApi, Client
 from apps.comptes.permissions import permission_requise
 from apps.comptes.services import regler_seuil_alerte
 from apps.credits.services import SoldeOccupe, solde
@@ -20,7 +20,7 @@ from apps.expediteurs.models import OPERATEURS
 from apps.expediteurs.selectors import du_compte
 from apps.journal import selectors as journal
 
-from . import documentation, services
+from . import documentation, essais, services
 from . import webhooks as webhooks_services
 from .auth import VERSION, erreur, reponse, route_api
 from .models import Livraison, PointReception
@@ -53,6 +53,10 @@ def _sort(envoi) -> dict:
     }
 
 
+def _essai(request) -> bool:
+    return request.cle_api.environnement == CleApi.Environnement.TEST
+
+
 def _envoyer(request):
     """POST /v1/messages : un message, ou un lot sous `messages`. Réponse 202
     dès l'acceptation, un identifiant par message ; le suivi est asynchrone."""
@@ -73,7 +77,11 @@ def _envoyer(request):
             "IDEMPOTENCE_INVALIDE",
             f"La clé d'idempotence dépasse {services.LONGUEUR_MAX} caractères.",
         )
+    essai = _essai(request)
     if cle:
+        # Une clé d'essai et une clé réelle ne partagent jamais une réponse
+        # gardée : le même Idempotency-Key repart en production (T-113).
+        cle = f"test:{cle}" if essai else cle
         empreinte = services.empreinte(request.method, request.path, request.body)
         reservation = services.reserver(cle, empreinte)
         if reservation.reutilisee:
@@ -87,9 +95,8 @@ def _envoyer(request):
                 reservation.reponse, reservation.statut_http, {"Idempotent-Rejoue": "true"}
             )
     try:
-        sorts = accepter_unitaires(
-            request.cle_api.client, demandes, cle_api=request.cle_api.prefixe
-        )
+        porte = essais.accepter if essai else accepter_unitaires
+        sorts = porte(request.cle_api.client, demandes, cle_api=request.cle_api.prefixe)
     except SoldeOccupe:
         # Rien n'est gardé : un nouvel essai avec la même clé sera traité.
         return erreur(
@@ -145,9 +152,8 @@ def _journal(request):
         limite = int(request.GET.get("limite") or LIMITE_PAR_DEFAUT)
         if not 1 <= limite <= LIMITE_MAXIMUM:
             raise journal.RechercheRefusee(f"`limite` va de 1 à {LIMITE_MAXIMUM}.")
-        page = journal.rechercher(
-            request.cle_api.client_id, filtres, request.GET.get("apres") or None, limite
-        )
+        lire = essais.rechercher if _essai(request) else journal.rechercher
+        page = lire(request.cle_api.client_id, filtres, request.GET.get("apres") or None, limite)
     except ValueError as refus:
         # RechercheRefusee en est une, comme une limite qui n'est pas un nombre.
         motif = (
@@ -173,7 +179,8 @@ def messages(request):
 @route_api("GET")
 def message(request, message_id):
     """GET /v1/messages/<id> : le statut d'un message et son historique daté."""
-    fiche = journal.fiche_par_identifiant(request.cle_api.client_id, message_id)
+    lire = essais.fiche if _essai(request) else journal.fiche_par_identifiant
+    fiche = lire(request.cle_api.client_id, message_id)
     if fiche is None:
         return erreur(
             404, "MESSAGE_INCONNU", "Aucun message de ce compte ne porte cet identifiant."
@@ -358,6 +365,7 @@ def documentation_api(request):
             "schema": base + "/v1/openapi.json",
             "regles": documentation.REGLES_INTEGRATEUR,
             "authentification": documentation.AUTHENTIFICATION,
+            "bac_a_sable": documentation.BAC_A_SABLE,
             "quotas": documentation.QUOTAS,
             "idempotence": documentation.IDEMPOTENCE,
             "routes": routes,

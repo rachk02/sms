@@ -58,6 +58,22 @@ def test_chaque_refus_d_envoi_est_documente():
     assert rendus == set(documentation.REFUS)
 
 
+def test_le_bac_a_sable_documente_suit_le_code():
+    from apps.api.essais import ISSUES
+
+    # Le tableau des issues écrit dans le texte est celui du code.
+    for chiffres, issue in (
+        ("0 à 6", "LIVRE"),
+        ("7", "NON_LIVRE"),
+        ("8", "EXPIRE"),
+        ("9", "SANS_ACCUSE"),
+    ):
+        premier = chiffres[0]
+        assert ISSUES[premier] == issue
+        assert chiffres in documentation.BAC_A_SABLE
+    assert {ISSUES[c] for c in "0123456"} == {"LIVRE"}
+
+
 def test_les_etats_et_les_evenements_suivent_le_code():
     assert set(documentation.ETATS) == set(Etat.values)
     assert set(documentation.EVENEMENTS) == set(PointReception.Evenement.values)

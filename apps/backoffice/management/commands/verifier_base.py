@@ -35,6 +35,7 @@ CLOISONNEES = (
     "api_idempotence",
     "api_point_reception",
     "api_livraison",
+    "api_message_essai",
     "fichiers_fichier",
     "campagnes_campagne",
     "campagnes_destinataire",

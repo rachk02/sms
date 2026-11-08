@@ -737,27 +737,15 @@ class Envoi:
         return self.message is not None
 
 
-def accepter_unitaires(client, demandes: list[dict], *, cle_api: str = "") -> list[Envoi]:
-    """Accepte des envois hors campagne : chacun est écrit au journal, son coût
-    réservé, puis il est déposé dans la file prioritaire de son réseau. C'est
-    la porte des envois de l'API, unitaires comme par lot.
-
-    Une demande invalide n'annule pas les autres : chacune reçoit son sort.
-    Le contrôle qui ne dépend que de la demande se fait d'abord, hors de tout
-    verrou ; viennent ensuite le plafond du compte (les premières passent),
-    puis la réservation groupée du crédit (les premières passent tant que le
-    disponible suffit). La liste noire, le bac à sable et l'état de
-    l'expéditeur au moment de partir restent contrôlés par le moteur d'envoi,
-    comme pour tout message.
-
-    Chaque demande porte `numero`, `texte` et, facultatif, `expediteur` (le
-    numéro court par défaut). À appeler dans une transaction."""
-    from redis.exceptions import RedisError
-
-    from apps.conformite.plafonds import consommer_lot
+def controler_unitaires(client, demandes: list[dict]):
+    """Les contrôles d'un envoi hors campagne qui ne dépendent que de la
+    demande : numéro, réseau, texte, expéditeur approuvé sur le réseau, tarif.
+    Renvoie les sorts (refus nommés posés) et, pour chaque demande valide,
+    son sort, sa ligne de journal et son coût. N'écrit rien : la porte réelle
+    (`accepter_unitaires`) et le bac à sable de l'API (T-113) passent par ici,
+    pour que leurs refus ne divergent jamais."""
     from apps.core.encodage import analyser
     from apps.expediteurs.controle import couvert
-    from apps.journal.services import enregistrer_messages, mettre_en_file_lot
     from apps.telecom.prefixes import table
 
     _compte_ouvert(client)
@@ -816,6 +804,30 @@ def accepter_unitaires(client, demandes: list[dict], *, cle_api: str = "") -> li
                 prix[reseau] * segments,
             )
         )
+    return sorts, valides
+
+
+def accepter_unitaires(client, demandes: list[dict], *, cle_api: str = "") -> list[Envoi]:
+    """Accepte des envois hors campagne : chacun est écrit au journal, son coût
+    réservé, puis il est déposé dans la file prioritaire de son réseau. C'est
+    la porte des envois de l'API, unitaires comme par lot.
+
+    Une demande invalide n'annule pas les autres : chacune reçoit son sort.
+    Le contrôle qui ne dépend que de la demande se fait d'abord, hors de tout
+    verrou ; viennent ensuite le plafond du compte (les premières passent),
+    puis la réservation groupée du crédit (les premières passent tant que le
+    disponible suffit). La liste noire, le bac à sable et l'état de
+    l'expéditeur au moment de partir restent contrôlés par le moteur d'envoi,
+    comme pour tout message.
+
+    Chaque demande porte `numero`, `texte` et, facultatif, `expediteur` (le
+    numéro court par défaut). À appeler dans une transaction."""
+    from redis.exceptions import RedisError
+
+    from apps.conformite.plafonds import consommer_lot
+    from apps.journal.services import enregistrer_messages, mettre_en_file_lot
+
+    sorts, valides = controler_unitaires(client, demandes)
     # Plafond horaire et journalier du compte, en messages (T-101, T-107).
     try:
         places, periode = consommer_lot(client, len(valides), cle_api=cle_api)

@@ -241,6 +241,7 @@ def _annoncer_sort(message: Message, vers: str, horodatage: datetime, motif: str
             "motif_echec": motif or None,
             "horodatage": horodatage.isoformat(),
             "recu_le": message.date_reception.isoformat(),
+            "environnement": "LIVE",
         },
         cle_idempotence=f"webhook:{message.id}:{vers}",
     )

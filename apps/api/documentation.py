@@ -50,6 +50,18 @@ AUTHENTIFICATION = (
     "aussitôt. Les clés sk_live_ envoient de vrais messages et consomment du crédit."
 )
 
+BAC_A_SABLE = (
+    "Une clé sk_test_ ouvre le bac à sable : mêmes routes, mêmes contrôles, réponses "
+    "de même forme qu'en production, mais aucun message ne part, aucun crédit n'est "
+    "consommé et le plafond du compte n'est pas décompté. Le dernier chiffre du numéro "
+    "choisit l'accusé simulé : 0 à 6 livré, 7 non livré, 8 expiré, 9 sans accusé. Le "
+    "message est soumis une seconde après sa réception, son accusé arrive quatre "
+    "secondes après (vingt pour le sans accusé), et l'issue part en webhook avec "
+    "environnement TEST dans les données. Les messages d'essai restent lisibles trente "
+    "jours, uniquement avec une clé d'essai ; une clé d'idempotence d'essai ne sert "
+    "jamais en production."
+)
+
 QUOTAS = (
     "Chaque clé dispose d'une rafale par seconde et d'un débit soutenu par minute ; "
     "le compte, d'un plafond horaire et journalier de messages. Les en-têtes "
@@ -527,7 +539,7 @@ def openapi(base: str = "") -> dict:
             "title": TITRE,
             "version": VERSION,
             "description": "\n\n".join(
-                (*REGLES_INTEGRATEUR, AUTHENTIFICATION, QUOTAS, IDEMPOTENCE)
+                (*REGLES_INTEGRATEUR, AUTHENTIFICATION, BAC_A_SABLE, QUOTAS, IDEMPOTENCE)
             ),
         },
         "servers": [{"url": base or "/"}],
