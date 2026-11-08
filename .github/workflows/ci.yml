@@ -61,4 +61,9 @@ jobs:
           cp .env.example .env
           docker run --rm --env-file .env -e DJANGO_SETTINGS_MODULE=config.settings.recette \
             sms:ci python manage.py check
-          docker run --rm --env-file .env sms:ci gunicorn --check-config config.wsgi:application
+          # prod.py refuse le moteur de courriel de la console et une adresse
+          # hors https : on lui donne ce qu'une production doit fournir.
+          docker run --rm --env-file .env \
+            -e SMS_MOTEUR_COURRIEL=django.core.mail.backends.smtp.EmailBackend \
+            -e PORTAIL_URL=https://sms.exemple.invalid \
+            sms:ci gunicorn --check-config config.wsgi:application

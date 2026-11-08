@@ -31,6 +31,8 @@ ENV_WEB = {
     "MINIO_ENDPOINT": "http://127.0.0.1:9000",
     "MINIO_ROOT_USER": "sms",
     "MINIO_ROOT_PASSWORD": "secret",
+    "SMS_MOTEUR_COURRIEL": "django.core.mail.backends.smtp.EmailBackend",
+    "PORTAIL_URL": "https://sms.exemple.bf",
 }
 
 
