@@ -162,3 +162,26 @@ def test_un_export_de_cent_mille_contacts_part_en_file_et_revient_par_lien_signe
     envoyes = len(mail.outbox)
     assert recherche.produire(export.id).fichier_id == fini.fichier_id
     assert len(mail.outbox) == envoyes
+
+
+def test_le_lien_d_export_ne_part_pas_vers_un_membre_retire(client):
+    """Retiré entre sa demande et la production, le demandeur ne reçoit pas le
+    lien vers le répertoire, et personne d'autre ne le reçoit à sa place."""
+    from apps.comptes.models import Utilisateur
+    from apps.comptes.services import retirer_membre
+
+    _inserer(client, 3)
+    administrateur = creer_utilisateur(
+        courriel="chef@exemple.bf",
+        mot_de_passe="x",
+        nom="Chef",
+        client=client,
+        role=Utilisateur.Role.ADMIN,
+    )
+    demandeur = creer_utilisateur(courriel="u@exemple.bf", mot_de_passe="x", nom="U", client=client)
+    export = recherche.demander_export(client=client, demandeur=demandeur, filtres=Filtres())
+    retirer_membre(demandeur, auteur=administrateur)
+    mail.outbox.clear()
+    fini = recherche.produire(export.id)
+    assert fini.etat == Export.Etat.TERMINE
+    assert mail.outbox == []

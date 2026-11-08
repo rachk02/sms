@@ -138,14 +138,20 @@ def _confirmer(transaction_: Transaction, statut: fournisseurs.Statut) -> None:
     )
     if transaction_.initie_par_id:
         # Même si le client a fermé son navigateur : le courriel part au commit.
-        envoyer(
-            transaction_.initie_par.courriel,
-            "Rechargement confirmé",
-            f"Votre paiement de {transaction_.montant} FCFA est confirmé : "
-            f"{transaction_.credits} FCFA de crédits sont portés à votre solde.\n\n"
-            f"Référence : {transaction_.reference_transaction}\n"
-            f"{settings.PORTAIL_URL}/paiements/{transaction_.id}\n",
-        )
+        # À l'initiateur s'il est encore membre actif, sinon aux administrateurs.
+        from apps.comptes.selectors import courriels_a_prevenir
+
+        for destinataire in courriels_a_prevenir(
+            transaction_.client_id, transaction_.initie_par_id
+        ):
+            envoyer(
+                destinataire,
+                "Rechargement confirmé",
+                f"Votre paiement de {transaction_.montant} FCFA est confirmé : "
+                f"{transaction_.credits} FCFA de crédits sont portés à votre solde.\n\n"
+                f"Référence : {transaction_.reference_transaction}\n"
+                f"{settings.PORTAIL_URL}/paiements/{transaction_.id}\n",
+            )
     publier(
         "paiements.transaction.confirmee",
         client_id=transaction_.client_id,

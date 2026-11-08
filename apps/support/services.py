@@ -126,9 +126,15 @@ def _delai_annonce(ticket: Ticket) -> str:
 
 
 def _courriel(ticket: Ticket, sujet: str, texte: str) -> None:
-    if ticket.demandeur_id and ticket.demandeur.courriel:
+    """Au demandeur s'il est encore membre actif du compte, relu à l'envoi ;
+    sinon aux administrateurs actifs : un membre retiré ne reçoit plus le fil."""
+    from apps.comptes.selectors import courriels_a_prevenir
+
+    if not ticket.demandeur_id:
+        return
+    for destinataire in courriels_a_prevenir(ticket.client_id, ticket.demandeur_id):
         envoyer(
-            ticket.demandeur.courriel,
+            destinataire,
             f"[Ticket {ticket.reference}] {sujet}",
             f"{texte}\n\nCompte : {ticket.client.raison_sociale}\n"
             f"Ticket : {ticket.objet}\n{_adresse_ticket(ticket)}\n",

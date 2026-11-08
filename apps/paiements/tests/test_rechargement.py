@@ -172,3 +172,27 @@ def test_le_back_office_coupe_la_tva_et_c_est_trace(en_tant_que_worker):
     assert services.montants(125) == services.Montants(125, 0, 125)
     (trace,) = Audit.objects.filter(action="paiements.reglage.modifie")
     assert trace.valeur_avant is None and trace.valeur_apres["tva_active"] is False
+
+
+def test_la_confirmation_ne_part_pas_vers_un_initiateur_retire(en_tant_que_worker):
+    """L'initiateur retiré du compte avant la confirmation ne la reçoit pas :
+    elle va aux administrateurs actifs du compte."""
+    from apps.comptes.services import retirer_membre
+
+    administrateur = _membre()
+    initiateur = creer_utilisateur(
+        courriel="caisse@fasoriz.bf",
+        mot_de_passe="x-1234-abcd",
+        nom="Caisse",
+        client=administrateur.client,
+        role=Utilisateur.Role.UTILISATEUR,
+        courriel_verifie_le=timezone.now(),
+    )
+    transaction_, _ = services.initier(
+        administrateur.client, credits_ht=10_000, fournisseur_nom="simule", auteur=initiateur
+    )
+    retirer_membre(initiateur, auteur=administrateur)
+    mail.outbox.clear()
+    fournisseurs.simuler(transaction_.reference_transaction, montant=11_800, etat="CONFIRME")
+    services.relancer()
+    assert [m.to for m in mail.outbox] == [["admin@fasoriz.bf"]]

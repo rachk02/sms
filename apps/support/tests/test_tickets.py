@@ -347,3 +347,25 @@ def test_un_rattachement_mal_forme_rend_une_page_introuvable(client, membre, par
     client.raise_request_exception = False
     reponse = client.get(f"/support/nouveau?{urlencode(parametres)}")
     assert reponse.status_code == 404
+
+
+def test_un_membre_retire_ne_recoit_plus_le_fil_du_support(compte, membre, agent):
+    """Un ancien membre ne reçoit plus les réponses de son ticket : elles vont
+    aux administrateurs actifs du compte."""
+    from apps.comptes.models import Utilisateur
+    from apps.comptes.services import retirer_membre
+
+    administrateur = creer_utilisateur(
+        courriel="chef@fasoriz.bf",
+        mot_de_passe="x-1234-abcd",
+        nom="Chef",
+        client=compte,
+        role=Utilisateur.Role.ADMIN,
+        courriel_verifie_le=timezone.now(),
+    )
+    ticket = _ticket(compte, membre)
+    retirer_membre(membre, auteur=administrateur)
+    mail.outbox.clear()
+    services.repondre_agent(ticket, agent=agent, corps="Voici la marche à suivre.")
+    assert [m.to for m in mail.outbox] == [["chef@fasoriz.bf"]]
+    assert all("awa@fasoriz.bf" not in m.to for m in mail.outbox)

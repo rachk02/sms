@@ -30,6 +30,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from apps.comptes.selectors import membre_actif
 from apps.core import courriels
 from apps.core.evenements import publier
 from apps.core.tableur import cellules
@@ -238,11 +239,15 @@ def produire(export_id) -> Export:
             lignes=lignes - 1,
             termine_le=timezone.now(),
         )
-        courriels.envoyer(
-            export.courriel,
-            "Votre export de contacts est prêt",
-            f"Votre export de {lignes - 1} contacts est prêt. Il se télécharge par ce "
-            f"lien, valable sept jours :\n\n{fichiers.lien(fichier, DUREE_LIEN_EXPORT)}\n",
-        )
+        # Le lien vers le répertoire ne part qu'au demandeur, et seulement s'il
+        # est encore membre actif du compte : retiré entre-temps, il ne le
+        # reçoit pas, et personne ne le reçoit à sa place.
+        if membre_actif(export.client_id, export.courriel):
+            courriels.envoyer(
+                export.courriel,
+                "Votre export de contacts est prêt",
+                f"Votre export de {lignes - 1} contacts est prêt. Il se télécharge par ce "
+                f"lien, valable sept jours :\n\n{fichiers.lien(fichier, DUREE_LIEN_EXPORT)}\n",
+            )
     export.refresh_from_db()
     return export
