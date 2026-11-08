@@ -65,6 +65,26 @@ Ce ne sont pas des choix faits, mais des décisions qui manquent.
   par les workers. À confirmer : les laisser ainsi, ou les réserver aux rôles
   qui s'en servent.
 
+## Relecture de sécurité de l'API publique, 8 novembre 2026
+
+Trois défauts certains y ont été relevés et se corrigent chacun par son commit
+et son test : le rebond DNS à la livraison d'un webhook, la collision des clés
+d'idempotence entre bac à sable et production, la réactivation d'un point au
+delà du maximum. Le délai par opération réseau des webhooks devient une
+échéance totale. Deux points restent ouverts, décidés par la session
+responsable en l'absence de l'utilisateur, à confirmer :
+
+- **Port libre sur l'adresse d'un webhook, risque résiduel.** Un point de
+  réception peut viser n'importe quel port d'un hôte public. Depuis que la
+  connexion part vers l'adresse vérifiée, le sondage ne peut plus viser que des
+  hôtes publics ; restreindre les ports pourrait casser des intégrateurs.
+  Option possible : 443 et 80 seulement en production.
+- **Temps de réponse d'une clé au préfixe inconnu, accepté.** Une clé dont le
+  préfixe n'existe pas est refusée plus vite qu'une clé au secret faux, la
+  vérification Argon2 n'ayant pas lieu : l'écart révèle si un préfixe existe.
+  Accepté sans changement, le préfixe n'étant pas secret (il s'affiche dans
+  l'espace du compte).
+
 ## Lot 7, crédits, tarifs, paiements, facturation
 
 **Ouverture du lot**
