@@ -199,3 +199,26 @@ def test_la_cle_des_codes_a_noter_ne_reste_pas_en_session_apres_confirmation(cli
     _activer(client)
     client.post("/second-facteur/codes", {"notes": "oui"})
     assert CLE_CODES not in client.session
+
+
+def test_le_mot_de_passe_seul_ne_remplace_pas_un_second_facteur_actif(client):
+    """Avec le seul mot de passe, la page d'activation ne doit ni réécrire le
+    secret de la victime ni ouvrir la session."""
+    utilisateur = _utilisateur()
+    secret = second_facteur.nouveau_secret()
+    second_facteur.activer(utilisateur, secret, pyotp.TOTP(secret).now())
+    _connecter(client)
+    reponse = client.get("/second-facteur/activer")
+    assert reponse.status_code == 302
+    assert reponse["Location"].startswith("/second-facteur/verifier")
+    # Même en postant un code tiré d'un secret choisi par l'intrus.
+    autre = second_facteur.nouveau_secret()
+    session = client.session
+    session["second_facteur_secret_en_cours"] = autre
+    session.save()
+    client.post("/second-facteur/activer", {"code": pyotp.TOTP(autre).now()})
+    utilisateur.refresh_from_db()
+    assert dechiffrer(utilisateur.second_facteur_secret) == secret
+    assert client.get("/membres")["Location"].startswith("/second-facteur/verifier")
+    with pytest.raises(second_facteur.CodeRefuse):
+        second_facteur.activer(utilisateur, autre, pyotp.TOTP(autre).now())

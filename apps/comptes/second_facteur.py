@@ -83,7 +83,12 @@ def presenter(code: str) -> str:
 @transaction.atomic
 def activer(utilisateur: Utilisateur, secret: str, code: str) -> list[str]:
     """Active le second facteur si le code prouve que l'application est réglée.
-    Renvoie les codes de secours, en clair pour la seule et unique fois."""
+    Renvoie les codes de secours, en clair pour la seule et unique fois.
+    Refusé si un second facteur est déjà actif : il ne se remplace pas sans
+    passer par la réinitialisation."""
+    courant = Utilisateur.objects.select_for_update().get(pk=utilisateur.pk)
+    if courant.second_facteur_actif:
+        raise CodeRefuse("Un second facteur est déjà réglé sur ce compte.")
     pas = _pas_valide(secret, _normaliser_code(code), None)
     if pas is None:
         raise CodeRefuse("Code invalide : vérifiez l'heure de votre téléphone et réessayez.")

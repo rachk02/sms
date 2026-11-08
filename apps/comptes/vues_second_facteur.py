@@ -24,7 +24,14 @@ def _suivant(request) -> str:
 @login_required
 def activer(request):
     """Régler l'application : le secret n'est enregistré qu'une fois qu'un code
-    a prouvé que l'application le connaît."""
+    a prouvé que l'application le connaît.
+
+    Un second facteur déjà actif ne se règle pas de nouveau ici : la page est
+    ouverte avant sa présentation, et le seul mot de passe suffirait sinon à
+    remplacer le secret et à ouvrir la session. Un téléphone perdu passe par
+    la réinitialisation, faite par un agent."""
+    if request.user.second_facteur_actif:
+        return redirect("second-facteur-verifier")
     secret = request.session.get(CLE_SECRET) or second_facteur.nouveau_secret()
     request.session[CLE_SECRET] = secret
     erreur = ""
