@@ -4,6 +4,8 @@ Fiches F-37, F-38, F-39, F-40, F-41 et F-47, soit 53 à 85 jours-homme. Quatorze
 
 Découpage très provisoire. C'est le lot le plus éloigné, celui dont le contenu bougera le plus, et celui qui sort du périmètre de lancement en cas de retard. Chaque bloc ci-dessous est indépendant des autres et se prend ou se laisse séparément.
 
+**Hors du périmètre de lancement** (décision de l'utilisateur du 8 novembre 2026) : le lot entier est reporté après la mise en service.
+
 ## Qualification des bases, F-37
 
 ### T-115 · Intégration d'un fournisseur d'interrogation réseau

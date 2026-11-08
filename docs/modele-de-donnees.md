@@ -676,17 +676,25 @@ par version, pour savoir ce qu'a reçu un client à une date donnée.
 
 ## support
 
-**`support_ticket`** : `id`, `client_id`, `demandeur_id`, `categorie`,
-`priorite` parmi P1, P2, P3, P4, `etat` parmi NOUVEAU, PRIS_EN_CHARGE,
-ATTENTE_CLIENT, ESCALADE_N2, ESCALADE_RESEAU, RESOLU, CLOS, `objet`,
-`contexte` en jsonb pour l'objet technique rattaché, `agent_id`,
-`premiere_reponse_le`, `resolu_le`, `clos_le`.
+**`support_ticket`** : `id`, `client_id`, `demandeur_id`, `canal` parmi
+FORMULAIRE, COURRIEL, TELEPHONE, INFORMEL, `categorie` parmi les douze
+catégories du support, `priorite` parmi P1, P2, P3, P4 (fixée par la
+catégorie), `etat` parmi NOUVEAU, PRIS_EN_CHARGE, ATTENTE_CLIENT, ESCALADE_N2,
+ESCALADE_RESEAU, RESOLU, CLOS, `objet`, `contexte` en jsonb pour l'objet
+technique rattaché, `agent_id`, `precedent_id` (le ticket clos que celui-ci
+continue), `cree_le`, `modifie_le`, `premiere_reponse_le`, `resolu_le`,
+`clos_le`, `resolution`. Ajoutés par T-102, à confirmer : `attente_depuis` et
+`preavis_le` pour la clôture sans réponse, `reference_reseau` et `relance_le`
+pour l'escalade à l'opérateur, `engagement_consomme_s` et `engagement_depuis`
+pour le compteur d'engagement, arrêté quand `engagement_depuis` est nul. Index
+`(client_id, cree_le)` et `(etat, cree_le)`. Cloisonnée par client.
 
 **`support_message`** : `id`, `client_id`, `ticket_id`, `auteur_id`, `interne`
-booléen, `corps`, `cree_le`.
+booléen, `corps`, `cree_le`. Cloisonnée par client ; une note interne n'est
+jamais lue côté client.
 
 **`support_piece`** : `id`, `client_id`, `message_id`, `fichier_id` référence
-`fichiers_fichier`, `cree_le`.
+`fichiers_fichier`, `cree_le`. Cloisonnée par client.
 
 **`support_incident`** : `id`, `titre`, `composants` en tableau parmi
 APPLICATION, API, ORANGE, MOOV, TELECEL, ACCUSES, RECHARGEMENT, `etat` parmi

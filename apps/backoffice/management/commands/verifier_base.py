@@ -16,6 +16,9 @@ from django.db.migrations.executor import MigrationExecutor
 CLOISONNEES = (
     "comptes_client",
     "conformite_alerte_fraude",
+    "support_ticket",
+    "support_message",
+    "support_piece",
     "journal_message",
     "journal_evenement",
     "journal_destinataire",

@@ -1,0 +1,9 @@
+<ol class="space-y-2 text-sm">
+  {% for message in fil %}
+    <li class="rounded border border-slate-200 {% if message.auteur.is_staff %}bg-slate-50{% else %}bg-white{% endif %} p-3">
+      <p class="text-xs text-slate-500">{% if message.auteur.is_staff %}EL-IMMEKA{% else %}{{ message.auteur.nom|default:"Vous" }}{% endif %}, le {{ message.cree_le|date:"d/m/Y à H:i" }}</p>
+      <p class="mt-1 whitespace-pre-wrap">{{ message.corps }}</p>
+      {% for piece in message.pieces.all %}<p class="mt-1 text-xs text-slate-600">Pièce jointe : {{ piece.fichier.nom_origine }}</p>{% endfor %}
+    </li>
+  {% endfor %}
+</ol>

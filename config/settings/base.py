@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "apps.contacts",
     "apps.campagnes",
     "apps.paiements",
+    "apps.support",
     "apps.api",
     "apps.backoffice",
 ]

@@ -1,0 +1,68 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<p>
+  {{ ticket.client }} ; {{ ticket.get_categorie_display }} ({{ ticket.priorite }}, niveau {{ engagement.niveau }}) ;
+  {{ ticket.get_etat_display|lower }} ; arrivé par {{ ticket.get_canal_display|lower }} ;
+  demandeur {{ ticket.demandeur.courriel|default:"aucun" }} ; agent {{ ticket.agent|default:"aucun" }}.
+  {% if ticket.precedent %}Fait suite au ticket <a href="{% url 'admin:support_ticket_traiter' ticket.precedent.id %}">{{ ticket.precedent.reference }}</a>.{% endif %}
+</p>
+<p>
+  Engagement de première réponse : {{ engagement.delai_min }} minutes{% if not engagement.continu %} ouvrées{% endif %},
+  {{ engagement.consomme_min }} consommées{% if engagement.arrete %}, compteur arrêté{% endif %}.
+  {% if ticket.premiere_reponse_le %}Première réponse le {{ ticket.premiere_reponse_le|date:"d/m/Y à H:i" }}.{% elif engagement.en_retard %}<strong>Hors délai.</strong>{% endif %}
+  {% if ticket.etat == "ESCALADE_RESEAU" %}Dossier opérateur {{ ticket.reference_reseau }}, relance le {{ ticket.relance_le|date:"d/m/Y" }}.{% endif %}
+  {% if ticket.etat == "ATTENTE_CLIENT" %}En attente depuis le {{ ticket.attente_depuis|date:"d/m/Y à H:i" }}{% if ticket.preavis_le %}, préavis envoyé le {{ ticket.preavis_le|date:"d/m/Y" }}{% endif %}.{% endif %}
+</p>
+{% if ticket.etat == "NOUVEAU" or not ticket.agent %}
+<form method="post">{% csrf_token %}<input type="hidden" name="action" value="prendre"><input type="submit" value="Prendre en charge"></form>
+{% endif %}
+
+{% if contexte_technique %}
+<h2>Contexte technique</h2>
+<table>
+  {% for cle, valeur in contexte_technique %}<tr><th>{{ cle }}</th><td>{{ valeur }}</td></tr>{% endfor %}
+</table>
+{% if historique %}
+<ul>{% for etape in historique %}<li>{{ etape.horodatage }} : {{ etape.etat }}{% if etape.details %} ({{ etape.details }}){% endif %}</li>{% endfor %}</ul>
+{% endif %}
+{% endif %}
+
+<h2>Fil</h2>
+<ol>
+  {% for message, pieces in fil %}
+    <li>
+      <p><strong>{% if message.interne %}Note interne de {{ message.auteur }}{% elif message.auteur.is_staff %}{{ message.auteur }} (EL-IMMEKA){% else %}{{ message.auteur|default:"Client" }}{% endif %}</strong>, le {{ message.cree_le|date:"d/m/Y à H:i" }}</p>
+      <p style="white-space: pre-wrap">{{ message.corps }}</p>
+      {% for nom, adresse in pieces %}<p>Pièce jointe : <a href="{{ adresse }}">{{ nom }}</a></p>{% endfor %}
+    </li>
+  {% endfor %}
+</ol>
+
+{% if ticket.etat != "CLOS" %}
+<h2>Répondre</h2>
+<form method="post" novalidate>
+  {% csrf_token %}
+  <input type="hidden" name="action" value="repondre">
+  {% include "admin/backoffice/_champs.html" with formulaire=reponse %}
+  <div class="submit-row"><input type="submit" class="default" value="Envoyer"></div>
+</form>
+{% endif %}
+
+{% if etat.fields.etat.choices %}
+<h2>Changer l'état</h2>
+<form method="post" novalidate>
+  {% csrf_token %}
+  <input type="hidden" name="action" value="etat">
+  {% include "admin/backoffice/_champs.html" with formulaire=etat %}
+  <div class="submit-row"><input type="submit" value="Changer l'état"></div>
+</form>
+{% endif %}
+
+<h2>Corriger la catégorie</h2>
+<form method="post" novalidate>
+  {% csrf_token %}
+  <input type="hidden" name="action" value="categorie">
+  {% include "admin/backoffice/_champs.html" with formulaire=categorie %}
+  <div class="submit-row"><input type="submit" value="Corriger"></div>
+</form>
+{% endblock %}

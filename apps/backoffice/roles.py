@@ -29,6 +29,7 @@ ROLES = {
         "backoffice.suspendre_client": None,
         "backoffice.cloturer_client": None,
         "backoffice.reinitialiser_second_facteur": None,
+        "support.ticket": ("view", "add", "change"),
     },
     EXPLOITATION: {
         "comptes.client": _VOIR,
@@ -41,6 +42,8 @@ ROLES = {
         "conformite.motproscrit": _TOUT,
         "conformite.reglefraude": ("view", "change"),
         "conformite.alertefraude": ("view", "change"),
+        # Le niveau 2 (liaisons, accusés, intégration), à confirmer.
+        "support.ticket": ("view", "change"),
     },
     FINANCE: {
         "comptes.client": _VOIR,

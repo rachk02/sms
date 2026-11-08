@@ -3,6 +3,7 @@ from django import forms
 from apps.comptes.models import Client, Piece, pieces_attendues
 from apps.credits.models import Grille
 from apps.paiements.services import MANUELS
+from apps.support.models import Ticket
 from apps.telecom.models import Connecteur, Operateur
 from apps.telecom.services import ConfigurationRefusee, verifier_parametres
 
@@ -191,3 +192,76 @@ class TraitementForm(forms.Form):
         help_text="Ce qui a été vérifié et décidé : il figurera au journal d'audit. Une alerte "
         "critique traitée débloque la plage.",
     )
+
+
+# Billetterie (T-102)
+
+
+class TicketReponseForm(forms.Form):
+    corps = forms.CharField(label="Message", widget=forms.Textarea(attrs={"rows": 5}))
+    interne = forms.BooleanField(
+        required=False, label="Note interne", help_text="Jamais montrée au client."
+    )
+    attendre_client = forms.BooleanField(
+        required=False,
+        label="Attendre la réponse du client",
+        help_text="Met le ticket en attente d'information : le compteur s'arrête, le préavis "
+        "part au cinquième jour et le ticket se clôt au septième sans réponse.",
+    )
+
+
+class TicketEtatForm(forms.Form):
+    etat = forms.ChoiceField(label="Nouvel état")
+    reference_reseau = forms.CharField(
+        required=False,
+        max_length=100,
+        label="Dossier chez l'opérateur",
+        help_text="Exigé pour une escalade à l'opérateur.",
+    )
+    relance_le = forms.DateField(
+        required=False,
+        label="Relance prévue le",
+        widget=forms.DateInput(attrs={"type": "date"}),
+        help_text="Exigée pour une escalade à l'opérateur.",
+    )
+    resolution = forms.CharField(
+        required=False,
+        label="Résolution retenue",
+        widget=forms.Textarea(attrs={"rows": 3}),
+        help_text="Exigée pour résoudre : elle est envoyée au client.",
+    )
+
+    def __init__(self, *args, choix=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["etat"].choices = list(choix)
+
+
+class TicketCategorieForm(forms.Form):
+    categorie = forms.ChoiceField(label="Catégorie", help_text="Elle refixe la priorité.")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["categorie"].choices = Ticket.Categorie.choices
+
+
+class SaisieTicketForm(forms.Form):
+    """Ressaisie en ticket d'une demande arrivée par un autre canal, avant d'y
+    répondre : ce qui n'est pas dans l'outil n'existe pas."""
+
+    client = forms.ModelChoiceField(queryset=Client.objects.order_by("raison_sociale"))
+    demandeur = forms.EmailField(
+        required=False,
+        label="Courriel du demandeur",
+        help_text="Un membre du compte ; il recevra les réponses. Laissez vide s'il n'en a pas.",
+    )
+    canal = forms.ChoiceField(label="Arrivée par")
+    categorie = forms.ChoiceField(label="Catégorie")
+    objet = forms.CharField(max_length=200)
+    corps = forms.CharField(label="Demande", widget=forms.Textarea(attrs={"rows": 6}))
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["canal"].choices = [
+            c for c in Ticket.Canal.choices if c[0] != Ticket.Canal.FORMULAIRE
+        ]
+        self.fields["categorie"].choices = Ticket.Categorie.choices

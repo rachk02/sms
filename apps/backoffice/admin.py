@@ -38,6 +38,10 @@ from apps.fichiers.models import Fichier
 from apps.fichiers.services import lien
 from apps.paiements import services as paiements
 from apps.paiements.models import Facture, Reglage, Transaction
+from apps.support import engagement as support_engagement
+from apps.support import selectors as support_selectors
+from apps.support import services as support
+from apps.support.models import Ticket
 from apps.telecom import services as telecom
 from apps.telecom.models import Connecteur, IncidentLiaison, Route
 
@@ -54,7 +58,11 @@ from .forms import (
     PalierForm,
     RemboursementForm,
     RolesForm,
+    SaisieTicketForm,
     SuspensionForm,
+    TicketCategorieForm,
+    TicketEtatForm,
+    TicketReponseForm,
     TraitementForm,
     VersionForm,
 )
@@ -1406,3 +1414,208 @@ class AlerteFraudeAdmin(admin.ModelAdmin):
             "opts": self.model._meta,
         }
         return TemplateResponse(request, "admin/backoffice/formulaire.html", contexte)
+
+
+@admin.register(Ticket)
+class TicketAdmin(admin.ModelAdmin):
+    """Billetterie, côté agent (T-102). La liste se filtre par état, priorité
+    et catégorie ; le traitement (réponse, note interne, changement d'état,
+    catégorie) passe par la page dédiée. Une demande arrivée par un autre canal
+    se ressaisit en ticket avant d'y répondre."""
+
+    list_display = (
+        "reference",
+        "cree_le",
+        "client",
+        "objet",
+        "categorie",
+        "priorite",
+        "etat",
+        "agent",
+        "en_retard",
+    )
+    list_filter = ("etat", "priorite", "categorie", "canal")
+    search_fields = ("client__raison_sociale", "objet")
+    list_select_related = ("client", "agent")
+    date_hierarchy = "cree_le"
+    change_form_template = "admin/backoffice/ticket_change_form.html"
+    change_list_template = "admin/backoffice/ticket_change_list.html"
+    readonly_fields = [champ.name for champ in Ticket._meta.fields]
+
+    @admin.display(description="référence")
+    def reference(self, ticket):
+        return ticket.reference
+
+    @admin.display(description="hors délai", boolean=True)
+    def en_retard(self, ticket):
+        return support_engagement.en_retard(ticket, timezone.now())
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_urls(self):
+        propres = [
+            path(
+                "saisir/",
+                self.admin_site.admin_view(self.saisir),
+                name="support_ticket_saisir",
+            ),
+            path(
+                "<uuid:pk>/traiter/",
+                self.admin_site.admin_view(self.traiter),
+                name="support_ticket_traiter",
+            ),
+        ]
+        return propres + super().get_urls()
+
+    def changelist_view(self, request, extra_context=None):
+        contexte = {
+            **(extra_context or {}),
+            "peut_saisir": request.user.has_perm("support.add_ticket"),
+        }
+        return super().changelist_view(request, contexte)
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        contexte = {
+            **(extra_context or {}),
+            "peut_traiter": request.user.has_perm("support.change_ticket"),
+        }
+        return super().change_view(request, object_id, form_url, contexte)
+
+    def saisir(self, request):
+        exiger(request, "support.add_ticket")
+        formulaire = SaisieTicketForm(request.POST if request.method == "POST" else None)
+        if request.method == "POST" and formulaire.is_valid():
+            donnees = formulaire.cleaned_data
+            demandeur = None
+            if donnees["demandeur"]:
+                demandeur = Utilisateur.objects.filter(
+                    client=donnees["client"], courriel__iexact=donnees["demandeur"]
+                ).first()
+                if demandeur is None:
+                    formulaire.add_error("demandeur", "Aucun membre de ce compte à ce courriel.")
+            if not formulaire.errors:
+                try:
+                    ticket = support.ouvrir(
+                        client=donnees["client"],
+                        demandeur=demandeur,
+                        categorie=donnees["categorie"],
+                        objet=donnees["objet"],
+                        corps=donnees["corps"],
+                        canal=donnees["canal"],
+                        agent=request.user,
+                    )
+                except support.TicketRefuse as refus:
+                    formulaire.add_error(None, str(refus))
+                else:
+                    messages.success(request, f"Ticket {ticket.reference} enregistré.")
+                    return redirect("admin:support_ticket_traiter", ticket.id)
+        contexte = {
+            **self.admin_site.each_context(request),
+            "title": "Saisir une demande",
+            "introduction": (
+                "Une demande arrivée par courriel, téléphone ou messagerie se ressaisit ici "
+                "avant d'y répondre : son délai se mesure, et son historique reste."
+            ),
+            "elements": [],
+            "bouton": "Enregistrer le ticket",
+            "formulaire": formulaire,
+            "opts": self.model._meta,
+        }
+        return TemplateResponse(request, "admin/backoffice/formulaire.html", contexte)
+
+    def _choix_etats(self, ticket):
+        """Les états où l'agent peut mener le ticket. La clôture d'un ticket en
+        attente revient à l'ordonnanceur, après le préavis."""
+        choix = [
+            (etat, Ticket.Etat(etat).label)
+            for etat in Ticket.Etat.values
+            if etat in support.TRANSITIONS[ticket.etat]
+        ]
+        if ticket.etat == Ticket.Etat.ATTENTE_CLIENT:
+            choix = [c for c in choix if c[0] != Ticket.Etat.CLOS]
+        return choix
+
+    def traiter(self, request, pk):
+        exiger(request, "support.change_ticket")
+        ticket = get_object_or_404(
+            Ticket.objects.select_related("client", "demandeur", "agent", "precedent"), pk=pk
+        )
+        action = request.POST.get("action") if request.method == "POST" else None
+        reponse = TicketReponseForm(request.POST if action == "repondre" else None, prefix="r")
+        etat = TicketEtatForm(
+            request.POST if action == "etat" else None,
+            prefix="e",
+            choix=self._choix_etats(ticket),
+        )
+        categorie = TicketCategorieForm(
+            request.POST if action == "categorie" else None,
+            prefix="c",
+            initial={"categorie": ticket.categorie},
+        )
+        formulaires = {"repondre": reponse, "etat": etat, "categorie": categorie}
+        try:
+            if action == "prendre":
+                support.prendre_en_charge(ticket, agent=request.user)
+                messages.success(request, "Ticket pris en charge.")
+                return redirect("admin:support_ticket_traiter", ticket.id)
+            if action == "repondre" and reponse.is_valid():
+                support.repondre_agent(ticket, agent=request.user, **reponse.cleaned_data)
+                messages.success(request, "Message enregistré.")
+                return redirect("admin:support_ticket_traiter", ticket.id)
+            if action == "etat" and etat.is_valid():
+                donnees = etat.cleaned_data
+                relance = donnees["relance_le"]
+                support.changer_etat(
+                    ticket,
+                    donnees["etat"],
+                    agent=request.user,
+                    reference_reseau=donnees["reference_reseau"],
+                    relance_le=(
+                        timezone.make_aware(datetime.combine(relance, time(8))) if relance else None
+                    ),
+                    resolution=donnees["resolution"],
+                    adresse_ip=adresse_ip(request),
+                )
+                messages.success(request, "État changé.")
+                return redirect("admin:support_ticket_traiter", ticket.id)
+            if action == "categorie" and categorie.is_valid():
+                support.recategoriser(
+                    ticket,
+                    categorie.cleaned_data["categorie"],
+                    agent=request.user,
+                    adresse_ip=adresse_ip(request),
+                )
+                messages.success(request, "Catégorie corrigée.")
+                return redirect("admin:support_ticket_traiter", ticket.id)
+        except support.TicketRefuse as refus:
+            formulaires.get(action, reponse).add_error(None, str(refus))
+        fil = [
+            (
+                message,
+                [
+                    (piece.fichier.nom_origine, lien(piece.fichier))
+                    for piece in message.pieces.all()
+                ],
+            )
+            for message in support_selectors.fil_agent(ticket)
+        ]
+        contexte = {
+            **self.admin_site.each_context(request),
+            "title": f"Ticket {ticket.reference} : {ticket.objet}",
+            "ticket": ticket,
+            "fil": fil,
+            "contexte_technique": [
+                (cle, valeur) for cle, valeur in ticket.contexte.items() if cle != "historique"
+            ],
+            "historique": ticket.contexte.get("historique", []),
+            "engagement": support_selectors.etat_engagement(ticket),
+            "reponse": reponse,
+            "etat": etat,
+            "categorie": categorie,
+            "opts": self.model._meta,
+        }
+        return TemplateResponse(request, "admin/backoffice/ticket.html", contexte)

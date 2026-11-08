@@ -33,6 +33,9 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     # Recharger engage l'argent du compte ; suivre un paiement se fait à deux.
     "credits.recharger": frozenset({ADMIN}),
     "credits.consulter": frozenset({ADMIN, UTILISATEUR}),
+    # Tout membre voit les tickets du compte et peut en ouvrir (T-102).
+    "support.consulter": frozenset({ADMIN, UTILISATEUR}),
+    "support.ouvrir": frozenset({ADMIN, UTILISATEUR}),
 }
 
 

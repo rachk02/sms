@@ -1,0 +1,5 @@
+{% extends "admin/change_list.html" %}
+{% block object-tools-items %}
+  {% if peut_saisir %}<li><a href="{% url 'admin:support_ticket_saisir' %}">Saisir une demande</a></li>{% endif %}
+  {{ block.super }}
+{% endblock %}

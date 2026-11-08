@@ -40,6 +40,8 @@ PERSONNALISEES = {
     "paiements_facture_avoir": ("backoffice.emettre_avoir", True),
     "backoffice_dossierpreuve_client": ("backoffice.view_dossierpreuve", False),
     "conformite_alertefraude_traiter": ("conformite.change_alertefraude", True),
+    "support_ticket_saisir": ("support.add_ticket", False),
+    "support_ticket_traiter": ("support.change_ticket", True),
     "credits_grille_version_ajouter": (SUPER, True),
     "credits_grille_version": (SUPER, True),
     "credits_grille_version_publier": (SUPER, True),

@@ -54,6 +54,8 @@ Le serveur SMPP client, la fiche F-36, pèse 8 à 12 jours-homme pour une demand
 
 **Critères** Un client se lie en transceiver, soumet et reçoit ses accusés sur la même session. Une adresse hors liste blanche est refusée au bind. Le débit configuré est respecté. Si cette fiche sort du périmètre, la tâche saute entièrement.
 
+**Sortie du périmètre de lancement** (décision de l'utilisateur du 8 novembre 2026). La tâche saute ; elle se reprendra si une demande client se démontre.
+
 ## T-113 · Bac à sable pour intégrateurs
 
 **Produit** Un environnement où une clé d'essai envoie vers des numéros de test sans consommer de crédit, avec des accusés simulés paramétrables.

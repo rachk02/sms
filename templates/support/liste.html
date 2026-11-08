@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block contenu %}
+<div class="mb-4 flex items-center justify-between">
+  <h1 class="text-2xl font-semibold">Support</h1>
+  <a class="rounded bg-slate-900 px-4 py-1.5 text-sm text-white" href="{% url 'support-nouveau' %}">Nouvelle demande</a>
+</div>
+<p class="mb-4 text-sm text-slate-600">Pour un message ou une campagne précis, ouvrez la demande depuis sa fiche : elle emporte son contexte technique.</p>
+{% if tickets %}
+  <table class="w-full rounded border border-slate-200 bg-white text-sm">
+    <thead class="text-left text-slate-500">
+      <tr><th class="px-3 py-2">Référence</th><th class="px-3 py-2">Objet</th><th class="px-3 py-2">Catégorie</th><th class="px-3 py-2">État</th><th class="px-3 py-2">Ouvert le</th></tr>
+    </thead>
+    <tbody>
+      {% for t in tickets %}
+        <tr class="border-t border-slate-200">
+          <td class="px-3 py-2"><a class="underline" href="{% url 'support-ticket' t.id %}">{{ t.reference }}</a></td>
+          <td class="px-3 py-2">{{ t.objet }}</td>
+          <td class="px-3 py-2">{{ t.get_categorie_display }}</td>
+          <td class="px-3 py-2">{{ t.get_etat_display }}</td>
+          <td class="px-3 py-2">{{ t.cree_le|date:"d/m/Y à H:i" }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p class="rounded border border-slate-200 bg-white p-4 text-sm text-slate-600">Aucune demande pour ce compte.</p>
+{% endif %}
+{% endblock %}

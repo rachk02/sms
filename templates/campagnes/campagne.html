@@ -2,7 +2,7 @@
 {% block contenu %}
 <p class="mb-2 text-sm"><a class="underline" href="{% url 'campagnes' %}">Campagnes</a></p>
 <h1 class="mb-1 text-2xl font-semibold">{{ campagne.nom }}</h1>
-<p class="mb-6 text-sm text-slate-600">{{ campagne.get_type_display }} ; {{ campagne.get_etat_display|lower }}.</p>
+<p class="mb-6 text-sm text-slate-600">{{ campagne.get_type_display }} ; {{ campagne.get_etat_display|lower }}. <a class="underline" href="{% url 'support-nouveau' %}?campagne={{ campagne.id }}">Signaler un problème sur cette campagne</a></p>
 
 {% if campagne.parent_id %}
   <p class="mb-6 text-sm">Envoi du {{ campagne.occurrence_le|date:"d/m/Y à H:i" }} de la campagne récurrente <a class="underline" href="{% url 'campagne' campagne.parent_id %}">{{ campagne.parent.nom }}</a>.{% if campagne.etat == "BROUILLON" %} Il attend votre confirmation : son coût dépasse le plafond, ou il n'a pas pu être réservé.{% endif %}</p>
