@@ -4,7 +4,7 @@ import csv
 import io
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta
+from datetime import UTC, datetime, time, timedelta
 
 from django.db import connection
 from django.db.models import Q, Sum
@@ -540,3 +540,37 @@ def fiche(client_id, message_id, date_reception: datetime) -> Fiche | None:
     if message.etat == Etat.LIVRE and message.date_soumission and message.date_accuse:
         latence = max(0.0, (message.date_accuse - message.date_soumission).total_seconds())
     return Fiche(message, etapes, liaison, latence, diagnostic(message, etapes))
+
+
+# Lecture par identifiant seul, pour l'API (T-109)
+
+# Un identifiant de message est un UUID version 7 : ses 48 premiers bits sont
+# l'instant de sa création, à la milliseconde, pris au moment où le message est
+# reçu. La recherche se borne à un jour de part et d'autre de cet instant :
+# deux partitions au plus, jamais un balayage du journal.
+MARGE_IDENTIFIANT = timedelta(days=1)
+
+
+def instant_de(message_id: uuid.UUID) -> datetime | None:
+    if message_id.version != 7:
+        return None
+    return datetime.fromtimestamp((message_id.int >> 80) / 1000, tz=UTC)
+
+
+def fiche_par_identifiant(client_id, message_id: uuid.UUID) -> Fiche | None:
+    """La fiche d'un message retrouvé par son seul identifiant ; None s'il
+    n'existe pas, n'est pas à ce client ou n'est pas un UUID version 7."""
+    instant = instant_de(message_id)
+    if instant is None:
+        return None
+    date_reception = (
+        Message.objects.filter(
+            client_id=client_id,
+            id=message_id,
+            date_reception__gte=instant - MARGE_IDENTIFIANT,
+            date_reception__lt=instant + MARGE_IDENTIFIANT,
+        )
+        .values_list("date_reception", flat=True)
+        .first()
+    )
+    return fiche(client_id, message_id, date_reception) if date_reception else None

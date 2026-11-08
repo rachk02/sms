@@ -30,6 +30,9 @@ CLOISONNEES = (
     "comptes_dossier",
     "comptes_piece",
     "comptes_numero_test",
+    # Plus une politique de lecture par préfixe, pour vérifier une clé.
+    "comptes_cle_api",
+    "api_idempotence",
     "fichiers_fichier",
     "campagnes_campagne",
     "campagnes_destinataire",

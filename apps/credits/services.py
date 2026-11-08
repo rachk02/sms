@@ -207,6 +207,60 @@ def reserver(
     )
 
 
+@dataclass(frozen=True)
+class LigneReservation:
+    message_id: object
+    message_date_reception: object
+    montant: int
+
+
+def reserver_messages(
+    client_id, lignes: list[LigneReservation], *, attente_max_ms: int | None = None
+) -> int:
+    """Réserve le coût de plusieurs envois unitaires d'un coup (un lot de l'API,
+    T-108, décision de l'utilisateur du 8 novembre 2026).
+
+    Mêmes règles que `reserver`, ligne par ligne : un seul verrou du solde,
+    pris une fois ; les lignes sont acceptées dans l'ordre tant que le
+    disponible couvre la suivante, la première qui ne passe pas arrête le lot
+    (les suivantes ne passent pas devant elle) ; une réservation par message,
+    au mode de règlement du compte, si bien que le règlement d'un message
+    (`solder_message`) la retrouve comme celle d'un envoi unitaire. Rend le
+    nombre de lignes acceptées, les premières de la liste. Lève SoldeOccupe si
+    le verrou reste pris au-delà de `attente_max_ms`.
+    """
+    for ligne in lignes:
+        _montant_positif(ligne.montant)
+    if not lignes:
+        return 0
+    compte = _compte_verrouille(client_id, attente_max_ms)
+    disponible, total, acceptees = compte.solde_disponible, 0, 0
+    for ligne in lignes:
+        if total + ligne.montant > disponible:
+            break
+        total += ligne.montant
+        acceptees += 1
+    if not acceptees:
+        return 0
+    mode = Client.objects.values_list("mode_reglement", flat=True).get(id=client_id)
+    Reservation.objects.bulk_create(
+        [
+            Reservation(
+                client_id=client_id,
+                message_id=ligne.message_id,
+                message_date_reception=ligne.message_date_reception,
+                montant_initial=ligne.montant,
+                montant_restant=ligne.montant,
+                mode=mode,
+            )
+            for ligne in lignes[:acceptees]
+        ]
+    )
+    compte.montant_reserve += total
+    compte.save(update_fields=["montant_reserve", "mis_a_jour_le"])
+    return acceptees
+
+
 def _reservation_verrouillee(reservation_id) -> tuple[CompteCredit, Reservation]:
     client_id = Reservation.objects.values_list("client_id", flat=True).get(id=reservation_id)
     compte = _compte_verrouille(client_id)

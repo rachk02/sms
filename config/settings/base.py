@@ -157,6 +157,12 @@ PAGE_ETAT = {
     "secret": env("PAGE_ETAT_SECRET", ""),
     "seau": env("PAGE_ETAT_SEAU", "page-etat"),
 }
+# Quotas de l'API publique par clé (T-107) : seau à jetons dans Redis, limite
+# en rafale par seconde et limite soutenue par minute. Valeurs provisoires.
+API_QUOTAS = {
+    "rafale_par_seconde": int(env("API_QUOTA_RAFALE_PAR_SECONDE", "20")),
+    "soutenu_par_minute": int(env("API_QUOTA_SOUTENU_PAR_MINUTE", "300")),
+}
 STOCKAGE_OBJET = {
     "point_acces": env("MINIO_ENDPOINT"),
     "identifiant": env("MINIO_ROOT_USER"),

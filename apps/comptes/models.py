@@ -308,3 +308,46 @@ class CodeSecours(Identifiable):
 
     def __str__(self):
         return f"code de {self.utilisateur_id}"
+
+
+class CleApi(Base):
+    """Clé d'accès à l'API publique (T-106).
+
+    La clé complète, `sk_<environnement>_<prefixe>_<secret>`, n'est montrée
+    qu'une fois, à sa création. Seul le préfixe est conservé en clair ; le
+    secret ne l'est que sous forme de condensat Argon2id. La table est
+    cloisonnée ; une seconde politique, en lecture seule, rend visible la
+    seule ligne dont le préfixe est posé dans `app.cle_prefixe`, le temps de
+    vérifier une clé avant de connaître son client (`core` 0040).
+    """
+
+    class Environnement(models.TextChoices):
+        LIVE = "LIVE", "Production"
+        TEST = "TEST", "Bac à sable"
+
+    class Etat(models.TextChoices):
+        ACTIVE = "ACTIVE", "Active"
+        REVOQUEE = "REVOQUEE", "Révoquée"
+
+    client = models.ForeignKey(Client, on_delete=models.PROTECT, related_name="cles_api")
+    nom = models.CharField(max_length=100)
+    environnement = models.CharField(
+        max_length=4, choices=Environnement.choices, default=Environnement.LIVE
+    )
+    prefixe = models.CharField(max_length=12, unique=True)
+    condensat = models.CharField(max_length=255)
+    etat = models.CharField(max_length=20, choices=Etat.choices, default=Etat.ACTIVE)
+    cree_par = models.ForeignKey(
+        Utilisateur, on_delete=models.PROTECT, null=True, blank=True, related_name="+"
+    )
+    derniere_utilisation_le = models.DateTimeField(null=True, blank=True)
+    # La version d'API appelée en dernier : qui casserait avant de publier.
+    derniere_version = models.CharField(max_length=10, blank=True)
+    revoquee_le = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "comptes_cle_api"
+        indexes = [models.Index(fields=["client", "etat"], name="cle_api_client_etat")]
+
+    def __str__(self):
+        return f"{self.nom} ({self.prefixe})"

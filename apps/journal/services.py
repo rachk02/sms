@@ -54,43 +54,74 @@ def enregistrer_message(
     campagne, l'unicité de cette table lève une IntegrityError et le message
     n'est pas écrit non plus.
     """
-    analyse = analyser(texte)
-    date_reception = date_reception or timezone.now()
-    message = Message.objects.create(
-        client=client,
-        campagne_id=campagne_id,
-        contact_id=contact_id,
+    ligne = dict(
         numero_normalise=numero_normalise,
         operateur=operateur,
         expediteur_libelle=expediteur_libelle,
         texte=texte,
-        encodage=analyse.encodage,
-        segments=analyse.segments,
         cout_unitaire=cout_unitaire,
-        cout_total=cout_unitaire * analyse.segments,
+        campagne_id=campagne_id,
+        contact_id=contact_id,
         date_reception=date_reception,
         **champs,
     )
-    if campagne_id and contact_id:
-        Destinataire.objects.create(
-            campagne_id=campagne_id,
-            contact_id=contact_id,
+    return enregistrer_messages(client=client, lignes=[ligne], source=source)[0]
+
+
+def enregistrer_messages(*, client, lignes: list[dict], source: str = Evenement.Source.API):
+    """Écrit plusieurs messages au journal d'un coup (un lot de l'API, T-108),
+    chacun avec son premier événement : trois insertions groupées quel que
+    soit le nombre de messages. Chaque ligne porte les arguments nommés de
+    `enregistrer_message` ; `id` peut y être fixé d'avance. À appeler dans une
+    transaction : les messages, leurs destinataires de campagne et leurs
+    événements sont validés ensemble, ou pas du tout."""
+    maintenant = timezone.now()
+    messages = []
+    for ligne in lignes:
+        ligne = dict(ligne)
+        analyse = analyser(ligne["texte"])
+        ligne["date_reception"] = ligne.get("date_reception") or maintenant
+        messages.append(
+            Message(
+                client=client,
+                encodage=analyse.encodage,
+                segments=analyse.segments,
+                cout_total=ligne["cout_unitaire"] * analyse.segments,
+                **{cle: valeur for cle, valeur in ligne.items() if valeur is not None},
+            )
+        )
+    Message.objects.bulk_create(messages)
+    destinataires = [
+        Destinataire(
+            campagne_id=message.campagne_id,
+            contact_id=message.contact_id,
             client=client,
             message_id=message.id,
-            message_date_reception=date_reception,
+            message_date_reception=message.date_reception,
         )
-    Evenement.objects.create(
-        client=client,
-        message_id=message.id,
-        etat=message.etat,
-        horodatage=date_reception,
-        source=source,
+        for message in messages
+        if message.campagne_id and message.contact_id
+    ]
+    if destinataires:
+        Destinataire.objects.bulk_create(destinataires)
+    Evenement.objects.bulk_create(
+        [
+            Evenement(
+                client=client,
+                message_id=message.id,
+                etat=message.etat,
+                horodatage=message.date_reception,
+                source=source,
+            )
+            for message in messages
+        ]
     )
     # Pic de codes vers une plage inhabituelle (T-100).
     from .fraude import noter_code
 
-    noter_code(message)
-    return message
+    for message in messages:
+        noter_code(message)
+    return messages
 
 
 def creer_partitions_a_venir(mois_d_avance: int = 2) -> list[str]:
@@ -661,6 +692,31 @@ def mettre_en_file(message: Message, *, prioritaire: bool, reprise: str = "") ->
             "date_reception": message.date_reception.isoformat(),
         },
         cle_idempotence=f"envoi:{message.id}:{reprise}" if reprise else f"envoi:{message.id}",
+    )
+
+
+def mettre_en_file_lot(messages: list, *, prioritaire: bool) -> list[str]:
+    """`mettre_en_file` pour plusieurs messages, en une insertion dans la boîte
+    d'envoi (T-108) : mêmes files, mêmes clés d'idempotence."""
+    from apps.core.evenements import publier_lot
+    from apps.core.files import TOPOLOGIE
+
+    nature = "prioritaire" if prioritaire else "masse"
+    return publier_lot(
+        [
+            {
+                "nom": TOPOLOGIE.nom(f"envoi.{nature}.{message.operateur.lower()}"),
+                "echange": TOPOLOGIE.echange,
+                "client_id": message.client_id,
+                "objet_id": message.id,
+                "donnees": {
+                    "message_id": str(message.id),
+                    "date_reception": message.date_reception.isoformat(),
+                },
+                "cle_idempotence": f"envoi:{message.id}",
+            }
+            for message in messages
+        ]
     )
 
 

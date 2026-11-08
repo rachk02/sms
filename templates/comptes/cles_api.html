@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block contenu %}
+<h1 class="mb-6 text-2xl font-semibold">Clés d'API</h1>
+
+{% if nouvelle %}
+<div class="mb-8 rounded border border-amber-300 bg-amber-50 p-4" role="status">
+  <p class="mb-2 font-semibold">Copiez cette clé maintenant : elle ne sera plus jamais affichée.</p>
+  <code class="block break-all rounded bg-white px-3 py-2 font-mono text-sm">{{ nouvelle }}</code>
+  <p class="mt-2 text-sm text-slate-600">Seule son empreinte est conservée. Une clé perdue se révoque et se remplace.</p>
+</div>
+{% endif %}
+
+<table class="mb-8 w-full text-sm">
+  <thead>
+    <tr class="text-left text-slate-500"><th class="py-2">Nom</th><th>Préfixe</th><th>Environnement</th><th>État</th><th>Dernière utilisation</th><th></th></tr>
+  </thead>
+  <tbody>
+  {% for cle in cles %}
+    <tr class="border-t border-slate-200">
+      <td class="py-2">{{ cle.nom }}</td>
+      <td class="font-mono">{{ cle.prefixe }}</td>
+      <td>{{ cle.get_environnement_display }}</td>
+      <td>{{ cle.get_etat_display }}{% if cle.revoquee_le %} le {{ cle.revoquee_le|date:"d/m/Y H:i" }}{% endif %}</td>
+      <td>{% if cle.derniere_utilisation_le %}{{ cle.derniere_utilisation_le|date:"d/m/Y H:i" }}{% else %}jamais{% endif %}</td>
+      <td class="text-right">
+        {% if cle.etat == "ACTIVE" %}
+          <form method="post" action="{% url 'cle-api-revoquer' cle.pk %}"
+                x-data="{ nom: '{{ cle.nom|escapejs }}' }"
+                @submit="if (!confirm(`Révoquer la clé ${nom} ? Les appels qui l'utilisent seront refusés aussitôt.`)) $event.preventDefault()">
+            {% csrf_token %}
+            <button type="submit" class="text-red-700 underline">Révoquer</button>
+          </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="6" class="py-2 text-slate-500">Aucune clé pour l'instant.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2 class="mb-3 text-lg font-semibold">Créer une clé</h2>
+{% if erreur %}<p class="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">{{ erreur }}</p>{% endif %}
+<form method="post" class="grid max-w-md gap-3">
+  {% csrf_token %}
+  <input name="nom" placeholder="Nom (par exemple : site de commande)" required maxlength="100" class="rounded border border-slate-300 px-3 py-2">
+  <select name="environnement" class="rounded border border-slate-300 px-3 py-2">
+    {% for valeur, libelle in environnements %}<option value="{{ valeur }}">{{ libelle }}</option>{% endfor %}
+  </select>
+  <button type="submit" class="rounded bg-slate-900 px-4 py-2 text-white">Créer la clé</button>
+</form>
+{% endblock %}

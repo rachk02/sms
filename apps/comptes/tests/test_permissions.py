@@ -32,11 +32,19 @@ ATTENDUS = {
     "membres": ("get", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 200}),
     "membre-role": ("post", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 302}),
     "membre-retirer": ("post", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 302}),
+    # Sans nom, la création est refusée et la page se réaffiche.
+    "cles-api": ("post", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 200}),
+    "cle-api-revoquer": ("post", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 404}),
     "second-facteur-activer": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "second-facteur-codes": ("get", {ANONYME: CONNEXION, UTILISATEUR: 302, ADMIN: 302}),
     "second-facteur-verifier": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "metriques": ("get", {ANONYME: 401, UTILISATEUR: 401, ADMIN: 401}),
     "rappel-jasmin": ("post", {ANONYME: 403, UTILISATEUR: 403, ADMIN: 403}),
+    # API publique : seule la clé authentifie, une session ne vaut rien.
+    "api-messages": ("post", {ANONYME: 401, UTILISATEUR: 401, ADMIN: 401}),
+    "api-message": ("get", {ANONYME: 401, UTILISATEUR: 401, ADMIN: 401}),
+    "api-solde": ("get", {ANONYME: 401, UTILISATEUR: 401, ADMIN: 401}),
+    "api-expediteurs": ("get", {ANONYME: 401, UTILISATEUR: 401, ADMIN: 401}),
     # Point public des fournisseurs : sans signature, la même réponse nue pour tous.
     "rappel-paiement": ("post", {ANONYME: 403, UTILISATEUR: 403, ADMIN: 403}),
     # Sans montant, le rechargement est refusé et le formulaire se réaffiche.
@@ -141,6 +149,8 @@ def _adresse(nom, membres):
         "support-ticket-fil",
         "contacts-liste-supprimer",
         "contacts-champ-supprimer",
+        "cle-api-revoquer",
+        "api-message",
     ) or (nom.startswith("import-") and nom != "import-deposer"):
         return reverse(nom, args=[uuid.uuid7()])
     return reverse(nom)

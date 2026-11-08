@@ -18,6 +18,7 @@ d'un client.
 """
 
 import math
+import uuid
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -713,3 +714,132 @@ def annuler(campagne: Campagne, *, auteur) -> Campagne:
 
 # Pour l'affichage : les réseaux dans l'ordre habituel.
 RESEAUX = OPERATEURS
+
+
+# Envois unitaires de l'API (T-108)
+
+# Un lot se borne : au-delà, l'intégrateur découpe.
+LOT_MAXIMUM = 1000
+SEGMENTS_MAXIMUM = 10
+
+
+@dataclass
+class Envoi:
+    """Le sort d'une demande d'envoi : un message accepté, ou un refus nommé."""
+
+    rang: int
+    message: object = None
+    code: str = ""
+    motif: str = ""
+
+    @property
+    def accepte(self) -> bool:
+        return self.message is not None
+
+
+def accepter_unitaires(client, demandes: list[dict], *, cle_api: str = "") -> list[Envoi]:
+    """Accepte des envois hors campagne : chacun est écrit au journal, son coût
+    réservé, puis il est déposé dans la file prioritaire de son réseau. C'est
+    la porte des envois de l'API, unitaires comme par lot.
+
+    Une demande invalide n'annule pas les autres : chacune reçoit son sort.
+    Le contrôle qui ne dépend que de la demande se fait d'abord, hors de tout
+    verrou ; viennent ensuite le plafond du compte (les premières passent),
+    puis la réservation groupée du crédit (les premières passent tant que le
+    disponible suffit). La liste noire, le bac à sable et l'état de
+    l'expéditeur au moment de partir restent contrôlés par le moteur d'envoi,
+    comme pour tout message.
+
+    Chaque demande porte `numero`, `texte` et, facultatif, `expediteur` (le
+    numéro court par défaut). À appeler dans une transaction."""
+    from redis.exceptions import RedisError
+
+    from apps.conformite.plafonds import consommer_lot
+    from apps.core.encodage import analyser
+    from apps.expediteurs.controle import couvert
+    from apps.journal.services import enregistrer_messages, mettre_en_file_lot
+    from apps.telecom.prefixes import table
+
+    _compte_ouvert(client)
+    if len(demandes) > LOT_MAXIMUM:
+        raise CampagneRefusee(f"Un lot compte au plus {LOT_MAXIMUM} messages.")
+    sorts = [Envoi(rang) for rang in range(len(demandes))]
+    prefixes = table(client.pays)
+    volume = volume_mensuel(client.id)
+    prix, couverts, valides = {}, {}, []
+    for envoi, demande in zip(sorts, demandes, strict=True):
+        texte = demande.get("texte") or ""
+        libelle = (demande.get("expediteur") or numero_court()).strip()
+        try:
+            numero = normaliser(str(demande.get("numero") or ""), client.pays)
+        except NumeroInvalide as refus:
+            envoi.code, envoi.motif = "NUMERO_INVALIDE", f"Numéro invalide : {refus.cause}."
+            continue
+        reseau = classer(numero, client.pays, prefixes)
+        if not reseau:
+            envoi.code, envoi.motif = "RESEAU_INCONNU", "Réseau du numéro inconnu."
+            continue
+        if not texte.strip():
+            envoi.code, envoi.motif = "TEXTE_VIDE", "Le texte est vide."
+            continue
+        segments = analyser(texte).segments
+        if segments > SEGMENTS_MAXIMUM:
+            envoi.code = "TEXTE_TROP_LONG"
+            envoi.motif = f"Le texte dépasse {SEGMENTS_MAXIMUM} segments."
+            continue
+        if (libelle, reseau) not in couverts:
+            couverts[libelle, reseau] = couvert(client.id, libelle, reseau)
+        if not couverts[libelle, reseau]:
+            envoi.code = "EXPEDITEUR_NON_AUTORISE"
+            envoi.motif = f"L'expéditeur {libelle} n'est pas approuvé sur le réseau {reseau}."
+            continue
+        if reseau not in prix:
+            try:
+                prix[reseau] = prix_segment(client.id, reseau, volume=volume)
+            except AucunTarif:
+                prix[reseau] = None
+        if prix[reseau] is None:
+            envoi.code, envoi.motif = "TARIF_ABSENT", f"Aucun tarif pour le réseau {reseau}."
+            continue
+        valides.append(
+            (
+                envoi,
+                {
+                    "id": uuid.uuid7(),
+                    "numero_normalise": numero,
+                    "operateur": reseau,
+                    "expediteur_libelle": libelle,
+                    "texte": texte,
+                    "cout_unitaire": prix[reseau],
+                    "date_reception": timezone.now(),
+                },
+                prix[reseau] * segments,
+            )
+        )
+    # Plafond horaire et journalier du compte, en messages (T-101, T-107).
+    try:
+        places, periode = consommer_lot(client, len(valides), cle_api=cle_api)
+    except RedisError:
+        # Mode permissif (T-107) : le crédit borne encore ce qui part.
+        places, periode = len(valides), None
+    for envoi, _, _ in valides[places:]:
+        envoi.code = "PLAFOND_COMPTE"
+        envoi.motif = f"Plafond {periode} du compte atteint."
+    valides = valides[:places]
+    with transaction.atomic():
+        reserves = credits.reserver_messages(
+            client.id,
+            [
+                credits.LigneReservation(ligne["id"], ligne["date_reception"], cout)
+                for _, ligne, cout in valides
+            ],
+            attente_max_ms=credits.ATTENTE_RESERVATION_MS,
+        )
+        for envoi, _, _ in valides[reserves:]:
+            envoi.code, envoi.motif = "SOLDE_INSUFFISANT", "Solde insuffisant pour ce message."
+        valides = valides[:reserves]
+        messages = enregistrer_messages(client=client, lignes=[ligne for _, ligne, _ in valides])
+        mettre_en_file_lot(messages, prioritaire=True)
+    for (envoi, _, _), message in zip(valides, messages, strict=True):
+        envoi.message = message
+    return sorts

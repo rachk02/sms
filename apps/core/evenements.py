@@ -53,6 +53,26 @@ def publier(
     return cle
 
 
+def publier_lot(evenements: list[dict], *, using: str = DEFAULT_DB_ALIAS) -> list[str]:
+    """Plusieurs `publier` en une insertion (un lot de l'API, T-108). Chaque
+    dictionnaire porte les arguments nommés de `publier`, `nom` compris ; mêmes
+    règles : une clé déjà publiée est sans effet."""
+    lignes = [
+        EvenementSortant(
+            nom=evenement["nom"],
+            client_id=evenement.get("client_id"),
+            objet_id=evenement.get("objet_id"),
+            auteur_id=evenement.get("auteur_id"),
+            donnees=evenement.get("donnees") or {},
+            cle_idempotence=evenement.get("cle_idempotence") or str(uuid.uuid7()),
+            echange=evenement.get("echange", "evenements"),
+        )
+        for evenement in evenements
+    ]
+    EvenementSortant.objects.using(using).bulk_create(lignes, ignore_conflicts=True)
+    return [ligne.cle_idempotence for ligne in lignes]
+
+
 def traiter_une_fois(
     consommateur: str,
     cle_idempotence: str,

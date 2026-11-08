@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from apps.core.cloisonnement import client_pose, poser_client
 
-from .models import Client, GestionnaireUtilisateur, NumeroTest, Utilisateur
+from .models import CleApi, Client, GestionnaireUtilisateur, NumeroTest, Utilisateur
 
 # Plafonds d'envoi par palier, en messages. Valeurs provisoires : la fiche F-11
 # laisse les plafonds de chaque palier à trancher. Elles ne servent qu'à remplir
@@ -432,3 +432,148 @@ def reactiver(
         adresse_ip=adresse_ip,
     )
     return client
+
+
+# Clés d'API (T-106)
+
+# Argon2id à coût réduit, propre aux clés : le secret est tiré au hasard sur
+# 256 bits, une attaque par force brute est hors de portée quel que soit le
+# coût, et la vérification doit tenir sous dix millisecondes à chaque appel.
+# Le mot de passe d'un utilisateur, choisi par un humain, garde le coût fort.
+_CONDENSEUR_CLE = None
+REGLAGE_PREFIXE = "app.cle_prefixe"
+# Une clé n'est réécrite (dernière utilisation) qu'une fois par minute au plus.
+RAFRAICHISSEMENT_USAGE = timedelta(minutes=1)
+
+
+def _condenseur():
+    global _CONDENSEUR_CLE
+    if _CONDENSEUR_CLE is None:
+        from argon2 import PasswordHasher, Type
+
+        _CONDENSEUR_CLE = PasswordHasher(time_cost=2, memory_cost=1024, parallelism=1, type=Type.ID)
+    return _CONDENSEUR_CLE
+
+
+class CleRefusee(ValueError):
+    pass
+
+
+def _decouper(jeton: str) -> tuple[str, str, str] | None:
+    """`sk_<environnement>_<prefixe>_<secret>` : environnement, préfixe, secret."""
+    parties = (jeton or "").split("_", 3)
+    if len(parties) != 4 or parties[0] != "sk":
+        return None
+    environnement = parties[1].upper()
+    if environnement not in CleApi.Environnement.values or not parties[2] or not parties[3]:
+        return None
+    return environnement, parties[2], parties[3]
+
+
+@transaction.atomic
+def creer_cle(
+    *, client, nom: str, auteur, environnement=CleApi.Environnement.LIVE, adresse_ip=None
+) -> tuple[CleApi, str]:
+    """Crée une clé et rend la clé complète, qui n'est plus jamais lisible
+    ensuite : seul son condensat est conservé."""
+    from apps.core.audit import auditer
+
+    nom = (nom or "").strip()
+    if not nom:
+        raise CleRefusee("Une clé porte un nom.")
+    if environnement not in CleApi.Environnement.values:
+        raise CleRefusee("Environnement inconnu.")
+    secret = secrets.token_urlsafe(32)
+    while True:
+        prefixe = secrets.token_hex(5)
+        # Le préfixe est unique sur toute la table, que le cloisonnement cache :
+        # la vérification passe par la lecture par préfixe.
+        if _lire_par_prefixe(prefixe) is None:
+            break
+    cle = CleApi.objects.create(
+        client=client,
+        nom=nom,
+        environnement=environnement,
+        prefixe=prefixe,
+        condensat=_condenseur().hash(secret),
+        cree_par=auteur,
+    )
+    auditer(
+        "comptes.cle_api.creation",
+        cle,
+        auteur=auteur,
+        client=client,
+        apres={"nom": nom, "prefixe": prefixe, "environnement": environnement},
+        adresse_ip=adresse_ip,
+    )
+    return cle, f"sk_{environnement.lower()}_{prefixe}_{secret}"
+
+
+@transaction.atomic
+def revoquer_cle(cle: CleApi, *, auteur, adresse_ip=None, maintenant=None) -> CleApi:
+    """Révoque une clé. La vérification relit l'état en base à chaque appel :
+    la clé est refusée dès la validation de cette transaction."""
+    from apps.core.audit import auditer
+
+    if cle.etat == CleApi.Etat.REVOQUEE:
+        return cle
+    cle.etat = CleApi.Etat.REVOQUEE
+    cle.revoquee_le = maintenant or timezone.now()
+    cle.save(update_fields=["etat", "revoquee_le", "modifie_le"])
+    auditer(
+        "comptes.cle_api.revocation",
+        cle,
+        auteur=auteur,
+        client=cle.client,
+        apres={"prefixe": cle.prefixe},
+        adresse_ip=adresse_ip,
+    )
+    return cle
+
+
+def _lire_par_prefixe(prefixe: str) -> CleApi | None:
+    """Lit la clé d'un préfixe, quel que soit le client posé, par la politique
+    de lecture par préfixe (`core` 0040). Le réglage ne vit que le temps de
+    cette lecture, local à la transaction."""
+    from django.db import connection
+
+    with connection.cursor() as curseur:
+        curseur.execute("SELECT set_config(%s, %s, true)", [REGLAGE_PREFIXE, prefixe])
+    try:
+        return CleApi.objects.filter(prefixe=prefixe).first()
+    finally:
+        with connection.cursor() as curseur:
+            curseur.execute("SELECT set_config(%s, '', true)", [REGLAGE_PREFIXE])
+
+
+def verifier_cle(jeton: str, *, version: str = "1", maintenant=None) -> CleApi | None:
+    """Vérifie une clé présentée à l'API et pose son client. Rend None pour
+    une clé inconnue, mal formée, révoquée ou fausse, sans dire laquelle.
+
+    À appeler dans la transaction de la requête. Aucun cache : l'état est relu
+    en base à chaque appel, si bien qu'une révocation vaut immédiatement.
+    """
+    from argon2.exceptions import VerificationError
+
+    if not transaction.get_connection().in_atomic_block:
+        raise RuntimeError("verifier_cle doit être appelé dans une transaction.")
+    morceaux = _decouper(jeton)
+    cle = _lire_par_prefixe(morceaux[1]) if morceaux else None
+    if cle is None or cle.etat != CleApi.Etat.ACTIVE or cle.environnement != morceaux[0]:
+        return None
+    try:
+        _condenseur().verify(cle.condensat, morceaux[2])
+    except VerificationError:
+        return None
+    poser_client(cle.client_id)
+    maintenant = maintenant or timezone.now()
+    if (
+        cle.derniere_utilisation_le is None
+        or maintenant - cle.derniere_utilisation_le >= RAFRAICHISSEMENT_USAGE
+        or cle.derniere_version != version
+    ):
+        CleApi.objects.filter(id=cle.id).update(
+            derniere_utilisation_le=maintenant, derniere_version=version
+        )
+        cle.derniere_utilisation_le, cle.derniere_version = maintenant, version
+    return cle

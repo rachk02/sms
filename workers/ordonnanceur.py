@@ -92,6 +92,7 @@ class Ordonnanceur(Worker):
         from asgiref.sync import sync_to_async
         from django.db import connections
 
+        from apps.api.services import purger as purger_idempotence
         from apps.backoffice.services import suspendre_sur_alertes
         from apps.campagnes.controle import controler_terminees
         from apps.campagnes.diffusion import publier as publier_campagnes
@@ -156,6 +157,8 @@ class Ordonnanceur(Worker):
                         await sync_to_async(effacer_comptes_clos)()
                         # Compteurs des campagnes terminées contre le journal (T-91).
                         await sync_to_async(controler_terminees)()
+                        # Clés d'idempotence de l'API expirées (T-108).
+                        await sync_to_async(purger_idempotence)()
                         dernier_rapprochement = time.monotonic()
                     # Paiements en attente revérifiés, rappel reçu ou non, puis
                     # expirés au-delà du délai (T-86).

@@ -33,6 +33,11 @@ def retirer(jetons: dict[str, contextvars.Token]) -> None:
         _contexte[champ].reset(jeton)
 
 
+def lire(champ: str):
+    """La valeur courante d'un champ du contexte, None hors contexte."""
+    return _contexte[champ].get()
+
+
 @contextmanager
 def contexte(**valeurs):
     jetons = poser(**valeurs)

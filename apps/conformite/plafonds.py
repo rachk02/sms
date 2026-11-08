@@ -48,20 +48,40 @@ def consommer(client, *, maintenant=None, cle_api: str | None = None) -> None:
     """Compte un envoi tenté ; lève PlafondAtteint au-delà d'un plafond.
     `cle_api` est notée dans l'alerte, jamais dans le compte : le plafond est
     celui du compte."""
+    acceptes, periode = consommer_lot(client, 1, maintenant=maintenant, cle_api=cle_api)
+    if not acceptes:
+        plafond = client.plafond_horaire if periode == "horaire" else client.plafond_journalier
+        raise PlafondAtteint(periode, plafond)
+
+
+def consommer_lot(
+    client, nombre: int, *, maintenant=None, cle_api: str | None = None
+) -> tuple[int, str | None]:
+    """Compte `nombre` envois tentés d'un coup (un lot de l'API, T-108) et rend
+    combien tiennent sous les deux plafonds, avec la période qui a limité. Les
+    premiers du lot passent, les suivants sont refusés ; tous comptent comme
+    essais, comme un refus unitaire."""
+    if nombre <= 0:
+        return 0, None
     maintenant = maintenant or timezone.now()
     cles = _cles(client.id, maintenant)
     redis = client_redis()
     with redis.pipeline() as lot:
         for periode, cle in cles.items():
-            lot.incr(cle)
+            lot.incrby(cle, nombre)
             lot.expire(cle, DUREES_S[periode])
         resultats = lot.execute()
     essais = {"horaire": resultats[0], "journalier": resultats[2]}
     plafonds = {"horaire": client.plafond_horaire, "journalier": client.plafond_journalier}
+    acceptes, limitante = nombre, None
     for periode in ("horaire", "journalier"):
-        if essais[periode] > plafonds[periode]:
-            _signaler(client, periode, essais[periode], plafonds[periode], cle_api)
-            raise PlafondAtteint(periode, plafonds[periode])
+        avant = essais[periode] - nombre
+        place = max(0, min(nombre, plafonds[periode] - avant))
+        if place < nombre:
+            _signaler(client, periode, avant, essais[periode], plafonds[periode], cle_api)
+        if place < acceptes:
+            acceptes, limitante = place, periode
+    return acceptes, limitante
 
 
 def essais(client_id, *, maintenant=None) -> dict:
@@ -77,15 +97,17 @@ def seuil_critique(plafond: int, regle: RegleFraude | None) -> int | None:
     return math.ceil(plafond * regle.seuil_critique / 100)
 
 
-def _signaler(client, periode: str, essais: int, plafond: int, cle_api) -> None:
+def _signaler(client, periode: str, avant: int, essais: int, plafond: int, cle_api) -> None:
     """Une alerte au premier refus, une seconde, critique, au seuil critique :
-    deux écritures par période au plus, quel que soit le nombre de refus."""
+    deux écritures par période au plus, quel que soit le nombre de refus. Un
+    lot peut franchir les deux seuils d'un coup : la gravité est celle du plus
+    haut seuil franchi par ces essais-ci, de `avant` (exclu) à `essais`."""
     regle = fraude.regle(RegleFraude.Code.PLAFOND_COMPTE)
     critique = seuil_critique(plafond, regle)
-    if essais == plafond + 1:
-        gravite = AlerteFraude.Gravite.ALERTE
-    elif critique is not None and essais == max(critique, plafond + 2):
+    if critique is not None and avant < max(critique, plafond + 2) <= essais:
         gravite = AlerteFraude.Gravite.CRITIQUE
+    elif avant < plafond + 1 <= essais:
+        gravite = AlerteFraude.Gravite.ALERTE
     else:
         return
     fraude.signaler(

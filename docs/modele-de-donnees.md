@@ -105,15 +105,25 @@ client courant.
 | `id` | uuid | clé primaire |
 | `client_id` | uuid | référence `comptes_client` |
 | `nom` | varchar(100) | non nul |
+| `environnement` | varchar(4) | LIVE, TEST (bac à sable), ajouté par T-106 |
 | `prefixe` | varchar(12) | unique, stocké en clair, sert à retrouver la clé |
 | `condensat` | varchar(255) | Argon2id du secret |
 | `etat` | varchar(20) | ACTIVE, REVOQUEE |
 | `cree_par_id` | uuid | référence `comptes_utilisateur` |
-| `derniere_utilisation_le` | timestamptz | |
+| `derniere_utilisation_le` | timestamptz | réécrite une fois par minute au plus |
+| `derniere_version` | varchar(10) | version d'API appelée en dernier, ajoutée par T-106 |
 | `revoquee_le` | timestamptz | |
 
-Le secret complet a la forme `sk_live_<prefixe>_<secret>` et n'est affiché
-qu'une fois, à la création.
+Le secret complet a la forme `sk_live_<prefixe>_<secret>` (`sk_test_` pour une
+clé de bac à sable) et n'est affiché qu'une fois, à la création. Le préfixe est
+fait de dix caractères hexadécimaux ; le condensat est un Argon2id à coût
+réduit, propre aux clés (le secret est tiré au hasard sur 256 bits).
+
+La table est cloisonnée (`core` 0040), avec une seconde politique, en lecture
+seule : une ligne est visible quand son préfixe égale le réglage
+`app.cle_prefixe`, posé local à la transaction le temps de vérifier une clé
+avant de connaître son client, puis vidé. Décision de l'utilisateur du
+8 novembre 2026 : la table reste cloisonnée et forcée.
 
 **`comptes_dossier`** et **`comptes_piece`** portent l'onboarding vérifié.
 
@@ -701,8 +711,13 @@ APPLICATION, API, ORANGE, MOOV, TELECEL, ACCUSES, RECHARGEMENT, `etat` parmi
 DEGRADE, PANNE, MAINTENANCE, RETABLI, `debut_le`, `fin_le`. Table de
 plateforme, sans `client_id`.
 
-**`support_publication_incident`** : `id`, `incident_id`, `texte`, `auteur_id`,
-`publiee_le`.
+**`support_publication_incident`** : `id`, `incident_id`, `texte`, `etat` (celui
+que la publication annonce, ajouté par T-103), `auteur_id`, `publiee_le`.
+
+Les deux tables d'incident sont réservées aux workers et au back-office
+(sécurité par ligne forcée sans politique, `core` 0039) ; `support_incident`
+porte aussi `modifie_le`. La page publique ne les lit pas : elle lit le
+fichier que l'ordonnanceur publie.
 
 ## api
 
@@ -711,6 +726,13 @@ en-tête `Idempotency-Key` : `id`, `client_id`, `cle`, `empreinte` condensat du
 corps de la requête, `statut_http`, `reponse` en jsonb, `cree_le`, `expire_le`.
 Unicité sur `(client_id, cle)`. Un rejeu avec la même clé et la même empreinte
 renvoie la réponse stockée ; la même clé avec une autre empreinte est refusée.
+
+Précisions de T-108 : `empreinte` est le SHA-256 de la méthode, du chemin et du
+corps ; `statut_http` et `reponse` sont nuls le temps du traitement, car la clé
+est réservée au début de la requête, dans sa transaction, par une insertion qui
+ignore le conflit (un rejeu concurrent attend la fin de la première requête,
+puis lit sa réponse). La table est cloisonnée (`core` 0041) ; l'ordonnanceur
+efface chaque jour les lignes expirées (index sur `expire_le`).
 
 ## fichiers
 

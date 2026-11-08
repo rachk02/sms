@@ -10,7 +10,7 @@ from apps.core.cloisonnement import poser_client
 
 from . import jetons, second_facteur, services
 from .authentification import DUREE_VERROUILLAGE, verrouille
-from .models import Client, Dossier, Utilisateur
+from .models import CleApi, Client, Dossier, Utilisateur
 from .permissions import permission_requise
 
 MESSAGE_ECHEC = "Courriel ou mot de passe incorrect."
@@ -201,3 +201,42 @@ def retirer(request, pk):
     except services.MembreRefuse as refus:
         messages.error(request, str(refus))
     return redirect("membres")
+
+
+# Clés d'API (T-106) ---------------------------------------------------------
+
+
+@permission_requise("cles.gerer")
+def cles_api(request):
+    """Liste les clés du compte et en crée une. La clé complète n'est montrée
+    que dans la réponse à la création, jamais rangée en session ni ailleurs."""
+    erreur, nouvelle = "", None
+    if request.method == "POST":
+        try:
+            _, nouvelle = services.creer_cle(
+                client=request.user.client,
+                nom=request.POST.get("nom", ""),
+                environnement=request.POST.get("environnement", CleApi.Environnement.LIVE),
+                auteur=request.user,
+                adresse_ip=_ip(request),
+            )
+        except services.CleRefusee as refus:
+            erreur = str(refus)
+    contexte = {
+        "cles": CleApi.objects.order_by("-cree_le"),
+        "environnements": CleApi.Environnement.choices,
+        "nouvelle": nouvelle,
+        "erreur": erreur,
+    }
+    reponse = render(request, "comptes/cles_api.html", contexte)
+    reponse["Cache-Control"] = "no-store"
+    return reponse
+
+
+@require_POST
+@permission_requise("cles.gerer")
+def revoquer_cle(request, pk):
+    cle = get_object_or_404(CleApi, pk=pk)
+    services.revoquer_cle(cle, auteur=request.user, adresse_ip=_ip(request))
+    messages.success(request, f"La clé {cle.nom} est révoquée.")
+    return redirect("cles-api")

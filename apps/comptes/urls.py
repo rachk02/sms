@@ -15,5 +15,7 @@ urlpatterns = [
     path("second-facteur/codes", vues_second_facteur.codes, name="second-facteur-codes"),
     path("second-facteur/verifier", vues_second_facteur.verifier, name="second-facteur-verifier"),
     path("compte/donnees", views.donnees, name="donnees"),
+    path("compte/cles-api", views.cles_api, name="cles-api"),
+    path("compte/cles-api/<uuid:pk>/revoquer", views.revoquer_cle, name="cle-api-revoquer"),
     path("", views.accueil, name="accueil"),
 ]

@@ -20,6 +20,8 @@ LIBRES = (
     "/static/",
     "/rappels/",
     "/metriques",
+    # L'API publique ignore la session : seule la clé y authentifie (T-106).
+    "/v1/",
 )
 
 
