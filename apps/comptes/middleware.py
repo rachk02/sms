@@ -22,6 +22,8 @@ LIBRES = (
     "/metriques",
     # L'API publique ignore la session : seule la clé y authentifie (T-106).
     "/v1/",
+    # Documentation publique de l'API (T-110).
+    "/documentation/",
 )
 
 

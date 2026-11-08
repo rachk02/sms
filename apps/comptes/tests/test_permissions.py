@@ -50,6 +50,9 @@ ATTENDUS = {
     "api-message": ("get", {ANONYME: 401, UTILISATEUR: 401, ADMIN: 401}),
     "api-solde": ("get", {ANONYME: 401, UTILISATEUR: 401, ADMIN: 401}),
     "api-expediteurs": ("get", {ANONYME: 401, UTILISATEUR: 401, ADMIN: 401}),
+    # Documentation publique de l'API (T-110).
+    "api-openapi": ("get", {ANONYME: 200, UTILISATEUR: 200, ADMIN: 200}),
+    "api-documentation": ("get", {ANONYME: 200, UTILISATEUR: 200, ADMIN: 200}),
     # Point public des fournisseurs : sans signature, la même réponse nue pour tous.
     "rappel-paiement": ("post", {ANONYME: 403, UTILISATEUR: 403, ADMIN: 403}),
     # Sans montant, le rechargement est refusé et le formulaire se réaffiche.

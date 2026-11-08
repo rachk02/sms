@@ -101,6 +101,8 @@ def route_api(*methodes: str):
                 sortie[nom] = valeur
             return sortie
 
+        # Lu par la documentation (T-110) : les méthodes documentées sont celles-ci.
+        enveloppe.methodes = tuple(methodes)
         return enveloppe
 
     return decorateur

@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block titre %}Documentation de l'API{% endblock %}
+{% block contenu %}
+<h1 class="mb-2 text-2xl font-semibold">{{ titre }}, version {{ version }}</h1>
+<p class="mb-6 text-sm text-slate-600">Générée depuis le code de la plateforme. Schéma OpenAPI : <a class="underline" href="{{ schema }}">{{ schema }}</a>. Adresse de base : <code class="font-mono">{{ base }}</code>.</p>
+
+<section class="mb-8 rounded border border-amber-300 bg-amber-50 p-4">
+  <h2 class="mb-2 text-lg font-semibold">À lire avant d'écrire une ligne</h2>
+  {% for regle in regles %}<p class="mb-2 text-sm">{{ regle }}</p>{% endfor %}
+</section>
+
+<section class="mb-8">
+  <h2 class="mb-2 text-lg font-semibold">Authentification</h2>
+  <p class="mb-3 text-sm">{{ authentification }}</p>
+  <h2 class="mb-2 text-lg font-semibold">Quotas</h2>
+  <p class="mb-3 text-sm">{{ quotas }}</p>
+  <h2 class="mb-2 text-lg font-semibold">Idempotence</h2>
+  <p class="text-sm">{{ idempotence }}</p>
+</section>
+
+{% for route in routes %}
+<section class="mb-10 border-t border-slate-200 pt-6" id="{{ route.ancre }}">
+  <h2 class="mb-1 text-lg font-semibold"><span class="font-mono">{{ route.fiche.methode }} {{ route.chemin }}</span></h2>
+  <p class="mb-2 font-medium">{{ route.fiche.resume }}</p>
+  <p class="mb-3 text-sm">{{ route.fiche.description }}</p>
+  {% if route.fiche.parametres %}
+  <table class="mb-3 w-full text-sm">
+    <thead><tr class="text-left text-slate-500"><th class="py-1">Paramètre</th><th>Où</th><th>Description</th></tr></thead>
+    <tbody>
+    {% for p in route.fiche.parametres %}
+      <tr class="border-t border-slate-200"><td class="py-1 font-mono">{{ p.nom }}</td><td>{{ p.ou }}</td><td>{{ p.description }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {% for langage, code in route.exemples.items %}
+  <details class="mb-2" {% if forloop.first %}open{% endif %}>
+    <summary class="cursor-pointer text-sm font-medium">{{ langage }}</summary>
+    <pre class="overflow-x-auto rounded bg-slate-900 p-3 text-xs text-slate-100"><code>{{ code }}</code></pre>
+  </details>
+  {% endfor %}
+  <p class="mt-3 mb-1 text-sm font-medium">Réponse {{ route.fiche.statut }}</p>
+  <pre class="overflow-x-auto rounded bg-slate-100 p-3 text-xs"><code>{{ route.reponse }}</code></pre>
+  <p class="mt-3 text-sm">Erreurs propres à cette route : {% for code in route.fiche.erreurs %}<span class="font-mono">{{ code }}</span>{% if not forloop.last %}, {% endif %}{% empty %}aucune{% endfor %} ; plus les erreurs communes.</p>
+</section>
+{% endfor %}
+
+<section class="mb-10 border-t border-slate-200 pt-6">
+  <h2 class="mb-3 text-lg font-semibold">Codes d'erreur</h2>
+  <p class="mb-3 text-sm">Toute erreur rend <code class="font-mono">{"erreur": {"code", "message", "requete_id"}}</code>. Joignez <code class="font-mono">requete_id</code> à toute demande au support.</p>
+  <table class="mb-6 w-full text-sm">
+    <thead><tr class="text-left text-slate-500"><th class="py-1">Code</th><th>HTTP</th><th>Signification</th></tr></thead>
+    <tbody>
+    {% for code, statut, description in erreurs %}
+      <tr class="border-t border-slate-200"><td class="py-1 font-mono">{{ code }}</td><td>{{ statut }}</td><td>{{ description }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <h3 class="mb-2 font-semibold">Refus message par message, dans un envoi</h3>
+  <table class="mb-6 w-full text-sm">
+    <tbody>
+    {% for code, description in refus %}
+      <tr class="border-t border-slate-200"><td class="py-1 font-mono">{{ code }}</td><td>{{ description }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <h3 class="mb-2 font-semibold">États d'un message</h3>
+  <table class="w-full text-sm">
+    <tbody>
+    {% for etat, description in etats %}
+      <tr class="border-t border-slate-200"><td class="py-1 font-mono">{{ etat }}</td><td>{{ description }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="mb-10 border-t border-slate-200 pt-6" id="webhooks">
+  <h2 class="mb-2 text-lg font-semibold">Webhooks</h2>
+  <p class="mb-3 text-sm">{{ webhooks }}</p>
+  <table class="mb-4 w-full text-sm">
+    <tbody>
+    {% for nom, libelle in evenements %}
+      <tr class="border-t border-slate-200"><td class="py-1 font-mono">{{ nom }}</td><td>{{ libelle }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="mb-2 text-sm font-medium">Vérifier la signature</p>
+  {% for langage, code in verification %}
+  <details class="mb-2" {% if forloop.first %}open{% endif %}>
+    <summary class="cursor-pointer text-sm font-medium">{{ langage }}</summary>
+    <pre class="overflow-x-auto rounded bg-slate-900 p-3 text-xs text-slate-100"><code>{{ code }}</code></pre>
+  </details>
+  {% endfor %}
+</section>
+{% endblock %}

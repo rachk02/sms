@@ -20,9 +20,9 @@ from apps.expediteurs.models import OPERATEURS
 from apps.expediteurs.selectors import du_compte
 from apps.journal import selectors as journal
 
-from . import services
+from . import documentation, services
 from . import webhooks as webhooks_services
-from .auth import erreur, reponse, route_api
+from .auth import VERSION, erreur, reponse, route_api
 from .models import Livraison, PointReception
 
 ENTETE_IDEMPOTENCE = "Idempotency-Key"
@@ -320,4 +320,55 @@ def livraisons(request):
         request,
         "api/livraisons.html",
         {"livraisons": lignes, "limite": LIVRAISONS_AFFICHEES},
+    )
+
+
+# Documentation publique (T-110), sans clé ni compte.
+
+
+def _base(request) -> str:
+    return request.build_absolute_uri("/").rstrip("/")
+
+
+def schema_openapi(request):
+    """GET /v1/openapi.json : le schéma OpenAPI 3.1, issu du code."""
+    return reponse(documentation.openapi(_base(request)))
+
+
+def documentation_api(request):
+    """La documentation lisible, tirée de la même source que le schéma."""
+    base = _base(request)
+    routes = [
+        {
+            "fiche": fiche,
+            "chemin": documentation.chemin(fiche),
+            "ancre": f"{fiche.methode.lower()}-{fiche.nom}",
+            "exemples": documentation.exemples(fiche, base),
+            "reponse": json.dumps(fiche.reponse, ensure_ascii=False, indent=2),
+        }
+        for fiche in documentation.FICHES
+    ]
+    return render(
+        request,
+        "api/documentation.html",
+        {
+            "titre": documentation.TITRE,
+            "version": VERSION,
+            "base": base,
+            "schema": base + "/v1/openapi.json",
+            "regles": documentation.REGLES_INTEGRATEUR,
+            "authentification": documentation.AUTHENTIFICATION,
+            "quotas": documentation.QUOTAS,
+            "idempotence": documentation.IDEMPOTENCE,
+            "routes": routes,
+            "erreurs": [
+                (code, statut, description)
+                for code, (statut, description) in documentation.ERREURS.items()
+            ],
+            "refus": list(documentation.REFUS.items()),
+            "etats": list(documentation.ETATS.items()),
+            "webhooks": documentation.WEBHOOKS,
+            "evenements": list(documentation.EVENEMENTS.items()),
+            "verification": list(documentation.VERIFICATION_SIGNATURE.items()),
+        },
     )

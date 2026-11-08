@@ -75,6 +75,12 @@ Choix faits, à confirmer : le texte du message n'est pas rendu par l'API (seuls
 
 **Critères** La documentation ne peut pas diverger du code puisqu'elle en est issue. Chaque route porte au moins un exemple complet. Un intégrateur réussit un premier envoi en bac à sable sans poser de question, ce qui se teste avec une personne qui ne connaît pas le projet.
 
+**Fait.** Une seule source, `apps/api/documentation.py`, d'où sortent le schéma OpenAPI 3.1 (`GET /v1/openapi.json`, public) et la page lisible (`/documentation/api`, publique, rendue au serveur). Les chemins viennent des routes déclarées dans `apps/api/urls.py`, les méthodes de la vue elle-même (le décorateur `route_api` les expose), les codes de refus d'un envoi de `campagnes.services`, les événements de webhook du modèle des points de réception, la version de `api.auth`. Chaque route porte son exemple complet en cURL, PHP, Python et JavaScript, généré depuis sa fiche (adresse, clé, en-tête d'idempotence pour un envoi, corps), avec un exemple de réponse ; la page reprend en tête, tel quel, le texte demandé aux intégrateurs par la politique de version (T-105), puis l'authentification, les quotas, l'idempotence, les codes d'erreur et leur code HTTP, les refus par message, les états, et les webhooks avec la vérification de signature dans les quatre langages.
+
+Les tests (`apps/api/tests/test_documentation.py`) refusent une route publique sans fiche ou une fiche sans route, des méthodes documentées qui diffèrent de celles de la vue, un code d'erreur rendu par le code mais absent de la documentation, un code documenté jamais rendu, un code HTTP documenté qui diffère de celui rendu, un refus d'envoi non documenté, une liste d'états ou d'événements qui diverge, un texte d'en-tête qui s'écarte de la politique de version, une route sans exemple complet dans un des quatre langages ; ils lisent enfin le schéma et la page sans compte.
+
+Reste à faire avec l'utilisateur : le troisième critère se vérifie avec une personne qui ne connaît pas le projet, sur le bac à sable de T-113. Choix faits, à confirmer : pas d'interface interactive de type Swagger (la page est rendue au serveur, sans script tiers) ; le schéma porte les exemples sous une extension `x-exemples`.
+
 ## T-111 · Webhooks sortants
 
 **Produit** La déclaration des points de réception, la signature HMAC sur horodatage et corps, les quatre événements, la réémission échelonnée et la file de rebut.
