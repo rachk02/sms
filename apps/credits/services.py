@@ -119,6 +119,35 @@ def _ecrire(compte: CompteCredit, type_, montant, *, reference="", motif="", aut
     return ecriture
 
 
+# Alerte de solde bas (T-111, décision de l'utilisateur du 8 novembre 2026).
+SOLDE_BAS = "client.solde.bas"
+
+
+def _surveiller_seuil(compte: CompteCredit) -> None:
+    """Après un mouvement du disponible, sous le verrou du solde : au passage
+    sous le seuil du client, l'alerte part une fois et se désarme ; elle se
+    réarme quand le disponible repasse au-dessus du seuil majoré de vingt pour
+    cent, pour qu'un solde qui oscille autour du seuil ne produise pas une
+    alerte par recharge. Un seuil nul ne surveille rien."""
+    from apps.core.evenements import publier
+
+    seuil, armee = Client.objects.values_list("seuil_alerte_solde", "alerte_solde_armee").get(
+        id=compte.client_id
+    )
+    if not seuil:
+        return
+    disponible = compte.solde_disponible
+    if armee and disponible < seuil:
+        Client.objects.filter(id=compte.client_id).update(alerte_solde_armee=False)
+        publier(
+            SOLDE_BAS,
+            client_id=compte.client_id,
+            donnees={"disponible": disponible, "seuil": seuil},
+        )
+    elif not armee and disponible * 10 >= seuil * 12:
+        Client.objects.filter(id=compte.client_id).update(alerte_solde_armee=True)
+
+
 @transaction.atomic
 def acheter(client_id, montant: int, *, reference: str, auteur=None, motif: str = "") -> Ecriture:
     """Achat constaté : paiement confirmé de serveur à serveur, ou paiement manuel
@@ -128,7 +157,7 @@ def acheter(client_id, montant: int, *, reference: str, auteur=None, motif: str 
     if not reference or not reference.strip():
         raise ReferenceObligatoire("Un achat renvoie à sa transaction de paiement.")
     compte = _compte_verrouille(client_id)
-    return _ecrire(
+    ecriture = _ecrire(
         compte,
         Ecriture.Type.ACHAT,
         montant,
@@ -136,6 +165,8 @@ def acheter(client_id, montant: int, *, reference: str, auteur=None, motif: str 
         motif=(motif or "").strip(),
         auteur=auteur,
     )
+    _surveiller_seuil(compte)
+    return ecriture
 
 
 @transaction.atomic
@@ -152,9 +183,11 @@ def recrediter(client_id, montant: int, *, motif: str = "", reference: str = "",
             "Un recrédit automatique renvoie au message ou à l'incident qui le justifie."
         )
     compte = _compte_verrouille(client_id)
-    return _ecrire(
+    ecriture = _ecrire(
         compte, Ecriture.Type.RECREDIT, montant, reference=reference, motif=motif, auteur=auteur
     )
+    _surveiller_seuil(compte)
+    return ecriture
 
 
 @transaction.atomic
@@ -167,7 +200,7 @@ def ajuster(client_id, montant: int, *, motif: str, auteur, reference: str = "")
     if not isinstance(montant, int) or montant == 0:
         raise ValueError(f"Le montant d'un ajustement est un entier non nul : {montant!r}")
     compte = _compte_verrouille(client_id)
-    return _ecrire(
+    ecriture = _ecrire(
         compte,
         Ecriture.Type.AJUSTEMENT,
         montant,
@@ -175,6 +208,8 @@ def ajuster(client_id, montant: int, *, motif: str, auteur, reference: str = "")
         motif=motif.strip(),
         auteur=auteur,
     )
+    _surveiller_seuil(compte)
+    return ecriture
 
 
 @transaction.atomic
@@ -196,6 +231,7 @@ def reserver(
         raise SoldeInsuffisant(compte.solde_disponible, montant)
     compte.montant_reserve += montant
     compte.save(update_fields=["montant_reserve", "mis_a_jour_le"])
+    _surveiller_seuil(compte)
     return Reservation.objects.create(
         client_id=client_id,
         campagne_id=campagne_id,
@@ -258,6 +294,7 @@ def reserver_messages(
     )
     compte.montant_reserve += total
     compte.save(update_fields=["montant_reserve", "mis_a_jour_le"])
+    _surveiller_seuil(compte)
     return acceptees
 
 
@@ -298,6 +335,7 @@ def liberer(reservation_id) -> int:
     libere = reservation.montant_restant
     compte.montant_reserve -= libere
     compte.save(update_fields=["montant_reserve", "mis_a_jour_le"])
+    _surveiller_seuil(compte)
     reservation.montant_restant = 0
     reservation.etat = Reservation.Etat.LIBEREE
     reservation.resolue_le = timezone.now()

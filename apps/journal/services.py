@@ -213,6 +213,55 @@ def latence_ms(soumis_le: datetime | None, livre_le: datetime) -> int | None:
     return max(0, (livre_le - soumis_le) // timedelta(milliseconds=1))
 
 
+# Webhooks (T-111) : le sort final d'un envoi hors campagne est annoncé au
+# client par la boîte d'envoi ; le module api, au-dessus, le livre.
+WEBHOOK_SORTS = {
+    Etat.LIVRE: "client.message.livre",
+    Etat.NON_LIVRE: "client.message.echec",
+    Etat.EXPIRE: "client.message.echec",
+    Etat.REJETE: "client.message.echec",
+}
+WEBHOOK_ENTRANT = "client.message.entrant"
+
+
+def _annoncer_sort(message: Message, vers: str, horodatage: datetime, motif: str) -> None:
+    if message.campagne_id or message.nature != Message.Nature.CLIENT:
+        return
+    if vers not in WEBHOOK_SORTS:
+        return
+    publier(
+        WEBHOOK_SORTS[vers],
+        client_id=message.client_id,
+        objet_id=message.id,
+        donnees={
+            "message_id": str(message.id),
+            "etat": vers,
+            "numero": message.numero_normalise,
+            "reseau": message.operateur,
+            "motif_echec": motif or None,
+            "horodatage": horodatage.isoformat(),
+            "recu_le": message.date_reception.isoformat(),
+        },
+        cle_idempotence=f"webhook:{message.id}:{vers}",
+    )
+
+
+def _annoncer_entrant(client_id, entrant_id, numero: str, texte: str, recu_le, mot_cle: str):
+    publier(
+        WEBHOOK_ENTRANT,
+        client_id=client_id,
+        objet_id=entrant_id,
+        donnees={
+            "entrant_id": str(entrant_id),
+            "numero": numero,
+            "texte": texte,
+            "mot_cle": mot_cle or None,
+            "recu_le": recu_le.isoformat(),
+        },
+        cle_idempotence=f"webhook:entrant:{entrant_id}:{client_id}",
+    )
+
+
 class TransitionInterdite(Exception):
     def __init__(self, message_id, depuis: str, vers: str):
         self.message_id, self.depuis, self.vers = message_id, depuis, vers
@@ -272,6 +321,7 @@ def changer_etat(
     from .fraude import noter_issue
 
     noter_issue(message, vers, horodatage)
+    _annoncer_sort(message, vers, horodatage, champs.get("motif_echec") or message.motif_echec)
     message.etat = vers
 
 
@@ -778,6 +828,9 @@ def rapprocher_desinscription(
         )
     clients = sorted(touches, key=str)
     marquer_rapproche(entrant_id, clients)
+    # Le STOP vaut pour chacun des clients retenus : chacun le reçoit (T-111).
+    for client_id in clients:
+        _annoncer_entrant(client_id, entrant_id, numero, texte, recu_le, mot_cle)
     if not clients:
         journal.warning(
             "Désinscription sans envoi correspondant dans les 72 heures : entrant %s.",
@@ -785,6 +838,27 @@ def rapprocher_desinscription(
         )
         transaction.on_commit(lambda: client_redis().incr(CLE_DESINSCRIPTIONS_SANS_EMETTEUR))
     return clients
+
+
+@transaction.atomic
+def attribuer_entrant(
+    *, entrant_id, numero_expediteur: str, texte: str, recu_le: datetime, mot_cle=""
+):
+    """Un SMS entrant qui n'est pas une désinscription revient au client qui a
+    écrit à ce numéro dans les soixante-douze heures, s'il est seul ; il est
+    alors annoncé à ce client (T-111). Plusieurs clients : la réponse d'une
+    personne ne se montre pas à un client qui ne lui a peut-être jamais écrit ;
+    le message reste gardé, sans client. Renvoie le client retenu, ou None."""
+    try:
+        numero = normaliser(numero_expediteur)
+    except NumeroInvalide:
+        return None
+    touches = sorted(clients_touches(numero, recu_le), key=str)
+    if len(touches) != 1:
+        return None
+    marquer_rapproche(entrant_id, touches)
+    _annoncer_entrant(touches[0], entrant_id, numero, texte, recu_le, mot_cle)
+    return touches[0]
 
 
 def confirmer_desinscription(

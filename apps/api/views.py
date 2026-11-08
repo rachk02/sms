@@ -7,14 +7,23 @@ la seule porte des envois hors campagne.
 
 import json
 
+from django.contrib import messages as django_messages
+from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
+
 from apps.campagnes.services import LOT_MAXIMUM, CampagneRefusee, accepter_unitaires
+from apps.comptes.models import Client
+from apps.comptes.permissions import permission_requise
+from apps.comptes.services import regler_seuil_alerte
 from apps.credits.services import SoldeOccupe, solde
 from apps.expediteurs.models import OPERATEURS
 from apps.expediteurs.selectors import du_compte
 from apps.journal import selectors as journal
 
 from . import services
+from . import webhooks as webhooks_services
 from .auth import erreur, reponse, route_api
+from .models import Livraison, PointReception
 
 ENTETE_IDEMPOTENCE = "Idempotency-Key"
 
@@ -218,4 +227,97 @@ def expediteurs(request):
                 for ligne in du_compte(request.cle_api.client_id)
             ]
         }
+    )
+
+
+# Écrans du compte : points de réception, seuil d'alerte, journal des livraisons
+# (T-111). Réservés aux administrateurs du compte.
+
+LIVRAISONS_AFFICHEES = 100
+
+
+@permission_requise("webhooks.gerer")
+def webhooks(request):
+    """Liste les points de réception et en déclare un. Le secret de signature
+    n'est montré que dans la réponse à la création."""
+    erreur, secret = "", None
+    if request.method == "POST":
+        try:
+            _, secret = webhooks_services.creer_point(
+                client=request.user.client,
+                url=request.POST.get("url", ""),
+                evenements=request.POST.getlist("evenements"),
+                auteur=request.user,
+                adresse_ip=request.META.get("REMOTE_ADDR"),
+            )
+        except webhooks_services.PointRefuse as refus:
+            erreur = str(refus)
+    contexte = {
+        "points": PointReception.objects.order_by("-cree_le"),
+        "evenements": PointReception.Evenement.choices,
+        "secret": secret,
+        "erreur": erreur,
+        "seuil": Client.objects.values_list("seuil_alerte_solde", flat=True).get(
+            id=request.user.client_id
+        ),
+    }
+    page = render(request, "api/webhooks.html", contexte)
+    page["Cache-Control"] = "no-store"
+    return page
+
+
+@require_POST
+@permission_requise("webhooks.gerer")
+def desactiver_webhook(request, pk):
+    point = get_object_or_404(PointReception, pk=pk)
+    webhooks_services.desactiver_point(
+        point, auteur=request.user, adresse_ip=request.META.get("REMOTE_ADDR")
+    )
+    django_messages.success(request, f"Le point {point.url} est désactivé.")
+    return redirect("webhooks")
+
+
+@require_POST
+@permission_requise("webhooks.gerer")
+def reactiver_webhook(request, pk):
+    point = get_object_or_404(PointReception, pk=pk)
+    try:
+        webhooks_services.reactiver_point(
+            point, auteur=request.user, adresse_ip=request.META.get("REMOTE_ADDR")
+        )
+    except webhooks_services.PointRefuse as refus:
+        django_messages.error(request, str(refus))
+    else:
+        django_messages.success(request, f"Le point {point.url} est de nouveau actif.")
+    return redirect("webhooks")
+
+
+@require_POST
+@permission_requise("webhooks.gerer")
+def alerte_solde(request):
+    try:
+        regler_seuil_alerte(
+            request.user.client,
+            request.POST.get("seuil", ""),
+            auteur=request.user,
+            adresse_ip=request.META.get("REMOTE_ADDR"),
+        )
+    except ValueError as refus:
+        django_messages.error(request, str(refus))
+    else:
+        django_messages.success(request, "Le seuil d'alerte est enregistré.")
+    return redirect("webhooks")
+
+
+@permission_requise("webhooks.gerer")
+def livraisons(request):
+    """Les dernières livraisons du compte, des plus récentes aux plus
+    anciennes, avec leur état, leurs tentatives et la dernière réponse."""
+    lignes = Livraison.objects.select_related("point").order_by("-cree_le", "-id")[
+        :LIVRAISONS_AFFICHEES
+    ]
+    return render(
+        request,
+        "api/livraisons.html",
+        {"livraisons": lignes, "limite": LIVRAISONS_AFFICHEES},
     )

@@ -69,6 +69,38 @@ def changer_mode_reglement(client: Client, mode: str, *, auteur, motif: str) -> 
     return client
 
 
+SEUIL_ALERTE_MAXIMUM = 1_000_000_000
+
+
+@transaction.atomic
+def regler_seuil_alerte(client: Client, seuil, *, auteur, adresse_ip=None) -> Client:
+    """Règle le seuil d'alerte de solde bas (T-111), en FCFA entiers ; zéro
+    pour aucune alerte. L'alerte est réarmée : le prochain mouvement qui laisse
+    le disponible sous le nouveau seuil la déclenche."""
+    from apps.core.audit import auditer
+
+    try:
+        seuil = int(str(seuil).strip())
+    except ValueError:
+        raise ValueError("Le seuil est un montant entier en FCFA.") from None
+    if not 0 <= seuil <= SEUIL_ALERTE_MAXIMUM:
+        raise ValueError("Le seuil va de zéro (aucune alerte) à un milliard de FCFA.")
+    avant = Client.objects.select_for_update().values_list("seuil_alerte_solde", flat=True)
+    avant = avant.get(id=client.id)
+    Client.objects.filter(id=client.id).update(seuil_alerte_solde=seuil, alerte_solde_armee=True)
+    auditer(
+        "comptes.seuil_alerte_solde",
+        client,
+        auteur=auteur,
+        client=client,
+        avant={"seuil_alerte_solde": avant},
+        apres={"seuil_alerte_solde": seuil},
+        adresse_ip=adresse_ip,
+    )
+    client.seuil_alerte_solde, client.alerte_solde_armee = seuil, True
+    return client
+
+
 @transaction.atomic
 def creer_utilisateur(*, courriel, mot_de_passe, nom, client=None, **champs) -> Utilisateur:
     return Utilisateur.objects.create_user(courriel, mot_de_passe, nom=nom, client=client, **champs)

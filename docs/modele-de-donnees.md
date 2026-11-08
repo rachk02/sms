@@ -63,6 +63,8 @@ audite dans la transaction même de son action (décision du 30 septembre 2026).
 | `plafond_horaire` | integer | non nul, défaut selon le palier |
 | `plafond_journalier` | integer | non nul |
 | `cloture_le` | timestamptz | nul tant que le compte vit |
+| `seuil_alerte_solde` | integer | FCFA entiers, défaut 0 : aucune alerte ; réglé par un administrateur du compte, audité (T-111) |
+| `alerte_solde_armee` | boolean | défaut vrai ; désarmée au passage sous le seuil, réarmée au-dessus du seuil majoré de 20 % |
 
 **`comptes_utilisateur`** étend le modèle utilisateur de Django. Le courriel est
 l'identifiant de connexion, il n'y a pas de nom d'utilisateur séparé.
@@ -733,6 +735,26 @@ est réservée au début de la requête, dans sa transaction, par une insertion 
 ignore le conflit (un rejeu concurrent attend la fin de la première requête,
 puis lit sa réponse). La table est cloisonnée (`core` 0041) ; l'ordonnanceur
 efface chaque jour les lignes expirées (index sur `expire_le`).
+
+**`api_point_reception`** (T-111) : un point de réception des webhooks d'un
+client. `id`, `client_id`, `url` (500 caractères, https et hôte public),
+`secret_chiffre` (le secret de signature, chiffré par la clé applicative,
+montré une fois), `evenements` (tableau : `client.message.livre`,
+`client.message.echec`, `client.message.entrant`, `client.solde.bas`), `actif`,
+`echecs_consecutifs` (remis à zéro au premier succès ; cinq désactivent le
+point), `desactive_le`, `cree_par` (nul pour un point créé hors interface),
+`cree_le`. Dix points actifs au plus par compte.
+
+**`api_livraison`** (T-111) : une livraison d'un événement à un point, le
+journal que le client consulte. `id`, `client_id`, `point_id` (clé étrangère,
+suppression en cascade), `evenement`, `cle_evenement` (la clé d'idempotence de
+l'événement interne, rendue au client comme `id` du corps et en-tête
+`Webhook-Id`), `corps` en jsonb, `etat` (EN_COURS, LIVREE, REBUT), `tentatives`,
+`dernier_statut_http`, `derniere_erreur`, `cree_le`, `derniere_tentative_le`,
+`livree_le`. Unicité sur `(point_id, cle_evenement)` : un événement relivré par
+le courtier ne produit pas de seconde livraison. Index sur
+`(client_id, cree_le décroissant)`. Les deux tables sont cloisonnées (`core`
+0042).
 
 ## fichiers
 

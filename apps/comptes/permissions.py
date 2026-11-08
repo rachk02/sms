@@ -23,6 +23,8 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     "membres.gerer": frozenset({ADMIN}),
     # Une clé d'API engage le compte entier, comme un membre (T-106).
     "cles.gerer": frozenset({ADMIN}),
+    # Points de réception des webhooks et seuil d'alerte de solde (T-111).
+    "webhooks.gerer": frozenset({ADMIN}),
     "contacts.consulter": frozenset({ADMIN, UTILISATEUR}),
     "contacts.importer": frozenset({ADMIN, UTILISATEUR}),
     "contacts.exporter": frozenset({ADMIN, UTILISATEUR}),

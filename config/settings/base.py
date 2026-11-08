@@ -163,6 +163,10 @@ API_QUOTAS = {
     "rafale_par_seconde": int(env("API_QUOTA_RAFALE_PAR_SECONDE", "20")),
     "soutenu_par_minute": int(env("API_QUOTA_SOUTENU_PAR_MINUTE", "300")),
 }
+# Webhooks sortants (T-111) : un point de réception doit être public et en
+# https. « 1 » accepte http et les adresses internes, pour le poste de
+# développement et les tests seulement : jamais en production.
+WEBHOOKS_ADRESSES_PRIVEES = env("WEBHOOKS_ADRESSES_PRIVEES", "") == "1"
 STOCKAGE_OBJET = {
     "point_acces": env("MINIO_ENDPOINT"),
     "identifiant": env("MINIO_ROOT_USER"),

@@ -15,6 +15,7 @@ from workers.base import Worker, WorkerEnAttente
 from workers.envoi import WorkerEnvoi
 from workers.ordonnanceur import CLE_VERROU, prendre_verrou
 from workers.paiements import WorkerPaiements
+from workers.webhook import WorkerWebhook
 
 DUREE_TRAITEMENT_S = 1.5
 
@@ -149,7 +150,9 @@ def test_chaque_point_d_entree_ecoute_ses_files():
     )
     assert WorkerPaiements.files == ("paiements.rappels",)
     connues = set(FILES) | set(ABONNEMENTS)
-    ecoutees = {f for w in (WorkerEnvoi, WorkerAccuses, WorkerPaiements) for f in w.files}
+    ecoutees = {
+        f for w in (WorkerEnvoi, WorkerAccuses, WorkerPaiements, WorkerWebhook) for f in w.files
+    }
     assert not ecoutees - connues
 
 

@@ -33,6 +33,8 @@ CLOISONNEES = (
     # Plus une politique de lecture par préfixe, pour vérifier une clé.
     "comptes_cle_api",
     "api_idempotence",
+    "api_point_reception",
+    "api_livraison",
     "fichiers_fichier",
     "campagnes_campagne",
     "campagnes_destinataire",

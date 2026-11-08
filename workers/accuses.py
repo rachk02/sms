@@ -15,18 +15,35 @@ from .base import Worker, journal, lancer
 
 
 def _enregistrer_entrant(corps: bytes) -> None:
-    from apps.telecom.services import enregistrer_entrant
+    from django.db import transaction
+
+    from apps.journal.services import attribuer_entrant
+    from apps.telecom.services import enregistrer_entrant, est_desinscription
 
     donnees = json.loads(corps)
     donnees = donnees.get("donnees", donnees)
-    enregistrer_entrant(
-        connecteur_id=donnees["connecteur_id"],
-        reference=donnees["reference"],
-        numero_expediteur=donnees["numero_expediteur"],
-        numero_destination=donnees["numero_destination"],
-        texte=donnees["texte"],
-        recu_le=datetime.fromisoformat(donnees["recu_le"]),
-    )
+    # Une seule transaction : une panne entre l'écriture et l'attribution ne
+    # laisse pas un entrant écrit que le rejeu, le trouvant déjà là, n'attribuerait plus.
+    with transaction.atomic():
+        entrant, cree = enregistrer_entrant(
+            connecteur_id=donnees["connecteur_id"],
+            reference=donnees["reference"],
+            numero_expediteur=donnees["numero_expediteur"],
+            numero_destination=donnees["numero_destination"],
+            texte=donnees["texte"],
+            recu_le=datetime.fromisoformat(donnees["recu_le"]),
+        )
+        # Hors désinscription, rapprochée par son propre chemin : le message
+        # revient au client qui a écrit à ce numéro, s'il est seul, et lui est
+        # annoncé (T-111).
+        if cree and not est_desinscription(entrant):
+            attribuer_entrant(
+                entrant_id=entrant.id,
+                numero_expediteur=entrant.numero_expediteur,
+                texte=entrant.texte,
+                recu_le=entrant.recu_le,
+                mot_cle=entrant.mot_cle_reconnu,
+            )
 
 
 def _confirmer_operateur(message) -> None:

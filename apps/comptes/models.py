@@ -48,6 +48,11 @@ class Client(Base):
     plafond_horaire = models.IntegerField()
     plafond_journalier = models.IntegerField()
     cloture_le = models.DateTimeField(null=True, blank=True)
+    # Alerte de solde bas (T-111) : seuil en FCFA réglé par le client, zéro
+    # pour aucune alerte. Désarmée au franchissement vers le bas, réarmée quand
+    # le disponible repasse au-dessus du seuil majoré de vingt pour cent.
+    seuil_alerte_solde = models.IntegerField(default=0, db_default=0)
+    alerte_solde_armee = models.BooleanField(default=True, db_default=True)
 
     class Meta:
         db_table = "comptes_client"

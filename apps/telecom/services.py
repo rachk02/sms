@@ -58,6 +58,16 @@ def enregistrer_entrant(
     return entrant, cree
 
 
+def est_desinscription(entrant: MessageEntrant) -> bool:
+    """Vrai si le mot-clé reconnu dans ce SMS est une désinscription : il suit
+    alors le chemin du STOP, qui le rapproche de ses clients."""
+    if not entrant.mot_cle_reconnu:
+        return False
+    return MotCle.objects.filter(
+        mot_cle=entrant.mot_cle_reconnu, action=MotCle.Action.DESINSCRIPTION
+    ).exists()
+
+
 def marquer_rapproche(entrant_id, clients: list) -> None:
     """Note qu'un SMS entrant a été rapproché. Le client n'est posé que s'il est
     seul : un STOP qui vaut pour plusieurs clients reste sans client, rapproché

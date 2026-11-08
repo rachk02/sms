@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block contenu %}
+<h1 class="mb-2 text-2xl font-semibold">Journal des livraisons</h1>
+<p class="mb-6 text-sm text-slate-600">Les {{ limite }} dernières livraisons de vos webhooks. <a class="underline" href="{% url 'webhooks' %}">Points de réception</a></p>
+<table class="w-full text-sm">
+  <thead>
+    <tr class="text-left text-slate-500"><th class="py-2">Créée le</th><th>Événement</th><th>Adresse</th><th>État</th><th>Tentatives</th><th>Dernière réponse</th></tr>
+  </thead>
+  <tbody>
+  {% for livraison in livraisons %}
+    <tr class="border-t border-slate-200">
+      <td class="py-2">{{ livraison.cree_le|date:"d/m/Y H:i:s" }}</td>
+      <td class="font-mono">{{ livraison.evenement }}</td>
+      <td class="break-all font-mono">{{ livraison.point.url }}</td>
+      <td>{{ livraison.get_etat_display }}{% if livraison.livree_le %} le {{ livraison.livree_le|date:"d/m/Y H:i:s" }}{% endif %}</td>
+      <td>{{ livraison.tentatives }}</td>
+      <td>{% if livraison.dernier_statut_http %}HTTP {{ livraison.dernier_statut_http }}{% endif %} {{ livraison.derniere_erreur }}</td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="6" class="py-2 text-slate-500">Aucune livraison pour l'instant.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

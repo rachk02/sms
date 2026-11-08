@@ -35,6 +35,11 @@ ATTENDUS = {
     # Sans nom, la création est refusée et la page se réaffiche.
     "cles-api": ("post", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 200}),
     "cle-api-revoquer": ("post", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 404}),
+    "webhooks": ("post", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 200}),
+    "webhook-livraisons": ("get", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 200}),
+    "webhook-desactiver": ("post", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 404}),
+    "webhook-reactiver": ("post", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 404}),
+    "alerte-solde": ("post", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 302}),
     "second-facteur-activer": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "second-facteur-codes": ("get", {ANONYME: CONNEXION, UTILISATEUR: 302, ADMIN: 302}),
     "second-facteur-verifier": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
@@ -151,6 +156,8 @@ def _adresse(nom, membres):
         "contacts-champ-supprimer",
         "cle-api-revoquer",
         "api-message",
+        "webhook-desactiver",
+        "webhook-reactiver",
     ) or (nom.startswith("import-") and nom != "import-deposer"):
         return reverse(nom, args=[uuid.uuid7()])
     return reverse(nom)

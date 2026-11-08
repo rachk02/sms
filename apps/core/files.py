@@ -38,6 +38,8 @@ ABONNEMENTS = {
     "journal.desinscriptions": "telecom.desinscription.recue",
     "contacts.desinscriptions": "journal.desinscription.rapprochee",
     "journal.confirmations": "contacts.desinscription.inscrite",
+    # Les événements destinés aux clients, livrés par webhook (T-111).
+    "webhooks.evenements": "client.#",
 }
 
 # Une minute, cinq, trente, deux heures, six heures, en millisecondes.

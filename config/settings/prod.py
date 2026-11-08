@@ -4,6 +4,8 @@ from .base import *
 
 # Jamais de paiement simulé en production, quoi que dise l'environnement.
 PAIEMENTS_SIMULATEUR = False
+# Jamais de webhook vers une adresse interne en production (T-111).
+WEBHOOKS_ADRESSES_PRIVEES = False
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = True
