@@ -822,18 +822,13 @@ def accepter_unitaires(client, demandes: list[dict], *, cle_api: str = "") -> li
 
     Chaque demande porte `numero`, `texte` et, facultatif, `expediteur` (le
     numéro court par défaut). À appeler dans une transaction."""
-    from redis.exceptions import RedisError
-
     from apps.conformite.plafonds import consommer_lot
     from apps.journal.services import enregistrer_messages, mettre_en_file_lot
 
     sorts, valides = controler_unitaires(client, demandes)
-    # Plafond horaire et journalier du compte, en messages (T-101, T-107).
-    try:
-        places, periode = consommer_lot(client, len(valides), cle_api=cle_api)
-    except RedisError:
-        # Mode permissif (T-107) : le crédit borne encore ce qui part.
-        places, periode = len(valides), None
+    # Plafond horaire et journalier du compte, en messages (T-101, T-107) ;
+    # compté en mémoire si Redis ne répond pas (décision A1 du 9 novembre).
+    places, periode = consommer_lot(client, len(valides), cle_api=cle_api)
     for envoi, _, _ in valides[places:]:
         envoi.code = "PLAFOND_COMPTE"
         envoi.motif = f"Plafond {periode} du compte atteint."

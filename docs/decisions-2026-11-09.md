@@ -46,6 +46,13 @@ Les deux listes se remplissent au fil de la journée, un commit par ligne.
 - **A3**, freinage par adresse IP à la connexion : commit « Comptes :
   freinage par adresse IP à la connexion ». L'adresse source est désormais lue
   par `apps.core.reseau.adresse_source`, partagée avec les rappels de paiement.
+- **A1**, panne de Redis : commit « Quotas : repli en mémoire quand Redis
+  tombe ». Seaux par clé et plafond du compte comptés dans la mémoire du
+  processus (`apps.core.repli`), aux mêmes limites, en-têtes compris ; après
+  un échec, Redis est laissé de côté cinq secondes. Le client Redis reçoit un
+  délai de deux secondes (`REDIS_DELAI_S`), sans quoi un Redis muet
+  bloquerait chaque requête. Le « laisser passer » de la soumission par l'API
+  (campagnes) disparaît. Connexion et second facteur restent fermés.
 
 ### Préparé, en attente de l'accord de l'utilisateur
 

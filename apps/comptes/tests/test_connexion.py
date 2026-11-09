@@ -3,10 +3,13 @@
 from datetime import timedelta
 
 import pytest
+import redis
 from django.conf import settings
 from django.db import connections
+from django.test import Client as Navigateur
 from django.utils import timezone
 
+from apps.comptes import authentification
 from apps.comptes.authentification import MAX_ECHECS, _cle
 from apps.comptes.models import Client, Connexion, Utilisateur
 from apps.comptes.services import creer_client, creer_utilisateur
@@ -165,3 +168,16 @@ def test_le_bandeau_du_bac_a_sable_montre_l_etat_reel_du_dossier(client, utilisa
     Dossier.objects.filter(id=dossier.id).update(etat=Dossier.Etat.APPROUVE)
     Client.objects.filter(id=utilisateur.client_id).update(palier=Client.Palier.VERIFIE)
     assert "bac à sable" not in client.get("/").content.decode()
+
+
+def test_redis_indisponible_la_connexion_reste_fermee(utilisateur, monkeypatch):
+    """Décision A1 du 9 novembre 2026 : sans Redis, pas de verrouillage, donc
+    pas de connexion. Aucun repli ici, contrairement aux quotas de l'API."""
+    eteint = redis.Redis(host="127.0.0.1", port=1, socket_connect_timeout=0.2)
+    monkeypatch.setattr(authentification, "client_redis", lambda: eteint)
+    navigateur = Navigateur(raise_request_exception=False)
+    reponse = navigateur.post(
+        "/connexion", {"courriel": "awa@exemple.bf", "mot_de_passe": MOT_DE_PASSE}
+    )
+    assert reponse.status_code == 500
+    assert "_auth_user_id" not in navigateur.session

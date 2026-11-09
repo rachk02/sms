@@ -2,8 +2,9 @@
 
 Les en-têtes annoncent le restant pour les deux niveaux. Un dépassement au
 niveau compte lève une alerte à l'exploitation en plus du refus. Redis
-indisponible ne fait pas tomber l'API, il fait tomber le quota en mode
-permissif avec alerte.
+indisponible ne fait pas tomber l'API : les deux niveaux passent sur des
+compteurs en mémoire du processus, aux mêmes limites, avec alerte (décision A1
+du 9 novembre 2026).
 """
 
 import importlib
@@ -20,6 +21,7 @@ from apps.comptes.models import Client
 from apps.comptes.services import creer_cle, creer_client
 from apps.conformite import plafonds
 from apps.conformite.models import AlerteFraude, RegleFraude
+from apps.core import repli
 from apps.core.models import EvenementSortant
 
 pytestmark = pytest.mark.django_db(transaction=True, databases=["default", "worker"])
@@ -107,14 +109,47 @@ def test_un_depassement_du_compte_leve_une_alerte_en_plus_du_refus(compte, espac
     ).exists()
 
 
-@override_settings(ROOT_URLCONF="apps.api.tests.urls_essai")
-def test_redis_indisponible_ne_fait_pas_tomber_l_api(client, compte, monkeypatch):
-    _, jeton = compte
+@pytest.fixture
+def redis_eteint(monkeypatch):
     eteint = redis.Redis(host="127.0.0.1", port=1, socket_connect_timeout=0.2)
     monkeypatch.setattr(quotas, "client_redis", lambda: eteint)
     monkeypatch.setattr(plafonds, "client_redis", lambda: eteint)
-    monkeypatch.setattr(quotas, "_derniere_alerte", float("-inf"))
-    reponse = client.get(ESSAI, HTTP_AUTHORIZATION=f"Bearer {jeton}")
+    repli.vider()
+    yield
+    repli.vider()
+
+
+@override_settings(
+    ROOT_URLCONF="apps.api.tests.urls_essai",
+    API_QUOTAS={"rafale_par_seconde": 5, "soutenu_par_minute": 2},
+)
+def test_redis_indisponible_le_quota_de_cle_tient_en_memoire(client, compte, redis_eteint):
+    _, jeton = compte
+    entetes = {"HTTP_AUTHORIZATION": f"Bearer {jeton}"}
+    reponse = client.get(ESSAI, **entetes)
+    # L'API répond, et les en-têtes annoncent le restant des compteurs de repli.
     assert reponse.status_code == 200
-    assert not any(nom.startswith("Quota-") for nom in reponse.headers)
-    assert EvenementSortant.objects.using("worker").filter(nom=quotas.EVENEMENT_PERMISSIF).exists()
+    assert reponse["Quota-Cle-Minute-Restant"] == "1"
+    assert reponse["Quota-Compte-Heure-Restant"] == "3"
+    client.get(ESSAI, **entetes)
+    # Le seau à la minute, vide, refuse le troisième appel.
+    refus = client.get(ESSAI, **entetes)
+    assert refus.status_code == 429
+    assert refus.json()["erreur"]["code"] == "QUOTA_CLE_DEPASSE"
+    # Une alerte, pas une par appel ; l'ancien nom ne sert plus.
+    sortants = EvenementSortant.objects.using("worker")
+    assert sortants.filter(nom="api.quota.repli").count() == 1
+    assert not sortants.filter(nom="api.quota.permissif").exists()
+
+
+def test_redis_indisponible_le_plafond_du_compte_tient_en_memoire(compte, espaces, redis_eteint):
+    client, _ = compte
+    espaces("worker")
+    assert plafonds.consommer_lot(client, 5, maintenant=MIDI, cle_api="abc") == (3, "horaire")
+    assert AlerteFraude.objects.filter(client=client, gravite=AlerteFraude.Gravite.ALERTE).exists()
+    # L'envoi unitaire passe par le même compteur.
+    with pytest.raises(plafonds.PlafondAtteint):
+        plafonds.consommer(client, maintenant=MIDI)
+    assert plafonds.essais(client.id, maintenant=MIDI)["horaire"] == 6
+    # Une autre heure repart de zéro.
+    assert plafonds.consommer_lot(client, 1, maintenant=MIDI.replace(hour=13)) == (1, None)

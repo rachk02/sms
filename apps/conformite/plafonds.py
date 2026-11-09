@@ -13,12 +13,18 @@ quand les essais atteignent le seuil critique de la règle PLAFOND_COMPTE, en
 pour cent du plafond, l'alerte devient critique et le compte est suspendu
 automatiquement (`backoffice.services.suspendre_sur_alertes`, par
 l'ordonnanceur).
+
+Si Redis ne répond pas, les essais se comptent dans la mémoire du processus
+(`apps.core.repli`, décision A1 du 9 novembre 2026), aux mêmes plafonds et avec
+les mêmes alertes : approximatif, jamais illimité. Tous les appelants (envoi
+unitaire, lot de l'API, en-têtes) en profitent sans rien attraper eux-mêmes.
 """
 
 import math
 
 from django.utils import timezone
 
+from apps.core import repli
 from apps.core.redis import client_redis
 
 from . import fraude
@@ -65,13 +71,22 @@ def consommer_lot(
         return 0, None
     maintenant = maintenant or timezone.now()
     cles = _cles(client.id, maintenant)
-    redis = client_redis()
-    with redis.pipeline() as lot:
-        for periode, cle in cles.items():
-            lot.incrby(cle, nombre)
-            lot.expire(cle, DUREES_S[periode])
-        resultats = lot.execute()
-    essais = {"horaire": resultats[0], "journalier": resultats[2]}
+
+    def par_redis():
+        with client_redis().pipeline() as lot:
+            for periode, cle in cles.items():
+                lot.incrby(cle, nombre)
+                lot.expire(cle, DUREES_S[periode])
+            resultats = lot.execute()
+        return {"horaire": resultats[0], "journalier": resultats[2]}
+
+    def en_memoire():
+        return {
+            periode: repli.incrementer(cle, nombre, DUREES_S[periode])
+            for periode, cle in cles.items()
+        }
+
+    essais, _ = repli.tenter(par_redis, en_memoire)
     plafonds = {"horaire": client.plafond_horaire, "journalier": client.plafond_journalier}
     acceptes, limitante = nombre, None
     for periode in ("horaire", "journalier"):
@@ -87,8 +102,15 @@ def consommer_lot(
 def essais(client_id, *, maintenant=None) -> dict:
     """Les envois tentés de l'heure et du jour en cours."""
     cles = _cles(client_id, maintenant or timezone.now())
-    valeurs = client_redis().mget(list(cles.values()))
-    return {periode: int(v or 0) for periode, v in zip(cles, valeurs, strict=True)}
+
+    def par_redis():
+        valeurs = client_redis().mget(list(cles.values()))
+        return {periode: int(v or 0) for periode, v in zip(cles, valeurs, strict=True)}
+
+    def en_memoire():
+        return {periode: repli.lire(cle) for periode, cle in cles.items()}
+
+    return repli.tenter(par_redis, en_memoire)[0]
 
 
 def seuil_critique(plafond: int, regle: RegleFraude | None) -> int | None:

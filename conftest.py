@@ -136,3 +136,15 @@ def freinage_ip_vide(request):
     from apps.core.redis import client_redis
 
     client_redis().delete(_cle_ip("127.0.0.1"))
+
+
+@pytest.fixture(autouse=True)
+def repli_vide():
+    """Les compteurs de repli et le coupe-circuit de Redis (A1) vivent dans la
+    mémoire du processus : un test qui éteint Redis ne doit pas laisser les
+    suivants compter en mémoire."""
+    from apps.core import repli
+
+    repli.vider()
+    yield
+    repli.vider()

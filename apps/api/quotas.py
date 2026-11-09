@@ -14,13 +14,13 @@ dépassement est refusé et lève une alerte à l'exploitation.
 Les réponses portent le restant des deux niveaux en en-tête, pour que
 l'intégrateur n'apprenne pas la limite par un refus.
 
-**Redis indisponible ne fait pas tomber l'API** : le quota passe en mode
-permissif, l'appel est servi sans en-têtes de quota, et l'exploitation est
-alertée (journal en erreur et événement `api.quota.permissif`, une fois par
-minute et par processus au plus). Décision du lot 9, à confirmer : un quota
-qui tombe laisse passer plutôt que de couper tous les clients pour une panne
-de cache ; le plafond du compte, lui aussi dans Redis, tombe avec, et la
-réservation de crédits continue de borner ce qui part.
+**Redis indisponible ne fait pas tomber l'API** (décision A1 du 9 novembre
+2026) : les seaux par clé et le plafond du compte comptent alors dans la
+mémoire du processus (`apps.core.repli`), aux mêmes limites. C'est
+approximatif, chaque processus tenant son propre compte, mais jamais illimité.
+Les en-têtes annoncent le restant de ces compteurs de repli, et l'exploitation
+est alertée (journal en erreur et événement `api.quota.repli`, une fois par
+minute et par processus au plus).
 """
 
 import logging
@@ -29,16 +29,14 @@ import time
 from dataclasses import dataclass, field
 
 from django.conf import settings
-from redis.exceptions import RedisError
 
+from apps.core import repli
 from apps.core.redis import client_redis
 
 journal = logging.getLogger(__name__)
 
 CLE_SEAU = "sms:api:seau:{cle}:{seau}"
-EVENEMENT_PERMISSIF = "api.quota.permissif"
-_ALERTE_TOUTES_LES_S = 60
-_derniere_alerte = float("-inf")
+EVENEMENT_REPLI = repli.EVENEMENT
 
 # Deux seaux tenus ensemble : un jeton n'est pris que si les deux en ont.
 # Rend accepté (0 ou 1), les jetons restants de chaque seau, et l'attente en
@@ -81,31 +79,11 @@ def reglage() -> dict:
 @dataclass
 class Decision:
     accepte: bool = True
-    # Restants par niveau ; vide en mode permissif.
+    # Restants par niveau.
     entetes: dict = field(default_factory=dict)
     attente_s: int = 0
-    permissif: bool = False
-
-
-def _alerter_permissif(erreur: Exception) -> None:
-    """Journal en erreur et événement à l'exploitation, une fois par minute au
-    plus : une panne de Redis ne doit pas noyer la boîte d'envoi."""
-    global _derniere_alerte
-    journal.error("Quota de l'API en mode permissif : Redis indisponible (%s).", erreur)
-    if time.monotonic() - _derniere_alerte < _ALERTE_TOUTES_LES_S:
-        return
-    _derniere_alerte = time.monotonic()
-    from django.db import transaction
-
-    from apps.core.evenements import publier
-
-    try:
-        # Dans un point de sauvegarde : un échec d'écriture n'abîme pas la
-        # transaction de la requête, qui doit continuer d'être servie.
-        with transaction.atomic():
-            publier(EVENEMENT_PERMISSIF, donnees={"erreur": str(erreur)[:200]})
-    except Exception:  # noqa: BLE001 - l'alerte ne doit jamais faire tomber l'appel
-        journal.exception("Alerte du mode permissif non publiée.")
+    # Vrai quand Redis n'a pas répondu et que le compte s'est fait en mémoire.
+    repli: bool = False
 
 
 def prendre(cle_id, *, maintenant_ms: int | None = None, cout: int = 1) -> Decision:
@@ -113,19 +91,24 @@ def prendre(cle_id, *, maintenant_ms: int | None = None, cout: int = 1) -> Decis
     regle = reglage()
     rafale, minute = regle["rafale_par_seconde"], regle["soutenu_par_minute"]
     maintenant_ms = maintenant_ms if maintenant_ms is not None else int(time.time() * 1000)
-    try:
+    cles = [CLE_SEAU.format(cle=cle_id, seau="seconde"), CLE_SEAU.format(cle=cle_id, seau="minute")]
+    taux = [rafale / 1000, minute / 60_000]
+
+    def par_redis():
         script = client_redis().register_script(_SCRIPT)
         accepte, reste_rafale, reste_minute, attente_ms = script(
-            keys=[
-                CLE_SEAU.format(cle=cle_id, seau="seconde"),
-                CLE_SEAU.format(cle=cle_id, seau="minute"),
-            ],
-            args=[maintenant_ms, cout, rafale, rafale / 1000, minute, minute / 60_000],
+            keys=cles, args=[maintenant_ms, cout, rafale, taux[0], minute, taux[1]]
         )
-    except RedisError as erreur:
-        _alerter_permissif(erreur)
-        return Decision(permissif=True)
+        return accepte, (reste_rafale, reste_minute), attente_ms
+
+    def en_memoire():
+        return repli.prendre_jeton(cles, [rafale, minute], taux, maintenant_ms, cout)
+
+    (accepte, (reste_rafale, reste_minute), attente_ms), en_repli = repli.tenter(
+        par_redis, en_memoire
+    )
     return Decision(
+        repli=en_repli,
         accepte=bool(accepte),
         attente_s=max(1, math.ceil(attente_ms / 1000)) if not accepte else 0,
         entetes={
@@ -139,14 +122,10 @@ def prendre(cle_id, *, maintenant_ms: int | None = None, cout: int = 1) -> Decis
 
 def entetes_compte(client) -> dict:
     """Le restant du plafond du compte, en messages, pour l'heure et le jour en
-    cours. Vide si Redis ne répond pas."""
+    cours ; compté en mémoire si Redis ne répond pas."""
     from apps.conformite.plafonds import essais
 
-    try:
-        tentes = essais(client.id)
-    except RedisError as erreur:
-        _alerter_permissif(erreur)
-        return {}
+    tentes = essais(client.id)
     return {
         "Quota-Compte-Heure-Limite": str(client.plafond_horaire),
         "Quota-Compte-Heure-Restant": str(max(0, client.plafond_horaire - tentes["horaire"])),

@@ -134,6 +134,8 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 
 REDIS_URL = f"redis://{env('REDIS_HOST')}:{env('REDIS_PORT')}/{env('REDIS_DB', '0')}"
+# Délai de connexion et de lecture, en secondes (décision A1 du 9 novembre 2026).
+REDIS_DELAI_S = float(env("REDIS_DELAI_S", "2"))
 
 RABBITMQ_USER = env("RABBITMQ_USER")
 RABBITMQ_PASSWORD = env("RABBITMQ_PASSWORD")
