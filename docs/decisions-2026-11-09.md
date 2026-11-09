@@ -163,6 +163,31 @@ Aucun commit en attente à l'ouverture de la journée.
   exceptions : la numérotation F et AV reste liée aux factures (réservée à
   l'utilisateur) ; T-97, la recopie vers Jasmin, reste manuelle par script au
   lancement. Registre : sections des lots 7, 8 et 9.
+- **C6. Reprise de la file `rebut`**, décidée en cours de journée par la
+  session responsable : une commande `rejouer_rebut` republie les messages du
+  rebut dans leur file d'origine ; à blanc par défaut, le vrai rejeu avec
+  `--appliquer`. Le rejeu d'un accusé est déjà sans effet en double. Avec un
+  test, après E.
+
+## Corrélation des accusés quand Redis tombe
+
+Relevé à la relecture d'A1, avancé par la session responsable juste après A4,
+avant B1. Zone délicate : préparé en local, relu par la session responsable,
+poussé avec l'accord de l'utilisateur.
+
+- Aujourd'hui, une panne de Redis retarde l'accusé sans le perdre : le worker
+  le republie aux paliers de réessai (environ 8 h 36 en tout), puis le range
+  dans `rebut`. Un message déjà SOUMIS n'est jamais resoumis
+  (`journal.services.soumettre`), et la consommation du crédit se fait une
+  seule fois au rejeu : ni double envoi ni double facturation.
+- Correctif attendu : `retrouver()` lit la base quand Redis lève, pas
+  seulement quand la clé manque ; le SET de `enregistrer()`, l'INCR du
+  compteur des soumis et `sante.enregistrer_accuse`, posés après validation,
+  attrapent l'erreur Redis et la journalisent.
+- Tests : délai Redis simulé à la soumission (une seule soumission à la
+  passerelle, une seule consommation), accusé corrélé par la base pendant la
+  panne, accusé rejoué deux fois pendant la panne et compté une fois.
+- État au 9 novembre, arrêt de mi-journée : pas commencé.
 
 ## D. Qualité
 
@@ -184,5 +209,6 @@ local jusqu'à l'accord de l'utilisateur.
 
 ## Ordre de travail
 
-Documentation des décisions, puis A2, A3, A1, A4, B1 (en local), B3, A7, A5,
-A6, B2, C1, C2, C3, A8, A10, B4, B6, D1, C4, B5 (inactive), puis E, puis D2.
+Documentation des décisions, puis A2, A3, A1, A4, la corrélation des accusés
+(en local), B1 (en local), B3, A7, A5,
+A6, B2, C1, C2, C3, A8, A10, B4, B6, D1, C4, B5 (inactive), puis E, puis C6, puis D2.
