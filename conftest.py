@@ -122,3 +122,17 @@ def fenetre_toujours_ouverte(request, monkeypatch):
 
     monkeypatch.setattr(fenetre, "ouverte", lambda instant, pays="BF": True)
     monkeypatch.setattr(fenetre, "prochaine_ouverture", lambda instant, pays="BF": instant)
+
+
+@pytest.fixture(autouse=True)
+def freinage_ip_vide(request):
+    """Tous les tests se connectent depuis 127.0.0.1 : sans remise à zéro, les
+    échecs de connexion s'additionneraient d'un test à l'autre jusqu'au
+    freinage par adresse (A3). Seuls les tests qui passent par le client de
+    test sont concernés."""
+    if "client" not in request.fixturenames:
+        return
+    from apps.comptes.authentification import _cle_ip
+    from apps.core.redis import client_redis
+
+    client_redis().delete(_cle_ip("127.0.0.1"))

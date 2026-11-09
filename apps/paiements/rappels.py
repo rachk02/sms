@@ -15,7 +15,6 @@ non. Le worker vérifie ensuite auprès de l'API de statut du fournisseur, avant
 tout crédit (T-85).
 """
 
-import ipaddress
 import logging
 import uuid
 
@@ -27,6 +26,7 @@ from django.views.decorators.csrf import csrf_exempt
 from apps.core.evenements import publier
 from apps.core.files import TOPOLOGIE
 from apps.core.redis import client_redis
+from apps.core.reseau import adresse_source, dans_plages
 
 from . import fournisseurs
 
@@ -34,25 +34,6 @@ journal = logging.getLogger(__name__)
 
 FILE = "paiements.rappels"
 CLE_DEBIT = "sms:paiements:rappels:{source}:{minute}"
-
-
-def adresse_source(request) -> str:
-    """L'adresse de la connexion. Derrière un frontal de confiance seulement, la
-    dernière adresse de X-Forwarded-For, celle que ce frontal a ajoutée : un
-    en-tête venu d'ailleurs se forge et ne vaut rien."""
-    adresse = request.META.get("REMOTE_ADDR", "")
-    transmise = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    if transmise and _dans(adresse, settings.PROXIES_DE_CONFIANCE):
-        return transmise.split(",")[-1].strip()
-    return adresse
-
-
-def _dans(adresse: str, plages) -> bool:
-    try:
-        ip = ipaddress.ip_address(adresse)
-    except ValueError:
-        return False
-    return any(ip in ipaddress.ip_network(plage, strict=False) for plage in plages)
 
 
 def _debit_depasse(source: str) -> bool:
@@ -71,7 +52,7 @@ def _refus(request, nom: str, source: str):
     fournisseur = fournisseurs.actifs().get(nom)
     if fournisseur is None:
         return "fournisseur inconnu", None
-    if not _dans(source, fournisseur.plages()):
+    if not dans_plages(source, fournisseur.plages()):
         return "adresse hors liste blanche", fournisseur
     if _debit_depasse(source):
         return "limite de débit dépassée", fournisseur

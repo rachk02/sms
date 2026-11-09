@@ -8,9 +8,10 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from apps.core.cloisonnement import poser_client
+from apps.core.reseau import adresse_source
 
 from . import jetons, second_facteur, services
-from .authentification import DUREE_VERROUILLAGE, CompteVerrouille, verrouille
+from .authentification import DUREE_VERROUILLAGE, CompteVerrouille, ip_freinee, verrouille
 from .models import CleApi, Client, Dossier, Utilisateur
 from .permissions import permission_requise
 
@@ -46,7 +47,8 @@ def connexion(request):
         # Même message qu'une adresse existe ou non : seul le verrouillage
         # change le texte, et il frappe une adresse inconnue comme une autre.
         contexte["courriel"] = courriel
-        contexte["erreur"] = MESSAGE_VERROUILLE if verrouille(courriel) else MESSAGE_ECHEC
+        bloque = verrouille(courriel) or ip_freinee(adresse_source(request))
+        contexte["erreur"] = MESSAGE_VERROUILLE if bloque else MESSAGE_ECHEC
     return render(request, "comptes/connexion.html", contexte)
 
 

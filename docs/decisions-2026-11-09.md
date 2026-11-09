@@ -43,6 +43,9 @@ Les deux listes se remplissent au fil de la journée, un commit par ligne.
 
 - **A2**, mot de passe oublié et changement de mot de passe : commit
   « Comptes : mot de passe oublié et changement de mot de passe ».
+- **A3**, freinage par adresse IP à la connexion : commit « Comptes :
+  freinage par adresse IP à la connexion ». L'adresse source est désormais lue
+  par `apps.core.reseau.adresse_source`, partagée avec les rappels de paiement.
 
 ### Préparé, en attente de l'accord de l'utilisateur
 
