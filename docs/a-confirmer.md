@@ -10,9 +10,16 @@ n'est ajouté après coup.
 Établi le 8 novembre 2026. Les décisions déjà prises par l'utilisateur (en tête
 de chaque lot, ou marquées comme telles dans une tâche) n'y figurent pas.
 
+Le 9 novembre 2026, une partie des points a été tranchée par la session
+responsable, par délégation de l'utilisateur : chacun porte la mention « Tranché
+le 9 novembre », avec le code de sa décision dans `decisions-2026-11-09.md`.
+
 ## En tête : point de sécurité
 
 **T-107, quotas, mode permissif quand Redis tombe** (`docs/lot-9-taches.md`).
+
+Tranché le 9 novembre (A1), voir `decisions-2026-11-09.md`. Repli sur des
+compteurs en mémoire par processus, aux mêmes limites.
 
 - Choix retenu : si Redis est indisponible, l'appel à l'API est servi sans
   quota ni en-têtes de quota ; l'erreur s'écrit au journal applicatif et
@@ -29,6 +36,9 @@ de chaque lot, ou marquées comme telles dans une tâche) n'y figurent pas.
   l'utilisateur.
 
 **Redis indisponible, deux comportements opposés à mettre côte à côte.**
+
+Tranché le 9 novembre (A1), voir `decisions-2026-11-09.md`. Connexion et
+second facteur restent fermés.
 
 | Chemin | Redis indisponible | Effet |
 |---|---|---|
@@ -59,12 +69,15 @@ Ce ne sont pas des choix faits, mais des décisions qui manquent.
   son compte. La page reste en `noindex` tant qu'elle n'a pas son domaine.
 - **T-89, clôture** : la durée de rétention du journal des messages, laissée à
   trancher depuis le lot 6.
+  Tranché le 9 novembre (B5), voir `decisions-2026-11-09.md`.
 - **T-110, documentation** : le troisième critère (un intégrateur réussit un
   premier envoi en bac à sable sans poser de question) se vérifie avec une
   personne qui ne connaît pas le projet.
 - **T-97, connecteurs** : la recopie automatique vers Jasmin de l'hôte, de
   l'identifiant et du secret saisis au back-office (lot 10 ou mise en
   production).
+  Tranché le 9 novembre (C5), voir `decisions-2026-11-09.md`. La recopie reste
+  manuelle, par script, au lancement.
 - **Lot 1, journal d'audit** (relevé par l'audit d'avant-lancement du
   8 novembre 2026) : `core.Audit` porte deux `ForeignKey`, `auteur` vers
   `comptes.Utilisateur` et `client` vers `comptes.Client`, depuis le commit
@@ -74,6 +87,7 @@ Ce ne sont pas des choix faits, mais des décisions qui manquent.
   demande une migration de `core` sur une table que toutes les autres
   alimentent ; non corrigée, décidé par la session responsable en l'absence de
   l'utilisateur, à confirmer.
+  Tranché le 9 novembre (B3), voir `decisions-2026-11-09.md`.
 - **Tables sans cloisonnement par ligne** (même audit) : `comptes_code_secours`
   (codes de secours du second facteur, lot 3) et `core_evenement_traite`
   (traces d'idempotence des consommateurs de file) n'ont ni `client_id` ni
@@ -81,6 +95,7 @@ Ce ne sont pas des choix faits, mais des décisions qui manquent.
   que la charte laisse hors cloisonnement ; la seconde n'est écrite et lue que
   par les workers. À confirmer : les laisser ainsi, ou les réserver aux rôles
   qui s'en servent.
+  Tranché le 9 novembre (B4), voir `decisions-2026-11-09.md`.
 
 ## Relecture de sécurité de l'API publique, 8 novembre 2026
 
@@ -96,11 +111,13 @@ responsable en l'absence de l'utilisateur, à confirmer :
   connexion part vers l'adresse vérifiée, le sondage ne peut plus viser que des
   hôtes publics ; restreindre les ports pourrait casser des intégrateurs.
   Option possible : 443 et 80 seulement en production.
+  Tranché le 9 novembre (A5), voir `decisions-2026-11-09.md`.
 - **Temps de réponse d'une clé au préfixe inconnu, accepté.** Une clé dont le
   préfixe n'existe pas est refusée plus vite qu'une clé au secret faux, la
   vérification Argon2 n'ayant pas lieu : l'écart révèle si un préfixe existe.
   Accepté sans changement, le préfixe n'étant pas secret (il s'affiche dans
   l'espace du compte).
+  Tranché le 9 novembre (A11), voir `decisions-2026-11-09.md`.
 - **Résolution DNS hors de l'échéance d'une livraison, risque résiduel.**
   L'échéance de dix secondes couvre la connexion et l'échange, pas la
   résolution du nom : `getaddrinfo` n'a pas de délai en Python, un résolveur
@@ -109,6 +126,7 @@ responsable en l'absence de l'utilisateur, à confirmer :
   l'exploitation ; ou un fil d'exécution à délai autour de la résolution, qui
   laisserait des fils orphelins dans le worker. Pas de correctif, décidé par
   la session responsable en l'absence de l'utilisateur, à confirmer.
+  Tranché le 9 novembre (A10), voir `decisions-2026-11-09.md`.
 
 ## Relecture des rôles du back-office, 8 novembre 2026
 
@@ -123,8 +141,10 @@ l'absence de l'utilisateur, à confirmer, et reste à trancher :
 - **Qui règle le palier et les plafonds.** La finance (palier) et
   l'exploitation (plafonds) n'ont aujourd'hui que la lecture des clients ;
   leur confier ces champs demande des permissions dédiées.
+  Tranché le 9 novembre (C1), voir `decisions-2026-11-09.md`.
 - **Motif obligatoire et service dédié** pour ces changements, comme pour le
   mode de règlement.
+  Tranché le 9 novembre (C1), voir `decisions-2026-11-09.md`.
 
 ## Relecture de sécurité des rappels de paiement, 8 novembre 2026
 
@@ -141,11 +161,14 @@ par la session responsable en l'absence de l'utilisateur, à confirmer :
   Une contrainte partielle sur le modèle de celle de `CONSOMMATION` fermerait
   la porte à un second chemin qui oublierait le verrou. Elle touche le
   registre de crédits : non faite.
+  Tranché le 9 novembre (B1), voir `decisions-2026-11-09.md`. Zone du registre
+  de crédits : préparé en local, poussé avec l'accord de l'utilisateur.
 - **Devise du statut, condition du branchement d'un vrai fournisseur.** Le
   statut rendu par l'API d'un fournisseur (`fournisseurs.Statut`) porte un
   montant mais pas de devise : tout est en FCFA avec le fournisseur simulé.
   Un vrai fournisseur devra rendre sa devise, et un statut dans une autre
   devise ne devra rien créditer.
+  Tranché le 9 novembre (B2), voir `decisions-2026-11-09.md`.
 
 ## Relecture des exports et des imports, 8 novembre 2026
 
@@ -172,10 +195,12 @@ confirmer :
   désormais, le 1 Go décompressé le limitent. Les deux réglages sont à fixer
   ensemble par l'utilisateur, selon la taille de carnet qu'il veut accepter
   d'un client.
+  Tranché le 9 novembre (B6), voir `decisions-2026-11-09.md`.
 - **Apostrophe visible sur un numéro saisi comme texte.** Un numéro écrit avec
   des espaces dans un champ libre d'un contact (« +226 70 00 00 00 ») n'est pas
   un nombre signé : il sort précédé d'une apostrophe. Gêne de lecture
   acceptée. Les numéros normalisés, sans espace, ne sont pas touchés.
+  Tranché le 9 novembre (A11), voir `decisions-2026-11-09.md`.
 
 ## Relecture de l'authentification, 8 novembre 2026
 
@@ -203,9 +228,11 @@ Deux absences, à trancher par l'utilisateur :
 - **Pas de parcours de mot de passe oublié, ni de changement de mot de
   passe.** Un utilisateur qui oublie le sien ne peut que demander une
   nouvelle invitation ; un mot de passe compromis ne se change pas.
+  Tranché le 9 novembre (A2), voir `decisions-2026-11-09.md`.
 - **Pas de freinage par adresse IP à la connexion.** Le verrouillage porte sur
   le courriel. Une même adresse peut essayer un mot de passe courant sur
   beaucoup de courriels différents (pulvérisation) sans être freinée.
+  Tranché le 9 novembre (A3), voir `decisions-2026-11-09.md`.
 
 ## Relecture de la configuration de production, 8 novembre 2026
 
@@ -230,16 +257,19 @@ Points qui dépendent du déploiement réel, à trancher par l'utilisateur :
 - **Préchargement HSTS** (seul avertissement restant de `check --deploy`).
   Inscrire le domaine dans la liste des navigateurs engage tous ses
   sous-domaines en https pour longtemps, et se défait mal.
+  Tranché le 9 novembre (A9), voir `decisions-2026-11-09.md`.
 - **Aucune politique de sécurité du contenu (CSP).** Django 6 la propose
   (`SECURE_CSP`). Il faut d'abord recenser les scripts en ligne des gabarits ;
   la version standard d'Alpine évalue ses expressions et demande soit
   `unsafe-eval`, soit sa version compatible CSP.
+  Tranché le 9 novembre (A8), voir `decisions-2026-11-09.md`.
 - **Redirection vers https et appels internes.** `SECURE_SSL_REDIRECT`
   renvoie en 301 toute requête en http : le relevé des métriques et le relais
   des accusés par Jasmin (`JASMIN_URL_RAPPEL`), s'ils passent en http sur le
   réseau interne, seraient redirigés, et un accusé non suivi serait perdu.
   Selon le mandataire inverse : appels internes en https, ou chemins exemptés
   (`SECURE_REDIRECT_EXEMPT`).
+  Tranché le 9 novembre (A7), voir `decisions-2026-11-09.md`.
 - **Mandataire inverse.** `SECURE_PROXY_SSL_HEADER` croit l'en-tête
   `X-Forwarded-Proto` : le mandataire doit l'écraser, jamais le laisser venir
   du client. S'il réécrit l'en-tête `Host`, il faudra `CSRF_TRUSTED_ORIGINS`
@@ -272,6 +302,7 @@ confirmer :
   fonction servant aussi à d'autres écrans dont les appelants restent à
   relire. Vérifier en préproduction que le stockage répond avec
   `X-Content-Type-Options: nosniff`.
+  Tranché le 9 novembre (A6), voir `decisions-2026-11-09.md`.
 - **Taille des envois contrôlée après réception.** La borne de 5 Mo est
   vérifiée une fois tout le fichier reçu par Django. Le mandataire inverse
   doit borner la taille des requêtes.
@@ -319,8 +350,13 @@ ne l'a pas demandé. Un test par appelant, vu échouer sur l'ancien code.
   touchent à l'usage : un lien vers le portail, qui exige la connexion et
   sert le fichier après contrôle des droits, ou une durée courte (24 heures
   par exemple).
+  Tranché le 9 novembre (A4), voir `decisions-2026-11-09.md`.
 
 ## Lot 7, crédits, tarifs, paiements, facturation
+
+Choix confirmés tels quels le 9 novembre (C5), voir `decisions-2026-11-09.md`,
+sauf la numérotation F et AV (T-88) et la recopie vers Jasmin (T-97), et sauf
+les points tranchés autrement ci-dessous.
 
 **Ouverture du lot**
 
@@ -352,6 +388,9 @@ ne l'a pas demandé. Un test par appelant, vu échouer sur l'ancien code.
 
 **T-80, rapprochement quotidien**
 
+Tranché le 9 novembre (C3 et C4), voir `decisions-2026-11-09.md`. Heure fixe,
+alerte par courriel aux agents d'exploitation.
+
 - Le rapprochement tourne toutes les vingt-quatre heures depuis le démarrage de
   l'ordonnanceur, pas à heure fixe ; un redémarrage le relance et peut répéter
   une alerte. Justification non écrite.
@@ -376,6 +415,10 @@ ne l'a pas demandé. Un test par appelant, vu échouer sur l'ancien code.
   moment à la diffusion. Justification non écrite.
 
 **T-83, grilles négociées et promotions**
+
+Tranché le 9 novembre (C2), voir `decisions-2026-11-09.md`, et consigné
+seulement : le prix public deviendrait un plafond, ce qui change ce que paient
+les clients et attend la confirmation de l'utilisateur.
 
 - La grille publique n'entre pas dans la comparaison : un prix négocié plus
   haut que le public reste le prix du client. Justification non écrite.
@@ -425,6 +468,9 @@ ne l'a pas demandé. Un test par appelant, vu échouer sur l'ancien code.
 
 **T-88, facturation**
 
+La numérotation F et AV reste réservée à l'utilisateur, exception de C5 le 9
+novembre, voir `decisions-2026-11-09.md`.
+
 - La facture tient lieu de reçu, émise acquittée avec la date, le moyen et la
   référence du paiement. Justification non écrite.
 - Deux séries, F et AV, sur six chiffres, remises à un chaque année.
@@ -448,6 +494,10 @@ ne l'a pas demandé. Un test par appelant, vu échouer sur l'ancien code.
   libérées. Justification non écrite.
 
 ## Lot 8, tableaux de bord, back-office, anti-fraude, support
+
+Choix confirmés tels quels le 9 novembre (C5), voir `decisions-2026-11-09.md`,
+sauf la numérotation F et AV (T-88) et la recopie vers Jasmin (T-97), et sauf
+les points tranchés autrement ci-dessous.
 
 **Rôles d'agent**
 
@@ -589,6 +639,10 @@ famille que les pièces du dossier).
   volume de production. Justification non écrite.
 
 ## Lot 9, API publique
+
+Choix confirmés tels quels le 9 novembre (C5), voir `decisions-2026-11-09.md`,
+sauf la numérotation F et AV (T-88) et la recopie vers Jasmin (T-97), et sauf
+les points tranchés autrement ci-dessous.
 
 **T-105, politique de version**
 
