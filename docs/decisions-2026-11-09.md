@@ -53,6 +53,11 @@ Les deux listes se remplissent au fil de la journée, un commit par ligne.
   délai de deux secondes (`REDIS_DELAI_S`), sans quoi un Redis muet
   bloquerait chaque requête. Le « laisser passer » de la soumission par l'API
   (campagnes) disparaît. Connexion et second facteur restent fermés.
+- **A4**, lien d'export des contacts : commit « Contacts : lien d'export par
+  le portail ». Le courriel porte `/contacts/exports/<id>`, qui exige la
+  connexion, ne sert qu'au demandeur (404 pour tout autre), sept jours durant
+  (410 au-delà), et renvoie vers un lien signé de cinq minutes. Chaque
+  téléchargement est tracé au journal d'audit.
 
 ### Préparé, en attente de l'accord de l'utilisateur
 

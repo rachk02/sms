@@ -12,8 +12,11 @@ une page lointaine coûte autant que la première, et un contact ajouté entre d
 pages ne décale rien.
 
 Au-delà de l'écran, c'est un export : la demande part en file, le worker produit
-le fichier dans le stockage objet et le demandeur reçoit un lien signé par
-courriel.
+le fichier dans le stockage objet et le demandeur reçoit par courriel un lien
+du portail (décision A4 du 9 novembre 2026). Ce lien exige la connexion et ne
+sert qu'au demandeur, sept jours durant ; il renvoie alors vers un lien signé
+de cinq minutes. Un courriel transféré ou intercepté ne donne donc pas accès au
+répertoire.
 """
 
 import base64
@@ -26,6 +29,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -43,12 +47,23 @@ from .models import ChampPersonnalise, Contact, Export
 TAILLE_PAGE = 50
 # Au-delà, l'écran n'affiche plus : il propose l'export.
 SEUIL_AFFICHAGE = 10_000
-DUREE_LIEN_EXPORT = timedelta(days=7)
+# Le portail sert l'export sept jours ; le lien signé qu'il rend vit cinq minutes.
+DUREE_EXPORT = timedelta(days=7)
+DUREE_LIEN_EXPORT = timedelta(minutes=5)
 FILE_EXPORT = "import.contacts"
 PAQUET = 2_000
 
 
 class RechercheInvalide(ValueError):
+    pass
+
+
+class ExportIntrouvable(LookupError):
+    """Inconnu, d'un autre compte, d'un autre demandeur ou pas encore produit :
+    la même réponse dans tous les cas."""
+
+
+class ExportExpire(Exception):
     pass
 
 
@@ -246,8 +261,31 @@ def produire(export_id) -> Export:
             courriels.envoyer(
                 export.courriel,
                 "Votre export de contacts est prêt",
-                f"Votre export de {lignes - 1} contacts est prêt. Il se télécharge par ce "
-                f"lien, valable sept jours :\n\n{fichiers.lien(fichier, DUREE_LIEN_EXPORT)}\n",
+                f"Votre export de {lignes - 1} contacts est prêt. Il se télécharge depuis "
+                "votre espace, après connexion, pendant sept jours :\n\n"
+                f"{settings.PORTAIL_URL}/contacts/exports/{export.id}\n",
             )
     export.refresh_from_db()
     return export
+
+
+def lien_export(*, export_id, utilisateur) -> str:
+    """Le lien signé de cinq minutes vers le fichier d'un export, pour son seul
+    demandeur, membre du compte, dans les sept jours. Tracé au journal d'audit :
+    c'est la sortie effective des données personnelles."""
+    from apps.core.audit import auditer
+
+    export = Export.objects.filter(
+        id=export_id,
+        client_id=utilisateur.client_id,
+        courriel=utilisateur.courriel,
+        etat=Export.Etat.TERMINE,
+        fichier_id__isnull=False,
+    ).first()
+    if export is None:
+        raise ExportIntrouvable
+    fichier = Fichier.objects.filter(id=export.fichier_id, supprime_le__isnull=True).first()
+    if fichier is None or export.termine_le < timezone.now() - DUREE_EXPORT:
+        raise ExportExpire
+    auditer("contacts.export.telechargement", export, auteur=utilisateur, client=utilisateur.client)
+    return fichiers.lien(fichier, DUREE_LIEN_EXPORT)

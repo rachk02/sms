@@ -6,6 +6,11 @@ urlpatterns = [
     path("contacts", vues_repertoire.repertoire, name="contacts-repertoire"),
     path("contacts/fragments/resultats", fragments.resultats, name="contacts-resultats"),
     path("contacts/export", vues_repertoire.exporter, name="contacts-exporter"),
+    path(
+        "contacts/exports/<uuid:pk>",
+        vues_repertoire.telecharger_export,
+        name="contacts-export-telecharger",
+    ),
     path("contacts/listes", vues_gestion.voir_listes, name="contacts-listes"),
     path(
         "contacts/listes/<uuid:pk>/supprimer",

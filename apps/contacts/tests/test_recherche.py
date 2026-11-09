@@ -136,7 +136,7 @@ def test_au_dela_du_seuil_l_ecran_propose_l_export(client, monkeypatch):
     assert not recherche.depasse_l_affichage(client, Filtres(numero="7000001"))
 
 
-def test_un_export_de_cent_mille_contacts_part_en_file_et_revient_par_lien_signe(client):
+def test_un_export_de_cent_mille_contacts_part_en_file_et_revient_par_courriel(client):
     _inserer(client, 100_000)
     champs.declarer(client=client, libelle="Code client", valeur_repli="inconnu")
     demandeur = creer_utilisateur(courriel="u@exemple.bf", mot_de_passe="x", nom="U", client=client)
@@ -156,7 +156,8 @@ def test_un_export_de_cent_mille_contacts_part_en_file_et_revient_par_lien_signe
     assert entete.strip() == "numero;nom;prenom;ville;operateur;entre_le;actif;Code client"
     assert premiere.startswith("+22670100000;Nom 100000;") and premiere.strip().endswith(";C100000")
     courriel = mail.outbox[-1]
-    assert courriel.to == ["u@exemple.bf"] and "X-Amz-Signature" in courriel.body
+    # Un lien du portail, pas du stockage (décision A4) : voir test_lien_export.
+    assert courriel.to == ["u@exemple.bf"] and f"/contacts/exports/{export.id}" in courriel.body
     assert "100000 contacts" in courriel.body
     # Relivré par le courtier : rien ne se refait.
     envoyes = len(mail.outbox)

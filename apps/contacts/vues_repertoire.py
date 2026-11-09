@@ -3,6 +3,7 @@
 from urllib.parse import urlencode
 
 from django.contrib import messages
+from django.http import Http404
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
@@ -88,3 +89,16 @@ def exporter(request):
         )
     requete = _requete(filtres)
     return redirect(f"/contacts?{requete}" if requete else "/contacts")
+
+
+@permission_requise("contacts.exporter")
+def telecharger_export(request, pk):
+    """Le lien du courriel d'export : connexion et droits contrôlés ici, puis
+    renvoi vers un lien signé de cinq minutes (décision A4)."""
+    try:
+        lien = recherche.lien_export(export_id=pk, utilisateur=request.user)
+    except recherche.ExportIntrouvable:
+        raise Http404 from None
+    except recherche.ExportExpire:
+        return render(request, "contacts/export_expire.html", status=410)
+    return redirect(lien)

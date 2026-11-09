@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block contenu %}
+<h1 class="mb-4 text-2xl font-semibold">Export expiré</h1>
+<p class="mb-4 text-sm">Un export de contacts reste téléchargeable sept jours. Celui-ci ne l'est plus : demandez un nouvel export depuis le répertoire.</p>
+<a class="rounded bg-slate-900 px-4 py-2 text-sm text-white" href="{% url 'contacts-repertoire' %}">Retour au répertoire</a>
+{% endblock %}
