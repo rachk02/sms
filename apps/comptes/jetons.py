@@ -1,4 +1,5 @@
-"""Liens signés à usage unique : invitation et vérification d'adresse.
+"""Liens signés à usage unique : invitation, vérification d'adresse et
+réinitialisation du mot de passe.
 
 Le jeton porte l'identifiant de l'utilisateur et une empreinte de son état
 (mot de passe, date de vérification, courriel, activité). L'usage du lien
@@ -15,6 +16,9 @@ from .models import Utilisateur
 
 INVITATION = ("comptes.invitation", timedelta(days=7))
 VERIFICATION = ("comptes.verification", timedelta(hours=24))
+# Mot de passe oublié (décision A2 du 9 novembre 2026) : une heure. Le lien
+# tombe dès que le mot de passe change, l'empreinte le portant.
+REINITIALISATION = ("comptes.reinitialisation", timedelta(hours=1))
 
 
 class LienExpire(Exception):

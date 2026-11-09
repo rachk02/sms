@@ -25,6 +25,7 @@
 <p class="mt-4"><a class="underline" href="{% url 'tableau-de-bord' %}">Tableau de bord des envois</a></p>
 <p class="mt-2"><a class="underline" href="{% url 'journal' %}">Journal des messages</a></p>
 <p class="mt-2"><a class="underline" href="{% url 'support' %}">Support</a></p>
+<p class="mt-2"><a class="underline" href="{% url 'mot-de-passe-changer' %}">Changer de mot de passe</a></p>
 {% if user.role == "ADMIN" %}<p class="mt-2"><a class="underline" href="{% url 'cles-api' %}">Clés d'API</a></p>{% endif %}
 {% if user.role == "ADMIN" %}<p class="mt-2"><a class="underline" href="{% url 'webhooks' %}">Webhooks</a></p>{% endif %}
 {% endblock %}

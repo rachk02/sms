@@ -65,6 +65,25 @@ def _noter_reussite(courriel: str, utilisateur: Utilisateur) -> None:
     )
 
 
+class CompteVerrouille(Exception):
+    pass
+
+
+def controler_mot_de_passe(utilisateur: Utilisateur, mot_de_passe: str) -> bool:
+    """Vrai si le mot de passe est celui de l'utilisateur. Sert à confirmer le
+    mot de passe actuel d'une personne déjà connectée : un essai faux compte
+    dans le même verrouillage que la connexion, et un compte verrouillé lève
+    CompteVerrouille sans contrôler le mot de passe."""
+    courriel = normaliser(utilisateur.courriel)
+    if verrouille(courriel):
+        raise CompteVerrouille
+    if utilisateur.check_password(mot_de_passe):
+        _noter_reussite(courriel, utilisateur)
+        return True
+    _noter_echec(courriel, utilisateur)
+    return False
+
+
 def _journaliser(request, courriel, utilisateur, reussie, motif=""):
     meta = getattr(request, "META", {}) if request is not None else {}
     Connexion.objects.create(

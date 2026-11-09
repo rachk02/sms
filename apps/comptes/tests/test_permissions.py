@@ -27,6 +27,9 @@ ATTENDUS = {
     "deconnexion": ("post", {ANONYME: 302, UTILISATEUR: 302, ADMIN: 302}),
     "invitation": ("get", {ANONYME: 404, UTILISATEUR: 404, ADMIN: 404}),
     "verification": ("get", {ANONYME: 404, UTILISATEUR: 404, ADMIN: 404}),
+    "mot-de-passe-oubli": ("get", PUBLIC),
+    "mot-de-passe-reinitialiser": ("get", {ANONYME: 404, UTILISATEUR: 404, ADMIN: 404}),
+    "mot-de-passe-changer": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "renvoi": ("post", PUBLIC),
     "accueil": ("get", {ANONYME: CONNEXION, UTILISATEUR: 200, ADMIN: 200}),
     "membres": ("get", {ANONYME: CONNEXION, UTILISATEUR: 403, ADMIN: 200}),
@@ -134,7 +137,7 @@ def membres():
 def _adresse(nom, membres):
     if nom in ("membre-role", "membre-retirer"):
         return reverse(nom, args=[membres["cible"].pk])
-    if nom in ("invitation", "verification"):
+    if nom in ("invitation", "verification", "mot-de-passe-reinitialiser"):
         return reverse(nom, args=["jeton-invalide"])
     if nom in (
         "rappel-jasmin",

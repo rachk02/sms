@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
+from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -9,7 +10,7 @@ from django.views.decorators.http import require_POST
 from apps.core.cloisonnement import poser_client
 
 from . import jetons, second_facteur, services
-from .authentification import DUREE_VERROUILLAGE, verrouille
+from .authentification import DUREE_VERROUILLAGE, CompteVerrouille, verrouille
 from .models import CleApi, Client, Dossier, Utilisateur
 from .permissions import permission_requise
 
@@ -145,6 +146,81 @@ def renvoi(request):
         "Si un accès en attente correspond à cette adresse, un nouveau lien vient d'y être envoyé."
     )
     return _page_lien(request, "Demande reçue", texte, renvoi=False)
+
+
+# Mot de passe oublié et changement de mot de passe (décision A2) -------------
+
+
+def mot_de_passe_oubli(request):
+    """Demande d'un lien de réinitialisation. La réponse est la même que
+    l'adresse soit connue ou non."""
+    if request.method == "POST":
+        services.demander_reinitialisation(request.POST.get("courriel", ""))
+        texte = (
+            "Si un accès correspond à cette adresse, un lien pour choisir un nouveau mot "
+            "de passe vient d'y être envoyé. Il est valable une heure."
+        )
+        return _page_lien(request, "Demande reçue", texte, renvoi=False)
+    return render(request, "comptes/mot_de_passe_oubli.html")
+
+
+def mot_de_passe_reinitialiser(request, jeton):
+    try:
+        utilisateur = jetons.lire(jeton, jetons.REINITIALISATION)
+    except jetons.LienExpire:
+        texte = "Ce lien a dépassé son heure de validité : demandez-en un nouveau."
+        return _page_lien(request, EXPIRE, texte, renvoi=False, statut=410)
+    except jetons.LienInvalide:
+        texte = "Ce lien a déjà servi ou n'est pas valide."
+        return _page_lien(request, INUTILISABLE, texte, renvoi=False, statut=404)
+    erreurs = []
+    if request.method == "POST":
+        mot_de_passe = request.POST.get("mot_de_passe", "")
+        if mot_de_passe != request.POST.get("confirmation", ""):
+            erreurs = ["Les deux saisies ne concordent pas."]
+        else:
+            try:
+                services.reinitialiser_mot_de_passe(jeton, mot_de_passe)
+            except jetons.LienInvalide:
+                texte = "Ce lien a déjà servi ou n'est pas valide."
+                return _page_lien(request, INUTILISABLE, texte, renvoi=False, statut=404)
+            except ValidationError as refus:
+                erreurs = list(refus.messages)
+            else:
+                # Aucune session ouverte ici : la connexion, et le second facteur
+                # s'il est réglé, restent à passer avec le nouveau mot de passe.
+                logout(request)
+                messages.success(request, "Votre mot de passe est modifié : connectez-vous.")
+                return redirect("connexion")
+    return render(
+        request,
+        "comptes/mot_de_passe_reinitialiser.html",
+        {"utilisateur": utilisateur, "erreurs": erreurs},
+    )
+
+
+@login_required
+def mot_de_passe_changer(request):
+    erreurs = []
+    if request.method == "POST":
+        nouveau = request.POST.get("mot_de_passe", "")
+        if nouveau != request.POST.get("confirmation", ""):
+            erreurs = ["Les deux saisies ne concordent pas."]
+        else:
+            try:
+                services.changer_mot_de_passe(request.user, request.POST.get("ancien", ""), nouveau)
+            except CompteVerrouille:
+                erreurs = [MESSAGE_VERROUILLE]
+            except services.MotDePasseRefuse as refus:
+                erreurs = [str(refus)]
+            except ValidationError as refus:
+                erreurs = list(refus.messages)
+            else:
+                # La session courante garde son empreinte ; les autres tombent.
+                update_session_auth_hash(request, request.user)
+                messages.success(request, "Votre mot de passe est modifié.")
+                return redirect("accueil")
+    return render(request, "comptes/mot_de_passe_changer.html", {"erreurs": erreurs})
 
 
 # Membres du compte (T-36) ---------------------------------------------------

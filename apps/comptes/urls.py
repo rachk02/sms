@@ -8,6 +8,13 @@ urlpatterns = [
     path("invitation/<str:jeton>", views.invitation, name="invitation"),
     path("verification/<str:jeton>", views.verification, name="verification"),
     path("renvoi", views.renvoi, name="renvoi"),
+    path("mot-de-passe/oubli", views.mot_de_passe_oubli, name="mot-de-passe-oubli"),
+    path(
+        "mot-de-passe/reinitialiser/<str:jeton>",
+        views.mot_de_passe_reinitialiser,
+        name="mot-de-passe-reinitialiser",
+    ),
+    path("compte/mot-de-passe", views.mot_de_passe_changer, name="mot-de-passe-changer"),
     path("membres", views.membres, name="membres"),
     path("membres/<uuid:pk>/role", views.changer_role, name="membre-role"),
     path("membres/<uuid:pk>/retirer", views.retirer, name="membre-retirer"),

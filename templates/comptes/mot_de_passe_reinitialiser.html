@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block titre %}Nouveau mot de passe, EL-IMMEKA SMS{% endblock %}
+{% block contenu %}
+<div class="mx-auto max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+  <h1 class="mb-2 text-xl font-semibold">Choisir un nouveau mot de passe</h1>
+  <p class="mb-4 text-sm text-slate-600">{{ utilisateur.nom }} ({{ utilisateur.courriel }}).</p>
+  {% for erreur in erreurs %}
+    <p class="mb-2 rounded bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">{{ erreur }}</p>
+  {% endfor %}
+  <form method="post" class="space-y-4">
+    {% csrf_token %}
+    <label class="block text-sm">Nouveau mot de passe
+      <input type="password" name="mot_de_passe" required autocomplete="new-password"
+             class="mt-1 w-full rounded border border-slate-300 px-3 py-2">
+    </label>
+    <label class="block text-sm">Confirmation
+      <input type="password" name="confirmation" required autocomplete="new-password"
+             class="mt-1 w-full rounded border border-slate-300 px-3 py-2">
+    </label>
+    <button type="submit" class="w-full rounded bg-slate-900 px-4 py-2 text-white">Enregistrer</button>
+  </form>
+</div>
+{% endblock %}

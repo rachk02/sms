@@ -307,6 +307,87 @@ def renvoyer_lien(courriel: str) -> None:
         envoyer_invitation(utilisateur)
 
 
+# Mot de passe oublié et changement de mot de passe (décision A2) -------------
+
+
+class MotDePasseRefuse(ValueError):
+    pass
+
+
+def demander_reinitialisation(courriel: str) -> None:
+    """Envoie un lien de réinitialisation, valable une heure, à un membre actif
+    qui a déjà créé son accès. Sans effet visible sinon : la page répond de
+    même que l'adresse existe ou non."""
+    from apps.core.courriels import envoyer
+
+    from . import jetons
+
+    utilisateur = Utilisateur.objects.filter(
+        courriel=GestionnaireUtilisateur.normaliser_courriel(courriel), is_active=True
+    ).first()
+    if utilisateur is None or not utilisateur.has_usable_password():
+        return
+    lien = _lien("mot-de-passe/reinitialiser", jetons.creer(utilisateur, jetons.REINITIALISATION))
+    envoyer(
+        utilisateur.courriel,
+        "Réinitialisation de votre mot de passe, EL-IMMEKA SMS",
+        f"Bonjour {utilisateur.nom},\n\nPour choisir un nouveau mot de passe, ouvrez ce "
+        f"lien, valable une heure et une seule fois :\n\n{lien}\n\nSi vous n'avez rien "
+        "demandé, ignorez ce message : votre mot de passe reste inchangé.",
+    )
+
+
+def _prevenir_changement(utilisateur: Utilisateur) -> None:
+    from apps.core.courriels import envoyer
+
+    envoyer(
+        utilisateur.courriel,
+        "Votre mot de passe a été modifié, EL-IMMEKA SMS",
+        f"Bonjour {utilisateur.nom},\n\nLe mot de passe de votre accès vient d'être "
+        "modifié ; vos autres sessions ouvertes sont fermées. Si vous n'êtes pas à "
+        "l'origine de ce changement, contactez le support sans attendre.",
+    )
+
+
+@transaction.atomic
+def reinitialiser_mot_de_passe(jeton: str, mot_de_passe: str) -> Utilisateur:
+    """Pose le nouveau mot de passe d'un lien de réinitialisation. Le lien tombe
+    avec l'ancien mot de passe, et les sessions ouvertes avec lui. Lève
+    LienExpire, LienInvalide, ou ValidationError si le mot de passe est refusé."""
+    from django.contrib.auth.password_validation import validate_password
+
+    from . import jetons
+
+    utilisateur = jetons.lire(jeton, jetons.REINITIALISATION)
+    if not utilisateur.is_active:
+        raise jetons.LienInvalide
+    validate_password(mot_de_passe, utilisateur)
+    utilisateur.set_password(mot_de_passe)
+    utilisateur.save(update_fields=["password", "modifie_le"])
+    _prevenir_changement(utilisateur)
+    return utilisateur
+
+
+def changer_mot_de_passe(utilisateur: Utilisateur, ancien: str, nouveau: str) -> Utilisateur:
+    """Change le mot de passe d'une personne connectée, sur présentation de
+    l'actuel. Lève MotDePasseRefuse, CompteVerrouille ou ValidationError. Les
+    autres sessions tombent avec l'ancien mot de passe ; la vue garde la
+    session courante. Le contrôle de l'actuel se fait hors transaction : un
+    essai faux reste compté même quand le refus annule le reste."""
+    from django.contrib.auth.password_validation import validate_password
+
+    from .authentification import controler_mot_de_passe
+
+    if not controler_mot_de_passe(utilisateur, ancien):
+        raise MotDePasseRefuse("Mot de passe actuel incorrect.")
+    validate_password(nouveau, utilisateur)
+    with transaction.atomic():
+        utilisateur.set_password(nouveau)
+        utilisateur.save(update_fields=["password", "modifie_le"])
+        _prevenir_changement(utilisateur)
+    return utilisateur
+
+
 def _administrateurs_verrouilles(client) -> list:
     return list(
         Utilisateur.objects.select_for_update()

@@ -27,13 +27,22 @@ La session de développement a signalé un changement de compte : depuis le
 dira si la délégation vient bien de lui ; d'ici là, seul le travail réversible
 avance.
 
+À 08 h 38, dans le terminal de la session responsable, l'utilisateur a
+confirmé le changement de compte et la délégation, et coché son accord pour
+B1, C2 et la poussée des correctifs des zones délicates après relecture par la
+session responsable. Cet accord est parvenu à la session de développement par
+relais : pour ce qui touche à l'argent et aux zones délicates, elle attend que
+l'utilisateur le lui confirme dans son propre terminal, et garde ces commits
+en local d'ici là. C2 entre dans l'ordre de travail, juste après C1.
+
 ## Suivi
 
 Les deux listes se remplissent au fil de la journée, un commit par ligne.
 
 ### Appliqué
 
-Aucune décision appliquée à l'ouverture de la journée.
+- **A2**, mot de passe oublié et changement de mot de passe : commit
+  « Comptes : mot de passe oublié et changement de mot de passe ».
 
 ### Préparé, en attente de l'accord de l'utilisateur
 
@@ -161,4 +170,4 @@ local jusqu'à l'accord de l'utilisateur.
 ## Ordre de travail
 
 Documentation des décisions, puis A2, A3, A1, A4, B1 (en local), B3, A7, A5,
-A6, B2, C1, C3, A8, A10, B4, B6, D1, C4, B5 (inactive), puis E, puis D2.
+A6, B2, C1, C2, C3, A8, A10, B4, B6, D1, C4, B5 (inactive), puis E, puis D2.
