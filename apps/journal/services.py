@@ -13,7 +13,7 @@ from apps.core.encodage import analyser
 from apps.core.etats import ETATS_TERMINAUX, Etat, transition_permise
 from apps.core.evenements import publier
 from apps.core.numeros import NumeroInvalide, normaliser
-from apps.core.redis import client_redis
+from apps.core.redis import client_redis, tolerer
 from apps.telecom import correlation, sante
 from apps.telecom.models import Connecteur, MotCle
 from apps.telecom.numero_court import numero_court
@@ -559,7 +559,9 @@ def _enregistrer_soumission(
     )
     correlation.enregistrer(passerelle.connecteur.id, reference, message.id, message.date_reception)
     compteur = CLE_SOUMIS.format(connecteur_id=passerelle.connecteur.id)
-    transaction.on_commit(lambda: client_redis().incr(compteur))
+    transaction.on_commit(
+        lambda: tolerer(lambda: client_redis().incr(compteur), "compteur de soumissions")
+    )
     return Message.objects.get(id=message.id, date_reception=message.date_reception)
 
 
@@ -636,7 +638,12 @@ def appliquer_accuse(accuse) -> bool:
             cle_idempotence=f"livre:{message.id}",
         )
     transaction.on_commit(
-        lambda: sante.enregistrer_accuse(accuse.connecteur_id, positif, delai, accuse.horodatage)
+        lambda: tolerer(
+            lambda: sante.enregistrer_accuse(
+                accuse.connecteur_id, positif, delai, accuse.horodatage
+            ),
+            "mesure de santé de la liaison",
+        )
     )
     return True
 

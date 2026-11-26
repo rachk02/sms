@@ -187,7 +187,19 @@ poussé avec l'accord de l'utilisateur.
 - Tests : délai Redis simulé à la soumission (une seule soumission à la
   passerelle, une seule consommation), accusé corrélé par la base pendant la
   panne, accusé rejoué deux fois pendant la panne et compté une fois.
-- État au 9 novembre, arrêt de mi-journée : pas commencé.
+- Appliqué le 26 novembre 2026, sur la branche locale
+  `correctif-correlation-redis`, non poussé : `core.redis.tolerer` exécute une
+  écriture Redis posée après validation et journalise l'erreur au lieu de la
+  laisser remonter ; `correlation.retrouver` lit la base quand Redis lève.
+  Quatre tests de panne (`telecom/tests/test_correlation.py`), tous en échec
+  sans le correctif : une seule soumission à la passerelle et une relivraison
+  qui ne la rappelle pas, accusé corrélé par la base, accusé rejoué trois fois
+  appliqué une fois, accusé sans message rangé parmi les orphelins. Précision :
+  `soumettre` ne touche pas au registre de crédits (la réservation se fait en
+  amont, au niveau de la campagne), donc la preuve porte sur l'appel à la
+  passerelle et la transition d'état, pas sur une consommation de crédit.
+- État au 26 novembre 2026 : fait en local, en attente de la relecture de la
+  session responsable et de l'accord de l'utilisateur pour le push.
 
 ## D. Qualité
 

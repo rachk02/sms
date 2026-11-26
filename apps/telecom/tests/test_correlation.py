@@ -3,15 +3,17 @@
 import uuid
 
 import pytest
+import redis
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
 from apps.comptes.models import Client
 from apps.comptes.services import creer_client
+from apps.journal import services as services_journal
 from apps.journal.models import Etat, Evenement, Message
 from apps.journal.services import appliquer_accuse, enregistrer_message, soumettre
-from apps.telecom import correlation
+from apps.telecom import correlation, sante
 from apps.telecom.models import AccuseOrphelin, Connecteur, Correlation, Operateur
 from apps.telecom.passerelles import Accuse, passerelle_pour
 
@@ -134,3 +136,79 @@ def test_la_correspondance_vit_la_validite_du_sms_plus_la_marge(passerelle, sett
         assert abs(ecart - 48 * 3600) < 60
     finally:
         correlation._redis().delete(correlation.cle_redis(passerelle.connecteur.id, "courte"))
+
+
+@pytest.fixture
+def redis_eteint(monkeypatch):
+    """Redis ne répond plus : chaque appel lève une erreur de connexion."""
+    eteint = redis.Redis(host="127.0.0.1", port=1, socket_connect_timeout=0.2)
+    # Levé avant le nettoyage des autres fixtures, qui parlent au vrai Redis.
+    with monkeypatch.context() as remplacement:
+        for module in (correlation, services_journal, sante):
+            remplacement.setattr(module, "client_redis", lambda: eteint)
+        yield
+
+
+def _nouveau_message():
+    client = creer_client(
+        raison_sociale="Exemple SA", forme=Client.Forme.SOCIETE, palier=Client.Palier.VERIFIE
+    )
+    return enregistrer_message(
+        client=client,
+        numero_normalise="+22660123456",
+        operateur="MOOV",
+        expediteur_libelle=settings.SMS_NUMERO_COURT,
+        texte="Bonjour",
+        cout_unitaire=10,
+    )
+
+
+def test_redis_en_panne_a_la_soumission_un_seul_appel_a_la_passerelle(
+    passerelle, redis_eteint, monkeypatch
+):
+    appels = []
+    soumettre_reel = type(passerelle).soumettre
+
+    def compter(self, soumission):
+        appels.append(soumission)
+        return soumettre_reel(self, soumission)
+
+    monkeypatch.setattr(type(passerelle), "soumettre", compter)
+    message = soumettre(_nouveau_message(), passerelle)
+    # La panne, après la validation, ne fait ni échouer ni rejouer la soumission.
+    assert message.etat == Etat.SOUMIS
+    assert len(appels) == 1
+    assert Correlation.objects.filter(reference_smsc=message.reference_smsc).count() == 1
+    # Une relivraison du même message ne rappelle pas la passerelle.
+    assert soumettre(message, passerelle).etat == Etat.SOUMIS
+    assert len(appels) == 1
+
+
+def test_redis_en_panne_l_accuse_est_rapproche_par_la_base(
+    passerelle, message_soumis, redis_eteint
+):
+    accuse = passerelle.accuses_dus()[0]
+    assert appliquer_accuse(accuse) is True
+    assert Message.objects.get(id=message_soumis.id).etat == Etat.LIVRE
+    assert not AccuseOrphelin.objects.exists()
+
+
+def test_redis_en_panne_un_accuse_rejoue_n_est_applique_qu_une_fois(
+    passerelle, message_soumis, redis_eteint
+):
+    accuse = passerelle.accuses_dus()[0]
+    assert [appliquer_accuse(accuse) for _ in range(3)] == [True, False, False]
+    assert Evenement.objects.filter(message_id=message_soumis.id, etat=Etat.LIVRE).count() == 1
+    assert not AccuseOrphelin.objects.exists()
+
+
+def test_redis_en_panne_un_accuse_sans_message_va_aux_orphelins(passerelle, redis_eteint):
+    accuse = Accuse(
+        connecteur_id=passerelle.connecteur.id,
+        reference_smsc="ffff0000deadbeef",
+        libelle_operateur="DELIVRD",
+        etat=Etat.LIVRE,
+        horodatage=timezone.now(),
+    )
+    assert appliquer_accuse(accuse) is False
+    assert AccuseOrphelin.objects.filter(reference_smsc="ffff0000deadbeef").count() == 1
