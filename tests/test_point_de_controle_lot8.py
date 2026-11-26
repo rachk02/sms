@@ -203,7 +203,9 @@ def test_une_journee_d_exploitation(client, espaces, monkeypatch):
 
     # Le journal d'audit porte toutes les actions d'administration de la journée.
     actions = set(
-        Audit.objects.filter(auteur__in=[support, exploitation]).values_list("action", flat=True)
+        Audit.objects.filter(auteur_id__in=[support.id, exploitation.id]).values_list(
+            "action", flat=True
+        )
     )
     assert {
         "conformite.fraude.traitement",
