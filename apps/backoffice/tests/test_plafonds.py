@@ -115,7 +115,7 @@ def test_au_seuil_critique_le_compte_est_suspendu_une_fois(en_tant_que_worker):
     client.refresh_from_db()
     assert client.etat == Client.Etat.SUSPENDU
     trace = Audit.objects.get(action="comptes.suspension", objet_id=str(client.id))
-    assert trace.auteur is None and "Suspension automatique" in trace.motif
+    assert trace.auteur_id is None and "Suspension automatique" in trace.motif
     assert suspendre_sur_alertes() == []
 
     # Réactivé par un agent sans traiter l'alerte : un simple dépassement ne

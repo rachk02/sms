@@ -146,7 +146,7 @@ def test_l_exploitation_tient_la_liste_au_back_office(client, en_tant_que_backof
     mot = MotProscrit.objects.get()
     assert mot.forme == "gagnezunevia"
     trace = Audit.objects.get(action="conformite.mot_proscrit.creation")
-    assert trace.auteur == agent and trace.valeur_apres["forme"] == "gagnezunevia"
+    assert trace.auteur_id == agent.id and trace.valeur_apres["forme"] == "gagnezunevia"
     reponse = client.post(
         "/admin/conformite/motproscrit/add/",
         {"expression": "x y", "gravite": "BLOCAGE", "actif": "on"},

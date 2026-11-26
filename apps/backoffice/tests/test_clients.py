@@ -112,7 +112,7 @@ def test_la_suspension_retient_les_envois_et_la_reactivation_ne_reprend_que_les_
     assert [c.id for c in pausees] == [diffusee.id]
     trace = Audit.objects.get(action="comptes.suspension")
     assert trace.valeur_apres["campagnes_en_pause"] == [str(diffusee.id)]
-    assert trace.motif == "Plainte ARCEP du 7 novembre" and trace.auteur == agent
+    assert trace.motif == "Plainte ARCEP du 7 novembre" and trace.auteur_id == agent.id
 
     # Les messages en file de la campagne sont retenus, pas refusés.
     WorkerEnvoi(files=[])._soumettre(file[0])

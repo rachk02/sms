@@ -1,5 +1,7 @@
 """Journal d'audit, T-41."""
 
+import uuid
+
 import pytest
 from django.db import ProgrammingError, connections, transaction
 
@@ -99,3 +101,28 @@ def test_le_journal_se_consulte_et_se_filtre_au_back_office(
     detail = client.post(f"/admin/core/audit/{entree.id}/change/", {"motif": "x"})
     assert detail.status_code in (403, 200)
     assert _lire().get(id=entree.id).motif == "Nouvelle responsable des campagnes"
+
+
+@pytest.mark.django_db(transaction=True, databases=["default", "backoffice", "worker"])
+def test_auteur_et_client_sont_des_references_sans_cle_etrangere(entree, agent):
+    """Décision B3 : colonnes `auteur_id` et `client_id` conservées, sans clé
+    étrangère ; le journal garde un auteur ou un client absent des tables."""
+    lue = _lire().get(id=entree.id)
+    assert lue.client_id == entree.client_id and lue.auteur_id == agent.id
+    with connections["backoffice"].cursor() as curseur:
+        curseur.execute(
+            "SELECT count(*) FROM information_schema.table_constraints "
+            "WHERE table_name = 'core_audit' AND constraint_type = 'FOREIGN KEY'"
+        )
+        assert curseur.fetchone()[0] == 0
+        curseur.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name = 'core_audit' AND column_name IN ('auteur_id', 'client_id') "
+            "ORDER BY column_name"
+        )
+        assert [ligne[0] for ligne in curseur.fetchall()] == ["auteur_id", "client_id"]
+    auditer("essai.reference.absente", ("essai", "1"), auteur=None, client=None)
+    inconnu = uuid.uuid7()
+    Audit.objects.using("worker").create(
+        action="essai.reference.inconnue", objet_type="essai", objet_id="2", auteur_id=inconnu
+    )

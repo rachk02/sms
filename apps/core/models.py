@@ -119,14 +119,14 @@ class Audit(Identifiable):
     seul : le modèle et un déclencheur PostgreSQL refusent toute modification
     et toute suppression, pour tous les rôles."""
 
-    auteur = models.ForeignKey(
-        "comptes.Utilisateur", on_delete=models.PROTECT, null=True, blank=True, related_name="+"
-    )
+    # Références par UUID simple, sans clé étrangère (décision B3 du 9 novembre
+    # 2026) : le journal d'audit d'une action ne bloque ni ne suit la
+    # suppression ou la fusion de l'auteur ou du compte. La cohérence est tenue
+    # par les services, comme pour les autres références vers un module plus haut.
+    auteur_id = models.UUIDField(null=True, blank=True, db_index=True)
     # Le compte client concerné, s'il y en a un : sert à remettre au client
     # l'extrait qui le regarde, sans rien lui montrer des autres.
-    client = models.ForeignKey(
-        "comptes.Client", on_delete=models.PROTECT, null=True, blank=True, related_name="+"
-    )
+    client_id = models.UUIDField(null=True, blank=True, db_index=True)
     action = models.CharField(max_length=100)
     objet_type = models.CharField(max_length=100)
     objet_id = models.CharField(max_length=100)
@@ -143,7 +143,7 @@ class Audit(Identifiable):
         ordering = ["-horodatage"]
         indexes = [
             models.Index(fields=["objet_type", "objet_id"], name="audit_objet"),
-            models.Index(fields=["client", "-horodatage"], name="audit_client_date"),
+            models.Index(fields=["client_id", "-horodatage"], name="audit_client_date"),
             models.Index(fields=["action", "-horodatage"], name="audit_action_date"),
         ]
 

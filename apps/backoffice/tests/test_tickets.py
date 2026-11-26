@@ -113,7 +113,7 @@ def test_une_demande_par_telephone_se_ressaisit_en_ticket(client, dossier):
     assert (ticket.demandeur, ticket.priorite) == (membre, "P2")
     assert ticket.messages.get().auteur == support
     trace = Audit.objects.get(action="support.ticket.saisie")
-    assert trace.auteur == support and trace.valeur_apres["canal"] == "TELEPHONE"
+    assert trace.auteur_id == support.id and trace.valeur_apres["canal"] == "TELEPHONE"
 
     # Un courriel qui n'est pas celui d'un membre du compte est refusé.
     reponse = client.post(

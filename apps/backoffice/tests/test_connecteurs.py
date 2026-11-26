@@ -67,7 +67,7 @@ def test_un_secret_saisi_n_est_jamais_reaffiche(client, agent):
     assert SECRET not in page and connecteur.secret_chiffre not in page
     assert "Enregistré, chiffré" in page
     trace = Audit.objects.get(action="telecom.connecteur.creation")
-    assert trace.valeur_apres["secret"] == "présent" and trace.auteur == agent
+    assert trace.valeur_apres["secret"] == "présent" and trace.auteur_id == agent.id
     assert SECRET not in json.dumps(trace.valeur_apres)
     assert connecteur.secret_chiffre not in json.dumps(trace.valeur_apres)
 

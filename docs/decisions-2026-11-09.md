@@ -138,6 +138,18 @@ Aucun commit en attente à l'ouverture de la journée.
   indexés, sous le même nom de colonne. La migration ne touche aucune
   politique de cloisonnement ; si elle le devait, arrêt et retour à la session
   responsable. Registre : points ouverts, lot 1.
+  Appliqué le 26 novembre 2026 : `auteur_id` et `client_id` de `core.Audit`
+  deviennent des UUID simples indexés, colonnes inchangées (migration
+  `core 0044` : seules les deux clés étrangères tombent, l'index composite
+  `audit_client_date` est recréé sur `client_id`). La politique de
+  `core_audit` est une insertion seule, indépendante de ces colonnes : aucune
+  politique de cloisonnement touchée. L'écriture passe par `auditer`, qui
+  prend toujours des objets ; l'administration affiche les identifiants et perd
+  la recherche par courriel de l'auteur et par raison sociale du compte
+  (conséquence acceptée). Migration éprouvée sur des lignes d'audit
+  existantes, dans la base de test jetable : aller-retour 0043 et 0044 avec le
+  déclencheur d'écriture seule en place, lignes relues intactes, index
+  conservés.
 - **B4. Tables sans cloisonnement** : `comptes_code_secours` reste en l'état.
   Le rôle applicatif perd ses droits sur `core_evenement_traite` si, et
   seulement si, le service web ne s'en sert pas ; dans une migration dédiée de

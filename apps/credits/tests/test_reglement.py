@@ -69,11 +69,11 @@ def test_le_changement_de_mode_est_motive_et_audite(en_tant_que_worker, agent):
         changer_mode_reglement(client, "AU_HASARD", auteur=agent, motif="x")
     changer_mode_reglement(client, Client.Reglement.LIVRAISON, auteur=agent, motif="Avenant n 2")
     trace = Audit.objects.get(action="comptes.mode_reglement")
-    assert (trace.valeur_avant, trace.valeur_apres, trace.motif, trace.auteur) == (
+    assert (trace.valeur_avant, trace.valeur_apres, trace.motif, trace.auteur_id) == (
         {"mode_reglement": "SOUMISSION"},
         {"mode_reglement": "LIVRAISON"},
         "Avenant n 2",
-        agent,
+        agent.id,
     )
     assert Client.objects.get(id=client.id).mode_reglement == Client.Reglement.LIVRAISON
 

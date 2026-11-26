@@ -144,7 +144,7 @@ def test_un_export_de_cent_mille_contacts_part_en_file_et_revient_par_courriel(c
     assert export.etat == Export.Etat.EN_FILE
     evenement = EvenementSortant.objects.get(cle_idempotence=f"export:{export.id}")
     assert evenement.nom == recherche.FILE_EXPORT
-    assert Audit.objects.filter(action="contacts.export.demande", auteur=demandeur).exists()
+    assert Audit.objects.filter(action="contacts.export.demande", auteur_id=demandeur.id).exists()
 
     fini = recherche.produire(export.id)
     assert (fini.etat, fini.lignes) == (Export.Etat.TERMINE, 100_000)
