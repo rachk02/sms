@@ -8,6 +8,7 @@ import uuid
 from datetime import timedelta
 
 import pytest
+import redis
 from django.utils import timezone
 
 from apps.comptes.models import Client
@@ -17,6 +18,7 @@ from apps.contacts.models import ListeNoire
 from apps.core.etats import Etat
 from apps.core.models import EvenementSortant
 from apps.core.redis import client_redis
+from apps.journal import services as services_journal
 from apps.journal.models import Message
 from apps.journal.services import (
     CLE_DESINSCRIPTIONS_SANS_EMETTEUR,
@@ -201,6 +203,16 @@ def test_un_stop_sans_historique_est_garde_et_signale(en_tant_que_worker, caplog
     assert "Désinscription sans envoi correspondant" in caplog.text
     assert int(client_redis().get(CLE_DESINSCRIPTIONS_SANS_EMETTEUR)) == avant + 1
     assert not ListeNoire.objects.filter(numero_normalise=NUMERO).exists()
+
+
+def test_un_stop_sans_historique_redis_en_panne_ne_leve_rien(en_tant_que_worker, monkeypatch):
+    eteint = redis.Redis(host="127.0.0.1", port=1, socket_connect_timeout=0.2)
+    entrant = _entrant()
+    with monkeypatch.context() as remplacement:
+        remplacement.setattr(services_journal, "client_redis", lambda: eteint)
+        assert _rapprocher(entrant) == []
+    entrant.refresh_from_db()
+    assert entrant.traite_le is not None and entrant.client_id is None
 
 
 def test_un_expediteur_illisible_ne_bloque_pas_la_file(en_tant_que_worker):

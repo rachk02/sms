@@ -844,7 +844,12 @@ def rapprocher_desinscription(
             "Désinscription sans envoi correspondant dans les 72 heures : entrant %s.",
             entrant_id,
         )
-        transaction.on_commit(lambda: client_redis().incr(CLE_DESINSCRIPTIONS_SANS_EMETTEUR))
+        transaction.on_commit(
+            lambda: tolerer(
+                lambda: client_redis().incr(CLE_DESINSCRIPTIONS_SANS_EMETTEUR),
+                "compteur de désinscriptions sans émetteur",
+            )
+        )
     return clients
 
 

@@ -198,6 +198,18 @@ poussé avec l'accord de l'utilisateur.
   `soumettre` ne touche pas au registre de crédits (la réservation se fait en
   amont, au niveau de la campagne), donc la preuve porte sur l'appel à la
   passerelle et la transition d'état, pas sur une consommation de crédit.
+- Relecture de la session responsable (26 novembre) : le compteur des STOP
+  sans émetteur (`CLE_DESINSCRIPTIONS_SANS_EMETTEUR`) reçoit la même
+  protection, avec son test. Deux points consignés sans correction :
+  1. Quand Redis est muet plutôt que refusé, chaque appel peut coûter
+     `REDIS_DELAI_S` (2 s) ; un accusé peut attendre trois ou quatre appels
+     de ce délai. Rien n'est perdu ni doublé, mais le débit des accusés
+     chute. Piste, à examiner après B1 : étendre le disjoncteur de cinq
+     secondes de `core.repli` à `tolerer` et à `retrouver`. Les tests
+     simulent une connexion refusée (port 1), pas un Redis muet.
+  2. Les compteurs `CLE_SOUMIS` et des STOP sans émetteur restent sous la
+     réalité après une panne : les incréments omis ne se rattrapent pas, et
+     la supervision du back-office les lit.
 - État au 26 novembre 2026 : fait en local, en attente de la relecture de la
   session responsable et de l'accord de l'utilisateur pour le push.
 
