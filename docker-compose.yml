@@ -41,7 +41,10 @@ services:
       retries: 10
 
   rabbitmq:
-    image: rabbitmq:4-management-alpine
+    # Version exacte, figée : Jasmin 0.11 dépend d'une fonctionnalité dépréciée de
+    # RabbitMQ (voir docker/rabbitmq/10-jasmin.conf). Une montée de version ne se
+    # fait qu'après avoir vérifié que Jasmin démarre et relaie ses accusés.
+    image: rabbitmq:4.3.6-management-alpine
     # Nom d'hôte fixe : RabbitMQ range ses données sous le nom de son nœud, tiré
     # du nom d'hôte. Sans lui, recréer le conteneur change de nœud et fait perdre
     # hôtes virtuels, files et droits, alors même que le volume est conservé.
