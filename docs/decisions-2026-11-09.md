@@ -123,6 +123,15 @@ Aucun commit en attente à l'ouverture de la journée.
   paiement manuel), avec un test de concurrence. Zone du registre de crédits :
   préparé en local, poussé avec l'accord de l'utilisateur. Registre :
   relecture des rappels de paiement.
+  Appliqué le 26 novembre 2026, sur la branche locale `correctif-b1-achat`,
+  non poussé : contrainte `registre_achat_unique_par_paiement` (migration
+  `credits 0007`), unique sur la référence des écritures ACHAT dont la
+  référence commence par `paiement:`. Les paiements en ligne et manuels
+  écrivent tous deux `paiement:<transaction>` (`reference_registre`) ; les
+  autres références (virements, tests) restent libres. Trois tests, dont deux
+  achats simultanés en threads qui n'en écrivent qu'un. Avant tout
+  déploiement : vérifier qu'aucun doublon `paiement:` n'existe en production,
+  sans quoi la migration échoue (à la charge de l'utilisateur).
 - **B2. Devise du statut** : seul le XOF crédite ; toute autre devise lève
   une alerte sans rien créditer. Registre : relecture des rappels de paiement.
 - **B3. `core.Audit`** : les deux `ForeignKey` deviennent des UUID simples,

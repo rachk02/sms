@@ -72,6 +72,15 @@ class Ecriture(Identifiable):
                 condition=Q(type="CONSOMMATION") & Q(reference__startswith="message:"),
                 name="registre_consommation_unique_par_message",
             ),
+            # Une transaction de paiement ne crédite qu'une fois, qu'elle soit en
+            # ligne ou manuelle (même référence `paiement:<id>`) : deux rappels
+            # simultanés ne peuvent pas écrire deux achats (décision B1 du
+            # 9 novembre 2026).
+            models.UniqueConstraint(
+                fields=["reference"],
+                condition=Q(type="ACHAT") & Q(reference__startswith="paiement:"),
+                name="registre_achat_unique_par_paiement",
+            ),
             models.CheckConstraint(
                 condition=~Q(type="AJUSTEMENT") | ~Q(motif=""), name="registre_ajustement_motive"
             ),
